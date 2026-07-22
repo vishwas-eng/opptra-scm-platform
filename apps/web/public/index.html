@@ -33,7 +33,10 @@
         <button data-tab="inventory"><i>⇅</i> Inward / Outward</button>
         <button data-tab="asn"><i>▤</i> ASN Compile</button>
         <button data-tab="reversedc"><i>⤺</i> Reverse DC</button>
-        <button data-tab="packing" disabled title="Needs Gmail delegation"><i>✉</i> Packing Mail</button>
+        <button data-tab="sheet"><i>▦</i> Sheet Update</button>
+        <button data-tab="packing"><i>✉</i> Packing Mail</button>
+        <button data-tab="reports"><i>▧</i> Reports Digest</button>
+        <button data-tab="homecentre"><i>⇄</i> Home Centre Sync</button>
         <div class="side-group">Tools</div>
         <button data-tab="extensions"><i>⤓</i> Extensions</button>
         <button data-tab="admin" id="admin-nav-btn" class="hidden"><i>⚙</i> Admin</button>
@@ -203,6 +206,47 @@
             </div>
             <div id="rdc-output" class="result hidden"></div>
           </div>
+        </section>
+
+        <!-- Sheet Update (A1) -->
+        <section id="tab-sheet" class="tab hidden">
+          <h2>Sheet Update</h2>
+          <p class="lead">Pulls the latest Waypoint CREATED sale orders, writes the ones missing from the Master into today's date tab, enriches them with UC invoice/tracking, and pushes the date tab into Master.</p>
+          <div id="sheet-setup" class="panel"></div>
+          <div class="panel">
+            <div class="row">
+              <button id="sheet-first-btn" class="primary" disabled>First fill (Waypoint → date tab)</button>
+              <button id="sheet-second-btn" class="secondary" disabled>Second fill (UC invoice enrich)</button>
+              <button id="sheet-push-btn" class="secondary" disabled>Push date tab → Master</button>
+            </div>
+            <div id="sheet-output" class="result hidden"></div>
+          </div>
+        </section>
+
+        <!-- Packing Mail (A2) -->
+        <section id="tab-packing" class="tab hidden">
+          <h2>Packing Mail</h2>
+          <p class="lead">Paste SO numbers → the platform composes a per-warehouse email (To from the WarehouseMap) with the invoice, label, appointment, and e-way PDFs attached, as a Gmail draft you review before sending.</p>
+          <div id="packing-setup" class="panel"></div>
+          <div class="panel">
+            <label>Sale Orders (one per line)<textarea id="packing-sos" rows="4" class="textarea" placeholder="SO02741"></textarea></label>
+            <div class="row"><button id="packing-btn" class="primary" disabled>Create drafts</button></div>
+            <div id="packing-output" class="result hidden"></div>
+          </div>
+        </section>
+
+        <!-- Reports Digest -->
+        <section id="tab-reports" class="tab hidden">
+          <h2>Reports Digest</h2>
+          <p class="lead">Scheduled job: downloads the daily supply-chain reports, compiles + OCRs them, and emails a per-warehouse digest — the 50-report automation, on a cron.</p>
+          <div id="reports-setup" class="panel"></div>
+        </section>
+
+        <!-- Home Centre Sync -->
+        <section id="tab-homecentre" class="tab hidden">
+          <h2>Home Centre Sync</h2>
+          <p class="lead">Scheduled pull of Home Centre orders from the Vinculum seller portal → creates matching Unicommerce Sale Orders. Runs hands-free once connected.</p>
+          <div id="homecentre-setup" class="panel"></div>
         </section>
 
         <!-- Extensions -->

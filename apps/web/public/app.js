@@ -1,7 +1,8 @@
 /* Opptra SCM Platform — sidebar SPA (plain ES2020, no build). */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', asn: 'ASN Compile', reversedc: 'Reverse DC', extensions: 'Extensions', admin: 'Admin' };
+  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', asn: 'ASN Compile', reversedc: 'Reverse DC', sheet: 'Sheet Update', packing: 'Packing Mail', reports: 'Reports Digest', homecentre: 'Home Centre Sync', extensions: 'Extensions', admin: 'Admin' };
+  let integrations = null;
   let me = null;
   let pollTimer = null;
   let ucLoginUrl = null;
@@ -88,6 +89,38 @@
     $('tab-' + tab).classList.remove('hidden');
     $('page-title').textContent = PAGE_TITLES[tab] || tab;
     if (tab === 'admin') loadAdmin();
+    if (['sheet', 'packing', 'reports', 'homecentre'].includes(tab)) renderSetup(tab);
+  }
+
+  // Setup-required panels for the credential-gated automations. Green when the required
+  // integration is configured; otherwise an amber checklist of what's needed.
+  const SETUP = {
+    sheet: { need: (i) => i.google && i.masterSheet, label: 'Google Workspace + Master sheet',
+      steps: ['Create a Google service account and enable domain-wide delegation (scopes: spreadsheets, drive.readonly).', 'Share the Master sheet with the service-account email (Editor).', 'Set GOOGLE_SA_KEY_JSON, GOOGLE_DELEGATED_USER, MASTER_SHEET_ID, and the Waypoint API config.'],
+      enable: ['sheet-first-btn', 'sheet-second-btn', 'sheet-push-btn'] },
+    packing: { need: (i) => i.google, label: 'Gmail + Drive delegation',
+      steps: ['Same service account, with gmail.compose + gmail.send + drive.readonly delegated, impersonating supplychainauto@opptra.com.', 'Set the label/appointment Drive folder IDs and the WarehouseMap.'],
+      enable: ['packing-btn'] },
+    reports: { need: (i) => i.google, label: 'Google Workspace + report list',
+      steps: ['The Google service account (as above).', 'Provide the list of the ~50 reports, the warehouses, and what the digest email should contain.'], enable: [] },
+    homecentre: { need: (i) => i.vinculum, label: 'Vinculum credentials',
+      steps: ['Set VINCULUM_BASE_URL, VINCULUM_USER, VINCULUM_PASS.', 'Confirm the RSA-login + commonJsonSearch flow (already proven in notes).'], enable: [] },
+  };
+
+  async function renderSetup(tab) {
+    if (!integrations) { try { integrations = await api('/api/integrations'); } catch { return; } }
+    const s = SETUP[tab];
+    const ok = s.need(integrations);
+    const el = $(tab + '-setup');
+    if (ok) {
+      el.innerHTML = `<div class="result-head"><span class="badge ok">connected</span><span class="title">${esc(s.label)} is configured</span></div>`;
+      s.enable.forEach((id) => { const b = $(id); if (b) b.disabled = false; });
+    } else {
+      el.innerHTML = `<div class="result-head"><span class="badge warn">setup required</span><span class="title">Connect ${esc(s.label)} to activate</span></div>`
+        + `<p class="lead">This automation is built and wired — it just needs its integration connected:</p>`
+        + `<ol class="steps">${s.steps.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>`;
+      s.enable.forEach((id) => { const b = $(id); if (b) b.disabled = true; });
+    }
   }
   document.querySelectorAll('#side-nav button').forEach((btn) => {
     btn.addEventListener('click', () => { if (!btn.disabled) go(btn.dataset.tab); });

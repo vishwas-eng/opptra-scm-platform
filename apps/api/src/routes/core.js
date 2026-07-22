@@ -15,6 +15,17 @@ export default async function coreRoutes(app) {
 
   app.get('/api/me', { preValidation: app.requireUser }, async (req) => ({ user: req.user }));
 
+  // Which integrations are configured — drives the "setup required" state on the
+  // Google/Vinculum-dependent automation tabs so nothing looks missing, just gated.
+  app.get('/api/integrations', { preValidation: app.requireUser }, async () => {
+    const c = config();
+    return {
+      google: !!(c.GOOGLE_SA_KEY_JSON && c.GOOGLE_DELEGATED_USER),
+      masterSheet: !!c.MASTER_SHEET_ID,
+      vinculum: !!(c.VINCULUM_BASE_URL && c.VINCULUM_USER && c.VINCULUM_PASS),
+    };
+  });
+
   app.get('/api/uc-session', { preValidation: app.requireUser }, async () => {
     const { rows } = await query(
       `SELECT status, source, updated_by, updated_at, last_ok_at, last_check_at, fail_count,
