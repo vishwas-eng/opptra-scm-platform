@@ -11,7 +11,7 @@ export default async function coreRoutes(app) {
   });
 
   // Public client config (the Google client id is not a secret — it's in every page).
-  app.get('/api/config', async () => ({ googleClientId: config().GOOGLE_CLIENT_ID }));
+  app.get('/api/config', async () => ({ googleClientId: config().GOOGLE_CLIENT_ID, devLogin: !config().isProd }));
 
   app.get('/api/me', { preValidation: app.requireUser }, async (req) => ({ user: req.user }));
 

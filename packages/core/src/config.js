@@ -49,7 +49,8 @@ const Env = z.object({
   UC_REVERSEDC_TO_LINES: z.string().default('Opptra Retail Private Limited'), // '|'-separated To block
 
   // --- Human auth (Google SSO) ---
-  GOOGLE_CLIENT_ID: z.string().min(1),
+  // Optional in dev (dev-login is used); the one-click deploy checks it is set for prod.
+  GOOGLE_CLIENT_ID: z.string().default(''),
   ALLOWED_DOMAIN: z.string().default('opptra.com'),
   ADMIN_EMAILS: z.string().default(''), // comma-separated; bootstrap admins
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 chars'),

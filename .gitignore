@@ -6,3 +6,4 @@ node_modules/
 
 # generated extension bundles (built by scripts/build-extensions.sh and in Docker)
 apps/web/public/downloads/*.zip
+.local/

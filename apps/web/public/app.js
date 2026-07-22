@@ -25,8 +25,17 @@
     $('app-view').classList.add('hidden');
     $('login-view').classList.remove('hidden');
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    const { googleClientId } = await api('/api/config');
+    const { googleClientId, devLogin } = await api('/api/config');
+    if (devLogin) {
+      const btn = $('dev-login-btn');
+      btn.classList.remove('hidden');
+      btn.addEventListener('click', async () => {
+        try { const { user } = await api('/auth/dev-login', { method: 'POST', body: {} }); me = user; showApp(); }
+        catch (err) { const el = $('login-error'); el.textContent = err.message; el.classList.remove('hidden'); }
+      }, { once: true });
+    }
     const mount = () => {
+      if (!googleClientId || !window.google?.accounts?.id) return;
       window.google.accounts.id.initialize({ client_id: googleClientId, callback: onCredential });
       window.google.accounts.id.renderButton($('gsi-button'), { theme: 'filled_black', size: 'large', width: 300 });
     };

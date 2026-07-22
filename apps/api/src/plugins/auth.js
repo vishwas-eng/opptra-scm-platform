@@ -69,6 +69,23 @@ export default fp(async function authPlugin(app) {
     return reply.clearCookie('opptra_session', { path: '/' }).send({ ok: true });
   });
 
+  // LOCAL DEV ONLY — sign in without Google, as the first admin. Hard-disabled in
+  // production (returns 404) so it can never be a backdoor on the deployed platform.
+  app.post('/auth/dev-login', async (req, reply) => {
+    if (cfg.isProd) return reply.code(404).send({ error: 'not found' });
+    const email = (cfg.adminEmails[0] || 'dev@opptra.com').toLowerCase();
+    const { rows } = await query(
+      `INSERT INTO users (email, name, role, last_login) VALUES ($1, 'Local Dev', 'admin', now())
+       ON CONFLICT (email) DO UPDATE SET role = 'admin', last_login = now()
+       RETURNING email, name, picture, role`, [email]);
+    const user = rows[0];
+    const token = await reply.jwtSign({ email: user.email, name: user.name, role: user.role });
+    await audit(email, 'dev-login', {});
+    return reply
+      .setCookie('opptra_session', token, { path: '/', httpOnly: true, sameSite: 'lax', secure: cfg.PUBLIC_URL.startsWith('https'), maxAge: cfg.SESSION_TTL_HOURS * 3600 })
+      .send({ user: { email: user.email, name: user.name, picture: '', role: user.role } });
+  });
+
   // Re-validate against the DB on every request so deactivation / role changes take
   // effect immediately (not only when the 12h JWT expires). Short in-memory cache
   // keeps this cheap under load. This closes the "demoted user keeps admin for 12h" gap.
