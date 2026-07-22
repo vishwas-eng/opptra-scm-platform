@@ -1,0 +1,95 @@
+// E-way bill generation — ported from ewaybill-app/Ewb.gs.
+//
+// Per SO: resolve the invoice (fetchShippingPackageDetails is facility-scoped, so hop
+// facilities until found) → generate the EWB via the PROVEN endpoint
+// /data/oms/invoice/generateEWayBill (regenerateEWayBill is only for an invoice that
+// ALREADY has an EWB — do not switch). transporterId MUST be a 15-char GSTIN.
+
+const v = (x) => (x == null ? '' : String(x).trim());
+
+function toEpoch(d) {
+  if (d == null || d === '') return null;
+  if (typeof d === 'number') return d;
+  const s = String(d).trim();
+  const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/); // DD/MM/YYYY
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? null : t;
+}
+
+export function makeEwaybillPipeline(uc) {
+  /** Resolve an SO's invoice in a specific facility. notHere=true → hop to the next. */
+  async function resolveInFacility(so, facility) {
+    const d = await uc.data('/data/oms/saleorder/fetchShippingPackageDetails', { saleOrderCode: so }, { facility });
+    const sps = d?.shippingPackages || [];
+    if (!sps.length) return { ok: false, notHere: true, error: 'not in this facility' };
+    const sp = sps.find((p) => p.invoiceCode);
+    if (!sp) return { ok: false, error: `not invoiced yet (status ${sps[0].statusCode || '?'})` };
+    return {
+      ok: true, invoiceCode: sp.invoiceCode, status: sp.statusCode, packageCode: sp.code,
+      existingEwb: sp.ewayBillNo || sp.ewayBillNumber || (sp.ewayBillPdfUrl ? 'present' : null),
+    };
+  }
+
+  /** Try each facility until the SO's invoice is found. */
+  async function resolveInvoice(so) {
+    const facs = await uc.dataGet('/data/user/facilities');
+    const current = facs?.currentFacilityCode || null;
+    const all = (facs?.facilityDTOList || []).map((f) => f.code);
+    const order = [current, ...all.filter((f) => f && f !== current)].filter(Boolean);
+    let lastErr = 'no facilities available';
+    for (const fac of order) {
+      const inv = await resolveInFacility(so, fac);
+      if (inv.ok) return { ...inv, facility: fac };
+      if (!inv.notHere) { lastErr = inv.error; break; } // here but not invoiced → stop
+      lastErr = inv.error;
+    }
+    return { ok: false, error: lastErr };
+  }
+
+  function buildTransporterDetail(row) {
+    const gstin = v(row.gstin);
+    if (gstin && gstin.length !== 15) {
+      throw new Error(`transporterId (GSTIN) must be exactly 15 characters — got ${gstin.length}`);
+    }
+    const td = {};
+    if (gstin) td.transporterId = gstin;
+    if (v(row.transporterName)) td.transporterName = v(row.transporterName);
+    if (v(row.vehicleNo)) td.vehicleNo = v(row.vehicleNo);
+    if (v(row.transMode)) td.transMode = v(row.transMode).toUpperCase();
+    if (v(row.distance)) td.transDistance = v(row.distance);
+    const dt = toEpoch(row.docDate); if (dt) td.transDocDate = dt;
+    if (v(row.docNo)) td.transDocNo = v(row.docNo);
+    if (v(row.vehicleType)) td.vehicleType = v(row.vehicleType).toUpperCase().replace(/\s+/g, '_');
+    return td;
+  }
+
+  /** Generate one EWB. dryRun → resolve + validate + return payload, no write. */
+  async function generateOne(row, { dryRun = false } = {}) {
+    const so = v(row.so);
+    if (!so) return { so, ok: false, error: 'empty SO' };
+
+    const inv = await resolveInvoice(so);
+    if (!inv.ok) return { so, ok: false, error: inv.error };
+    if (inv.existingEwb && inv.existingEwb !== 'present') {
+      return { so, ok: true, skipped: true, ewb: inv.existingEwb, invoiceCode: inv.invoiceCode, note: 'already had EWB' };
+    }
+
+    let td;
+    try { td = buildTransporterDetail(row); }
+    catch (e) { return { so, ok: false, invoiceCode: inv.invoiceCode, error: e.message }; }
+
+    if (dryRun) return { so, ok: true, dryRun: true, invoiceCode: inv.invoiceCode, facility: inv.facility, payload: td };
+
+    const d = await uc.data('/data/oms/invoice/generateEWayBill',
+      { invoiceCode: inv.invoiceCode, transporterDetail: td }, { facility: inv.facility });
+    if (d?.successful === false) {
+      return { so, ok: false, invoiceCode: inv.invoiceCode, error: (d.errors || []).map((x) => x.description || x.message).join('; ') || 'failed' };
+    }
+    const ewb = d.ewayBillNo || d.ewayBillNumber ||
+      (d.ewbeinvoicelist && d.ewbeinvoicelist[0] && (d.ewbeinvoicelist[0].ewayBillNo || d.ewbeinvoicelist[0].ewbNo)) || '(generated)';
+    return { so, ok: true, invoiceCode: inv.invoiceCode, ewb, pdf: d.ewayBillPdfUrl || null };
+  }
+
+  return { generateOne, resolveInvoice };
+}

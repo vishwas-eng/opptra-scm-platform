@@ -1,7 +1,7 @@
 /* Opptra SCM Platform — sidebar SPA (plain ES2020, no build). */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', extensions: 'Extensions', admin: 'Admin' };
+  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', extensions: 'Extensions', admin: 'Admin' };
   let me = null;
   let pollTimer = null;
   let ucLoginUrl = null;
@@ -173,6 +173,37 @@
       if (Date.now() - t0 > timeoutMs) return run;
     }
   }
+
+  /* ---------------- e-way bill tab ---------------- */
+  $('ewb-run-btn')?.addEventListener('click', async () => {
+    const sos = $('ewb-sos').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    const out = $('ewb-output');
+    out.classList.remove('hidden');
+    if (!sos.length) { out.textContent = 'Enter at least one SO number.'; return; }
+    const gstin = $('ewb-gstin').value.trim();
+    if (gstin && gstin.length !== 15) { out.textContent = 'GSTIN must be exactly 15 characters (or leave it blank).'; return; }
+    const shared = {
+      gstin, transporterName: $('ewb-tname').value.trim(), transMode: $('ewb-mode').value.trim(),
+      vehicleType: $('ewb-vtype').value.trim(), vehicleNo: $('ewb-vno').value.trim(), distance: $('ewb-dist').value.trim(),
+    };
+    const rows = sos.map((so) => ({ so, ...shared }));
+    const dryRun = $('ewb-dry').checked;
+    const btn = $('ewb-run-btn');
+    btn.disabled = true;
+    out.textContent = dryRun ? 'Previewing (dry run — no e-way bills created)…' : 'Generating e-way bills…';
+    try {
+      const { runUid } = await api('/api/automations/ewaybill/generate', { body: { dryRun, rows } });
+      const run = await pollRun(runUid, out);
+      const r = run.result || run;
+      const lines = (r.results || []).map((x) =>
+        `${x.ok ? '✓' : '✗'} ${x.so}  ${x.skipped ? 'already had EWB: ' + x.ewb : x.dryRun ? 'would generate (inv ' + x.invoiceCode + ')' : x.ewb ? 'EWB ' + x.ewb : x.error}`);
+      out.textContent = `${r.ok ?? '?'} ok · ${r.failed ?? '?'} failed\n\n` + lines.join('\n');
+    } catch (err) {
+      out.textContent = 'Error: ' + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   /* ---------------- admin ---------------- */
   $('admin-cookie-btn')?.addEventListener('click', async () => {

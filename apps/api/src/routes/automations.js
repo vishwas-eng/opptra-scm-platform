@@ -75,6 +75,46 @@ export default async function automationRoutes(app) {
     return { queued: runs.length, runs };
   });
 
+  // --- E-way bill: generate for a batch of SO rows ---
+  app.post('/api/automations/ewaybill/generate', {
+    preHandler: opsOnly,
+    config: perUser(20, '1 minute'),
+    schema: {
+      body: {
+        type: 'object', required: ['rows'],
+        properties: {
+          dryRun: { type: 'boolean', default: false },
+          rows: {
+            type: 'array', minItems: 1, maxItems: 100,
+            items: {
+              type: 'object', required: ['so'],
+              properties: {
+                so: SO_CODE,
+                gstin: { type: 'string', maxLength: 20 },
+                transporterName: { type: 'string', maxLength: 120 },
+                vehicleNo: { type: 'string', maxLength: 20 },
+                transMode: { type: 'string', maxLength: 12 },
+                distance: { type: 'string', maxLength: 10 },
+                docDate: { type: 'string', maxLength: 20 },
+                docNo: { type: 'string', maxLength: 40 },
+                vehicleType: { type: 'string', maxLength: 30 },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (req) => {
+    const run = await createRun({
+      userEmail: req.user.email, automation: 'ewaybill', action: req.body.dryRun ? 'dry-run' : 'generate',
+      input: { count: req.body.rows.length, dryRun: !!req.body.dryRun },
+    });
+    await enqueue('ewaybill.generate', { runUid: run.run_uid, input: req.body });
+    return { runUid: run.run_uid, queued: true };
+  });
+
   // --- UC probe: read-only SO status (used by the UI before acting) ---
   // ops-only: even read probes consume the single shared UC session/worker.
   app.post('/api/automations/uc/so-status', {

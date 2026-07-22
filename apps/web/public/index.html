@@ -26,7 +26,7 @@
         <button data-tab="dashboard" class="active"><i>▪</i> Dashboard</button>
         <div class="side-group">Automations</div>
         <button data-tab="return"><i>↺</i> Return Flow</button>
-        <button data-tab="ewaybill" disabled title="Migrating — Phase 2"><i>▤</i> E-way Bill</button>
+        <button data-tab="ewaybill"><i>▤</i> E-way Bill</button>
         <button data-tab="asn" disabled title="Migrating — Phase 2"><i>▤</i> ASN Compile</button>
         <button data-tab="packing" disabled title="Migrating — Phase 3"><i>✉</i> Packing Mail</button>
         <div class="side-group">Tools</div>
@@ -100,6 +100,44 @@
               <button id="ret-run-btn" class="primary">Process SO</button>
             </div>
             <pre id="ret-output" class="output hidden"></pre>
+          </div>
+        </section>
+
+        <!-- E-way Bill -->
+        <section id="tab-ewaybill" class="tab hidden">
+          <h2>E-way Bill Generation</h2>
+          <p class="meta" style="margin-bottom:14px">Paste SO numbers (one per line). The platform finds each invoice across facilities and generates its e-way bill. Transporter details below apply to all rows.</p>
+          <div class="panel">
+            <label>Sale Orders (one per line)
+              <textarea id="ewb-sos" rows="5" placeholder="SO02444&#10;SO02445" style="width:100%;font-family:Menlo,monospace;font-size:13px;padding:10px 12px;border:1px solid var(--grey-l);border-radius:8px"></textarea>
+            </label>
+            <div class="row">
+              <label style="flex:1;margin:0">Transporter GSTIN (15 chars)
+                <input id="ewb-gstin" placeholder="29ABCDE1234F1Z5" maxlength="15" />
+              </label>
+              <label style="flex:1;margin:0">Transporter name
+                <input id="ewb-tname" placeholder="ABC Logistics" />
+              </label>
+            </div>
+            <div class="row">
+              <label style="flex:1;margin:0">Transport mode
+                <input id="ewb-mode" placeholder="ROAD" value="ROAD" />
+              </label>
+              <label style="flex:1;margin:0">Vehicle type
+                <input id="ewb-vtype" placeholder="REGULAR" value="REGULAR" />
+              </label>
+              <label style="flex:1;margin:0">Vehicle no.
+                <input id="ewb-vno" placeholder="optional" />
+              </label>
+              <label style="flex:1;margin:0">Distance (km)
+                <input id="ewb-dist" placeholder="optional" />
+              </label>
+            </div>
+            <div class="row">
+              <label class="check"><input type="checkbox" id="ewb-dry" checked /> Dry run (preview, no e-way bill created)</label>
+              <button id="ewb-run-btn" class="primary">Generate</button>
+            </div>
+            <pre id="ewb-output" class="output hidden"></pre>
           </div>
         </section>
 

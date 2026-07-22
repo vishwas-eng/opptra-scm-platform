@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@opptra/automation-ewaybill": "*",
     "@opptra/automation-return": "*",
     "@opptra/core": "*",
     "@opptra/uc-client": "*",

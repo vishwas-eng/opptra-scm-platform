@@ -10,6 +10,7 @@ import IORedis from 'ioredis';
 import { config, logger, migrate, closeDb, markRunning, markPendingRetry, finishRun, alert } from '@opptra/core';
 import { ucClient, SessionError, ConfigError } from '@opptra/uc-client';
 import { makeReturnPipeline } from '@opptra/automation-return';
+import { makeEwaybillPipeline } from '@opptra/automation-ewaybill';
 
 const cfg = config();
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +21,7 @@ const connection = new IORedis(cfg.REDIS_URL, { maxRetriesPerRequest: null });
 const queue = new Queue('automations', { connection });
 const uc = ucClient();
 const returnPipeline = makeReturnPipeline(uc, { facility: cfg.UC_DEFAULT_FACILITY });
+const ewaybillPipeline = makeEwaybillPipeline(uc);
 
 const MAX_PENDING_RETRIES = 40;      // resumable pipeline: ~40 × 90s ≈ 1h of patience
 const PENDING_RETRY_DELAY_MS = 90_000;
@@ -32,6 +34,32 @@ const handlers = {
     const r = await uc.ping();
     logger.info({ alive: r.alive, facility: r.currentFacility || null }, 'uc keepalive');
     return r;
+  },
+
+  // E-way bill: generate for a batch of SO rows. Each row is independent; one bad
+  // row (e.g. bad GSTIN, not invoiced) fails only itself. dryRun previews with no write.
+  'ewaybill.generate': async (job) => {
+    const { runUid, input } = job.data;
+    await markRunning(runUid);
+    const rows = input.rows || [];
+    const results = [];
+    for (const row of rows) {
+      try {
+        results.push(await ewaybillPipeline.generateOne(row, { dryRun: !!input.dryRun }));
+      } catch (err) {
+        if (err instanceof SessionError) { // session died mid-batch — stop, don't churn
+          results.push({ so: row.so, ok: false, error: 'session expired' });
+          for (const r of rows.slice(rows.indexOf(row) + 1)) results.push({ so: r.so, ok: false, error: 'skipped (session expired)' });
+          break;
+        }
+        results.push({ so: row.so, ok: false, error: String(err.message || err) });
+      }
+    }
+    const ok = results.filter((r) => r.ok).length;
+    const failed = results.length - ok;
+    await finishRun(runUid, { ok: failed === 0, result: { results, ok, failed } });
+    if (failed) await alert('ewaybill-failures', `E-way bill: ${failed} of ${results.length} failed`, { runUid });
+    return { results, ok, failed };
   },
 
   // Read-only SO status probe for the UI.
