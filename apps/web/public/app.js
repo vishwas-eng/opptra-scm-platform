@@ -97,11 +97,16 @@
   /* ---------------- dashboard ---------------- */
   async function refreshDashboard() {
     try {
-      const s = await api('/api/uc-session');
+      const [s, stats, { runs }] = await Promise.all([
+        api('/api/uc-session'), api('/api/dashboard'), api('/api/runs?limit=30'),
+      ]);
       renderSession(s);
-      const { runs } = await api('/api/runs?limit=30');
-      $('runs-table').querySelector('tbody').innerHTML = runs.map(runRow).join('');
-    } catch { /* transient */ }
+      $('inflight-count').textContent = stats.inflight;
+      $('week-count').textContent = stats.week.total;
+      $('week-breakdown').textContent = `${stats.week.succeeded} ok · ${stats.week.failed} failed`;
+      const tbody = $('runs-table').querySelector('tbody');
+      tbody.innerHTML = runs.length ? runs.map(runRow).join('') : emptyRow(6);
+    } catch { /* transient — next poll retries */ }
   }
 
   function renderSession(s) {
@@ -196,6 +201,23 @@
       render: (r) => renderReturn(r, kind),
     });
   }
+
+  // Batch: queue a sheet of original→correct SO pairs. Returns immediately with the
+  // queued run list (each pair runs on the worker, sequentially).
+  $('ret-batch-btn')?.addEventListener('click', () => {
+    const pairs = $('ret-batch').value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+      const [a, b] = l.split(/[,\t]/).map((x) => x.trim());
+      return b ? { originalSO: a, correctSO: b } : { correctSO: a };
+    });
+    return runJob({
+      btn: $('ret-batch-btn'), out: $('ret-batch-output'), working: `Queueing ${pairs.length} pair(s)…`,
+      validate: () => (!pairs.length || pairs.some((p) => !p.correctSO) ? 'Enter pairs: originalSO, correctSO (one per line).' : null),
+      submit: () => api('/api/automations/return/batch', { body: { pairs, returnIn: $('ret-batch-return-in').checked } }),
+      render: (r) => resultHead(true, `Queued ${r.queued} order(s)`)
+        + `<ul class="result-list">${(r.runs || []).map((x) => `<li class="ok"><span class="so">${esc(x.saleOrder)}</span><span>queued · ${esc(x.runUid.slice(0, 8))}</span></li>`).join('')}</ul>`
+        + `<p class="result-note">Track progress in the Dashboard → Recent Activity.</p>`,
+    });
+  });
 
   /* ---------------- e-way bill tab ---------------- */
   $('ewb-run-btn')?.addEventListener('click', () => {
@@ -330,6 +352,13 @@
         try { await api('/api/admin/users/' + encodeURIComponent(sel.dataset.email), { body: { role: sel.value } }); toast(`Role updated for ${sel.dataset.email}.`, 'ok'); }
         catch (err) { toast(err.message, 'bad'); loadAdmin(); }
       }));
+    } catch {}
+    // audit log
+    try {
+      const { audit } = await api('/api/admin/audit');
+      $('audit-table').querySelector('tbody').innerHTML = audit.map((a) => `
+        <tr><td>${fmt(a.at)}</td><td>${esc(a.actor)}</td><td>${esc(a.event)}</td>
+        <td><code>${esc(JSON.stringify(a.detail))}</code></td></tr>`).join('') || emptyRow(4);
     } catch {}
   }
 

@@ -1,5 +1,5 @@
 // Health, session status, runs feed, current user.
-import { query, listRuns } from '@opptra/core';
+import { config, query, listRuns } from '@opptra/core';
 
 export default async function coreRoutes(app) {
   // Liveness/readiness — used by Docker healthcheck and monitoring. No auth, so it
@@ -11,10 +11,7 @@ export default async function coreRoutes(app) {
   });
 
   // Public client config (the Google client id is not a secret — it's in every page).
-  app.get('/api/config', async () => {
-    const { config } = await import('@opptra/core');
-    return { googleClientId: config().GOOGLE_CLIENT_ID };
-  });
+  app.get('/api/config', async () => ({ googleClientId: config().GOOGLE_CLIENT_ID }));
 
   app.get('/api/me', { preValidation: app.requireUser }, async (req) => ({ user: req.user }));
 
@@ -30,7 +27,7 @@ export default async function coreRoutes(app) {
     preValidation: app.requireUser,
     schema: {
       querystring: {
-        type: 'object',
+        type: 'object', additionalProperties: false,
         properties: {
           limit: { type: 'integer', minimum: 1, maximum: 200 },
           user: { type: 'string' },
@@ -45,5 +42,20 @@ export default async function coreRoutes(app) {
       automation: req.query.automation || null,
     });
     return { runs: rows };
+  });
+
+  // Dashboard stats for every signed-in user (the header cards). Lightweight counts,
+  // not the admin analytics panel.
+  app.get('/api/dashboard', { preValidation: app.requireUser }, async () => {
+    const [inflight, week] = await Promise.all([
+      query(`SELECT count(*)::int n FROM runs WHERE status IN ('queued','running','pending_retry')`),
+      query(`SELECT status, count(*)::int n FROM runs WHERE created_at > now() - interval '7 days' GROUP BY status`),
+    ]);
+    const byStatus = Object.fromEntries(week.rows.map((r) => [r.status, r.n]));
+    const total = week.rows.reduce((s, r) => s + r.n, 0);
+    return {
+      inflight: inflight.rows[0].n,
+      week: { total, succeeded: byStatus.succeeded || 0, failed: byStatus.failed || 0 },
+    };
   });
 }

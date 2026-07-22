@@ -4,7 +4,7 @@
 // and 502/503/504. POSTs do NOT retry by default — UC mutations (allocate, invoice,
 // dispatch) are not idempotent and a blind retry can double-execute. Callers that
 // know a call is safe pass { idempotent: true }.
-import { logger } from '@opptra/core/logger';
+import { logger } from '@opptra/core';
 import { retryAfterMs } from './ratelimit.js';
 
 const DEFAULT_TIMEOUT_MS = 60_000;

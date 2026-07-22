@@ -3,7 +3,7 @@
 import { config } from './config.js';
 import { logger } from './logger.js';
 
-let lastSent = new Map(); // key -> ts, simple dedup so a flapping check can't spam
+const lastSent = new Map(); // key -> ts, simple dedup so a flapping check can't spam
 
 export async function alert(key, message, detail = {}) {
   logger.error({ alertKey: key, detail }, `ALERT: ${message}`);
@@ -28,5 +28,3 @@ export async function alert(key, message, detail = {}) {
     logger.warn({ err }, 'slack alert failed (alerting must not break the caller)');
   }
 }
-
-export function _resetAlertDedupForTests() { lastSent = new Map(); }

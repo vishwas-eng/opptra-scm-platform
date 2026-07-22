@@ -4,7 +4,9 @@
 //  - data(path, body, {facility})     → JSESSIONID cookie; facility-scoped, so ALL internal
 //                                       calls are serialized behind one mutex and the client
 //                                       switches facility before the call when needed.
-//  - dataGet / dataPdf                → same session rules, GET / binary flavours.
+//  - dataGet / dataBinary             → same session rules, GET / binary (PDF) flavours.
+//    (dataBinary is the download primitive for the upcoming reverse-DC / invoice-PDF
+//     automations; kept here because those live on the same session/facility rules.)
 //
 // Death handling: a SessionError triggers ONE mutex'd refresh + ONE retry, then throws.
 import { logger } from '@opptra/core';

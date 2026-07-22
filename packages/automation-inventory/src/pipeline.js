@@ -26,6 +26,17 @@ export function makeInventoryPipeline(uc, cfg, memoStep) {
   };
   const fac = CFG.facility ? { facility: CFG.facility } : {};
 
+  // PO create is identical for both inward modes — one memoized helper.
+  const createApprovedPO = (reqId, items) => memoStep(reqId, 'PO', async () =>
+    (await uc.public('/services/rest/v1/purchase/purchaseOrder/createApproved', {
+      vendorCode: CFG.vendorCode, currencyCode: CFG.currency,
+      purchaseOrderItems: items.map((it) => ({
+        itemSKU: it.sku, quantity: Number(it.quantity), unitPrice: Number(it.unitPrice),
+        maxRetailPrice: it.maxRetailPrice ? Number(it.maxRetailPrice) : undefined,
+        taxTypeCode: it.taxCode || CFG.taxCode || undefined,
+      })),
+    })).purchaseOrderCode);
+
   async function snapshot(skus) {
     const snap = await uc.public('/services/rest/v1/inventory/inventorySnapshot/get', { itemTypeSKUs: skus }, { idempotent: true });
     const inv = {};
@@ -37,17 +48,7 @@ export function makeInventoryPipeline(uc, cfg, memoStep) {
 
   async function inwardAdjust(form) {
     const { reqId, items } = form;
-    const poCode = await memoStep(reqId, 'PO', async () => {
-      const r = await uc.public('/services/rest/v1/purchase/purchaseOrder/createApproved', {
-        vendorCode: CFG.vendorCode, currencyCode: CFG.currency,
-        purchaseOrderItems: items.map((it) => ({
-          itemSKU: it.sku, quantity: Number(it.quantity), unitPrice: Number(it.unitPrice),
-          maxRetailPrice: it.maxRetailPrice ? Number(it.maxRetailPrice) : undefined,
-          taxTypeCode: it.taxCode || CFG.taxCode || undefined,
-        })),
-      });
-      return r.purchaseOrderCode;
-    });
+    const poCode = await createApprovedPO(reqId, items);
 
     let grnCode = null;
     if (CFG.grnTrail) {
@@ -85,15 +86,7 @@ export function makeInventoryPipeline(uc, cfg, memoStep) {
 
   async function inwardPutaway(form) {
     const { reqId, items } = form;
-    const poCode = await memoStep(reqId, 'PO', async () =>
-      (await uc.public('/services/rest/v1/purchase/purchaseOrder/createApproved', {
-        vendorCode: CFG.vendorCode, currencyCode: CFG.currency,
-        purchaseOrderItems: items.map((it) => ({
-          itemSKU: it.sku, quantity: Number(it.quantity), unitPrice: Number(it.unitPrice),
-          maxRetailPrice: it.maxRetailPrice ? Number(it.maxRetailPrice) : undefined,
-          taxTypeCode: it.taxCode || CFG.taxCode || undefined,
-        })),
-      })).purchaseOrderCode);
+    const poCode = await createApprovedPO(reqId, items);
 
     const grnCode = await memoStep(reqId, 'GRN', async () =>
       (await uc.public('/services/rest/v1/purchase/inflowReceipt/create', {

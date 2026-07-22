@@ -1,12 +1,10 @@
 import { config } from '@opptra/core';
 import { UcClient } from './client.js';
 
-export { UcClient } from './client.js';
-export { SessionManager } from './session.js';
-export { BearerManager } from './bearer.js';
-export { UcError, SessionError, ConfigError } from './errors.js';
-export { Mutex, makeHttp } from './http.js';
-export { RateLimiter, retryAfterMs } from './ratelimit.js';
+// Public API of this package — only what other packages actually consume: the shared
+// client singleton and the two error types callers branch on. Tests reach internals
+// (UcClient, RateLimiter, makeHttp, …) via deep paths on purpose; those are not API.
+export { SessionError, ConfigError } from './errors.js';
 
 let singleton = null;
 

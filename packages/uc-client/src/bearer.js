@@ -2,7 +2,7 @@
 //   GET /oauth/token?grant_type=password&client_id=my-trusted-client&username=..&password=..
 // Tokens last ~12h; we refresh 5 minutes early behind a mutex so concurrent callers
 // never stampede the token endpoint.
-import { logger } from '@opptra/core/logger';
+import { logger } from '@opptra/core';
 import { ConfigError, UcError } from './errors.js';
 
 export class BearerManager {

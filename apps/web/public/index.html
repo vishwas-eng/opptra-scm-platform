@@ -104,6 +104,19 @@
             </div>
             <div id="ret-output" class="result hidden"></div>
           </div>
+
+          <div class="panel">
+            <h3>Batch — original → correct SO pairs</h3>
+            <p class="lead">The manager's flow: paste the sheet of pairs, one per line as <code>originalSO, correctSO</code>. Each pair cancels the wrong SO and processes the correct one — sequentially, so inventory never leaks.</p>
+            <label>Pairs (one per line)
+              <textarea id="ret-batch" rows="5" class="textarea" placeholder="SO02690, SO02696&#10;SO02701, SO02705"></textarea>
+            </label>
+            <div class="row">
+              <label class="check"><input type="checkbox" id="ret-batch-return-in" /> Run return-in after delivery</label>
+              <button id="ret-batch-btn" class="primary">Queue batch</button>
+            </div>
+            <div id="ret-batch-output" class="result hidden"></div>
+          </div>
         </section>
 
         <!-- E-way Bill -->
@@ -236,6 +249,15 @@
             <h3>Users</h3>
             <table id="users-table">
               <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Active</th><th>Last login</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="panel">
+            <h3>Audit log</h3>
+            <p class="lead">Security-relevant events — logins, role changes, session updates.</p>
+            <table id="audit-table">
+              <thead><tr><th>When</th><th>Actor</th><th>Event</th><th>Detail</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>

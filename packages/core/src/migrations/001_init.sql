@@ -15,7 +15,7 @@ CREATE TABLE runs (
   id           bigserial PRIMARY KEY,
   run_uid      text NOT NULL UNIQUE,
   user_email   text NOT NULL,            -- 'system' for scheduled jobs
-  owner_email  text NOT NULL DEFAULT '', -- who configured a scheduled job
+  owner_email  text NOT NULL DEFAULT '', -- who configured a scheduled job (set once the reports-digest scheduler lands)
   automation   text NOT NULL,            -- e.g. 'return', 'ewaybill', 'asn'
   action       text NOT NULL,            -- e.g. 'process-so', 'compile'
   input        jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -23,6 +23,7 @@ CREATE TABLE runs (
                CHECK (status IN ('queued', 'running', 'pending_retry', 'succeeded', 'failed', 'cancelled')),
   result       jsonb,
   error        text,
+  -- Populated by file-producing automations (ASN sheets, reverse-DC PDFs) as they land.
   artifacts    jsonb NOT NULL DEFAULT '[]'::jsonb,
   created_at   timestamptz NOT NULL DEFAULT now(),
   started_at   timestamptz,

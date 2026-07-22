@@ -13,7 +13,7 @@ export default async function adminRoutes(app) {
     ...adminOnly,
     schema: {
       body: {
-        type: 'object', required: ['jsessionid'],
+        type: 'object', required: ['jsessionid'], additionalProperties: false,
         properties: { jsessionid: { type: 'string', minLength: 8, maxLength: 512 } },
       },
     },

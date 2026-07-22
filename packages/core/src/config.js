@@ -52,10 +52,9 @@ const Env = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
 
   // --- Alerting ---
+  // Alerting. LOG_LEVEL is intentionally NOT here — the logger reads it straight from
+  // the environment to stay dependency-free (see logger.js).
   SLACK_WEBHOOK_URL: z.string().default(''),
-  ALERT_EMAIL: z.string().default(''),
-
-  LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 });
 
 let cached = null;
@@ -76,6 +75,3 @@ export function config() {
   });
   return cached;
 }
-
-// Test hook only.
-export function _resetConfigForTests() { cached = null; }
