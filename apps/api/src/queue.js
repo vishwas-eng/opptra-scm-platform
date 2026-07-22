@@ -1,13 +1,12 @@
 // BullMQ wiring (API side): the API only ENQUEUES — all Unicommerce traffic runs in
 // the worker so exactly one process owns the session. waitForResult lets synchronous
 // UI actions (e.g. "process this SO") block briefly for the outcome.
-import { Queue, QueueEvents } from 'bullmq';
+import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { config } from '@opptra/core';
 
 let _conn = null;
 let _queue = null;
-let _events = null;
 
 export function redis() {
   if (!_conn) {
@@ -30,24 +29,22 @@ export function automationQueue() {
   return _queue;
 }
 
-export function queueEvents() {
-  if (!_events) {
-    _events = new QueueEvents('automations', { connection: new IORedis(config().REDIS_URL, { maxRetriesPerRequest: null }) });
-  }
-  return _events;
-}
+// Producer backpressure: with a concurrency-1 worker, an unbounded queue against a
+// noeviction Redis is an outage waiting to happen. Reject new work past this depth.
+const MAX_QUEUE_DEPTH = 2000;
 
 export async function enqueue(name, payload, opts = {}) {
-  return automationQueue().add(name, payload, opts);
-}
-
-/** Enqueue and wait up to timeoutMs for the worker's result (UI-synchronous actions). */
-export async function enqueueAndWait(name, payload, timeoutMs = 120_000) {
-  const job = await enqueue(name, payload);
-  return job.waitUntilFinished(queueEvents(), timeoutMs);
+  const q = automationQueue();
+  const depth = (await q.getWaitingCount()) + (await q.getDelayedCount());
+  if (depth >= MAX_QUEUE_DEPTH) {
+    const err = new Error(`queue is full (${depth} jobs waiting) — try again later`);
+    err.statusCode = 503;
+    throw err;
+  }
+  return q.add(name, payload, opts);
 }
 
 export async function closeQueues() {
-  await Promise.allSettled([_queue?.close(), _events?.close(), _conn?.quit()]);
-  _queue = null; _events = null; _conn = null;
+  await Promise.allSettled([_queue?.close(), _conn?.quit()]);
+  _queue = null; _conn = null;
 }

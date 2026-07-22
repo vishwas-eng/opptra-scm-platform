@@ -1,53 +1,24 @@
-// API entrypoint. Boot order: config → migrations → plugins → routes → listen.
+// API entrypoint. Boot order: config → migrations → build app → listen.
 // Anything wrong at boot exits non-zero so Docker restarts us loudly.
 process.env.SERVICE_NAME = 'api';
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify from 'fastify';
 import { config, logger, migrate, closeDb } from '@opptra/core';
 import { closeQueues } from './queue.js';
+import { buildApp } from './app.js';
 
 const cfg = config();
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-// 1. Migrations run at boot — API and worker race safely (advisory via _migrations PK).
-const migrationsDir = path.join(here, '../../../packages/core/src/migrations');
-await migrate(migrationsDir);
+// 1. Migrations run at boot — API and worker race safely (via _migrations PK).
+await migrate(path.join(here, '../../../packages/core/src/migrations'));
 
-const app = Fastify({
-  loggerInstance: logger,
-  trustProxy: true, // behind Caddy
-  bodyLimit: 1 * 1024 * 1024,
-});
+// 2. Build the app (plugins + routes + static).
+const app = await buildApp();
 
-await app.register(import('@fastify/rate-limit'), {
-  max: 300, timeWindow: '1 minute',
-  allowList: (req) => req.url === '/healthz',
-});
-
-await app.register(import('./plugins/auth.js'));
-await app.register(import('./routes/core.js'));
-await app.register(import('./routes/admin.js'));
-await app.register(import('./routes/automations.js'));
-
-// Static web app (single container serves UI + API; Caddy handles TLS).
-await app.register(import('@fastify/static'), {
-  root: path.join(here, '../../web/public'),
-  prefix: '/',
-});
-app.setNotFoundHandler((req, reply) => {
-  if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) {
-    return reply.code(404).send({ error: 'not found' });
-  }
-  return reply.sendFile('index.html'); // SPA fallback
-});
-
-app.setErrorHandler((err, req, reply) => {
-  if (err.validation) return reply.code(400).send({ error: 'invalid input', detail: err.message });
-  req.log.error({ err }, 'unhandled route error');
-  return reply.code(500).send({ error: 'internal error' });
-});
+// Global safety net: log loudly instead of dying silently on a missed rejection.
+process.on('unhandledRejection', (err) => logger.error({ err }, 'UNHANDLED REJECTION'));
 
 // Graceful shutdown — finish in-flight requests, close pools, exit.
 let shuttingDown = false;

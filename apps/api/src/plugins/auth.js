@@ -57,7 +57,9 @@ export default fp(async function authPlugin(app) {
     await audit(email, 'login', {});
     return reply
       .setCookie('opptra_session', token, {
-        path: '/', httpOnly: true, sameSite: 'lax', secure: cfg.isProd,
+        // secure follows the actual serving scheme — a Secure cookie over plain HTTP
+        // is silently dropped by browsers, which bricks login entirely.
+        path: '/', httpOnly: true, sameSite: 'lax', secure: cfg.PUBLIC_URL.startsWith('https'),
         maxAge: cfg.SESSION_TTL_HOURS * 3600,
       })
       .send({ user: { email: user.email, name: user.name, picture: user.picture, role: user.role } });
@@ -67,22 +69,50 @@ export default fp(async function authPlugin(app) {
     return reply.clearCookie('opptra_session', { path: '/' }).send({ ok: true });
   });
 
-  // Decorators used by every protected route.
-  app.decorate('requireUser', async function (req, reply) {
+  // Re-validate against the DB on every request so deactivation / role changes take
+  // effect immediately (not only when the 12h JWT expires). Short in-memory cache
+  // keeps this cheap under load. This closes the "demoted user keeps admin for 12h" gap.
+  const userCache = new Map(); // email -> { row, exp }
+  const USER_CACHE_MS = 15_000;
+
+  async function currentUser(req, reply) {
     try {
       await req.jwtVerify();
     } catch {
-      return reply.code(401).send({ error: 'not signed in' });
+      reply.code(401).send({ error: 'not signed in' });
+      return null;
     }
+    const email = req.user.email;
+    const cached = userCache.get(email);
+    let row;
+    if (cached && cached.exp > Date.now()) {
+      row = cached.row;
+    } else {
+      const { rows } = await query('SELECT email, name, role, is_active FROM users WHERE email = $1', [email]);
+      row = rows[0];
+      userCache.set(email, { row, exp: Date.now() + USER_CACHE_MS });
+    }
+    if (!row || !row.is_active) {
+      reply.clearCookie('opptra_session', { path: '/' }).code(403).send({ error: 'account is not active' });
+      return null;
+    }
+    // Trust the DB, not the token, for role.
+    req.user.role = row.role;
+    req.user.name = row.name;
+    return row;
+  }
+
+  app.decorate('currentUser', currentUser);
+  app.decorate('invalidateUserCache', (email) => userCache.delete(email));
+
+  app.decorate('requireUser', async function (req, reply) {
+    await currentUser(req, reply);
   });
 
   app.decorate('requireRole', (...roles) => async function (req, reply) {
-    try {
-      await req.jwtVerify();
-    } catch {
-      return reply.code(401).send({ error: 'not signed in' });
-    }
-    if (!roles.includes(req.user.role)) {
+    const row = await currentUser(req, reply);
+    if (!row) return; // reply already sent
+    if (!roles.includes(row.role)) {
       return reply.code(403).send({ error: `requires role: ${roles.join(' or ')}` });
     }
   });

@@ -97,6 +97,7 @@ const worker = new Worker('automations', async (job) => {
 
 worker.on('failed', (job, err) => logger.error({ job: job?.name, err: String(err) }, 'job failed'));
 worker.on('error', (err) => logger.error({ err: String(err) }, 'worker error'));
+process.on('unhandledRejection', (err) => logger.error({ err }, 'UNHANDLED REJECTION'));
 
 // Repeatable keep-alive (BullMQ job scheduler — replaces Apps Script time triggers).
 await queue.upsertJobScheduler('keepalive', { every: cfg.UC_KEEPALIVE_MINUTES * 60_000 }, {

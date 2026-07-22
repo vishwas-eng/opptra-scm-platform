@@ -3,3 +3,6 @@ node_modules/
 .env.production
 *.log
 .DS_Store
+
+# generated extension bundles (built by scripts/build-extensions.sh and in Docker)
+apps/web/public/downloads/*.zip

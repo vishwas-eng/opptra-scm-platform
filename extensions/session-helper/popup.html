@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root { --navy:#131A48; --orange:#FF5800; --grey:#5A5A5A; --grey-l:#CECECE; --green:#276749; }
+    body { width: 320px; margin: 0; font-family: 'Segoe UI', Roboto, sans-serif; color: var(--grey); font-size: 13px; }
+    header { background: var(--navy); color: #fff; padding: 12px 16px; font-weight: 600; }
+    header span { color: var(--orange); }
+    .body { padding: 14px 16px; }
+    label { display: block; font-size: 11px; font-weight: 600; color: var(--navy); margin: 10px 0 3px; }
+    input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--grey-l); border-radius: 7px; font-size: 12px; }
+    button { width: 100%; margin-top: 12px; padding: 10px; border: 0; border-radius: 7px; font-weight: 600; font-size: 13px; cursor: pointer; }
+    .primary { background: var(--orange); color: #fff; }
+    .secondary { background: #fff; color: var(--navy); border: 1px solid var(--grey-l); }
+    .msg { margin-top: 10px; font-size: 12px; padding: 8px 10px; border-radius: 7px; display: none; }
+    .msg.ok { background: #e7f6ec; color: #137a3a; display: block; }
+    .msg.err { background: #ffe9df; color: #9a3500; display: block; }
+    .hint { font-size: 11px; color: var(--grey); margin-top: 8px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <header>Opptra <span>Session</span> Helper</header>
+  <div class="body">
+    <label>Platform URL</label>
+    <input id="platform" placeholder="https://scm.opptra.com" />
+    <label>Ingest token (from Admin → Session Helper token)</label>
+    <input id="token" type="password" placeholder="paste token" />
+    <button class="secondary" id="save">Save settings</button>
+    <button class="primary" id="capture">Capture session &amp; send</button>
+    <div class="msg" id="msg"></div>
+    <div class="hint">Log into Unicommerce in a normal tab first (do the CAPTCHA). Then click “Capture session” — this reads only your JSESSIONID cookie and sends it to the platform. No passwords are read or stored.</div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

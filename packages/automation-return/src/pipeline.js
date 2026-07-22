@@ -6,7 +6,17 @@
 // state and advances it; a not-ready order returns { pending: true } and the worker
 // re-enqueues it with a delay.
 
-const safe = async (fn) => { try { return await fn(); } catch { return null; } };
+import { SessionError, ConfigError } from '@opptra/uc-client';
+
+// safe() tolerates per-step business failures (the pipeline reads state and moves on),
+// but a dead session or bad config must FAIL THE RUN FAST — otherwise the worker
+// re-enqueues a doomed job for an hour while the session is dead.
+const safe = async (fn) => {
+  try { return await fn(); } catch (e) {
+    if (e instanceof SessionError || e instanceof ConfigError) throw e;
+    return null;
+  }
+};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function makeReturnPipeline(uc, cfgIn = {}) {

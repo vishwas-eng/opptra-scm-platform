@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Opptra Session Helper",
+  "version": "1.0.0",
+  "description": "Captures your Unicommerce session after you log in and hands it to the Opptra SCM Platform to keep alive. No passwords, no automation — you log in yourself.",
+  "permissions": ["cookies", "storage"],
+  "host_permissions": [
+    "https://oppdoor.unicommerce.co.in/*",
+    "https://oppdoorstg.unicommerce.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Opptra Session Helper"
+  }
+}

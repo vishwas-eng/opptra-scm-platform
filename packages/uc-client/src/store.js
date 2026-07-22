@@ -9,15 +9,18 @@ export class PgSessionStore {
   }
 
   async set(cookie, source, actor) {
+    // A fresh cookie clears the re-login flag — the outage is over.
     await query(
       `UPDATE uc_session SET jsessionid = $1, source = $2, status = 'unknown',
-        updated_by = $3, updated_at = now(), fail_count = 0 WHERE id = 1`,
+        updated_by = $3, updated_at = now(), fail_count = 0,
+        needs_relogin = false, relogin_since = NULL WHERE id = 1`,
       [cookie, source, actor]
     );
   }
 
   async markAlive() {
-    await query(`UPDATE uc_session SET status = 'alive', last_ok_at = now(), last_check_at = now(), fail_count = 0 WHERE id = 1`);
+    await query(`UPDATE uc_session SET status = 'alive', last_ok_at = now(), last_check_at = now(),
+      fail_count = 0, needs_relogin = false, relogin_since = NULL WHERE id = 1`);
   }
 
   async markChecked() {
@@ -25,13 +28,18 @@ export class PgSessionStore {
   }
 
   async markDead() {
-    await query(`UPDATE uc_session SET status = 'dead', last_check_at = now(), fail_count = fail_count + 1 WHERE id = 1`);
+    // Flag that a human re-login is needed; stamp the start of the outage once.
+    await query(`UPDATE uc_session
+      SET status = 'dead', last_check_at = now(), fail_count = fail_count + 1,
+          needs_relogin = true,
+          relogin_since = COALESCE(relogin_since, now())
+      WHERE id = 1`);
   }
 
   async status() {
     const { rows } = await query(
       `SELECT status, source, facility, updated_by, updated_at, last_ok_at, last_check_at, fail_count,
-              (jsessionid <> '') AS has_cookie
+              needs_relogin, relogin_since, (jsessionid <> '') AS has_cookie
        FROM uc_session WHERE id = 1`);
     return rows[0];
   }

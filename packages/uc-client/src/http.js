@@ -11,6 +11,12 @@ const RETRYABLE_STATUS = new Set([502, 503, 504]);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Never log full URLs: the OAuth token endpoint carries credentials in its query
+// string, and other UC URLs can carry business identifiers. Log host+path only.
+function safeUrl(url) {
+  try { const u = new URL(url); return u.origin + u.pathname; } catch { return '[unparseable-url]'; }
+}
+
 export function makeHttp({ fetchImpl = fetch } = {}) {
   async function request(url, opts = {}) {
     const {
@@ -41,7 +47,7 @@ export function makeHttp({ fetchImpl = fetch } = {}) {
         // so only retry when the caller declared the call idempotent.
         if (idempotent && attempt <= maxRetries) {
           const delay = 500 * attempt + Math.floor(Math.random() * 250);
-          logger.warn({ url, attempt, err: String(err) }, 'uc http network error, retrying');
+          logger.warn({ url: safeUrl(url), attempt, err: String(err) }, 'uc http network error, retrying');
           await sleep(delay);
           continue;
         }
@@ -49,7 +55,7 @@ export function makeHttp({ fetchImpl = fetch } = {}) {
       }
       if (idempotent && RETRYABLE_STATUS.has(res.status) && attempt <= maxRetries) {
         const delay = 750 * attempt + Math.floor(Math.random() * 250);
-        logger.warn({ url, status: res.status, attempt }, 'uc http retryable status, retrying');
+        logger.warn({ url: safeUrl(url), status: res.status, attempt }, 'uc http retryable status, retrying');
         await sleep(delay);
         continue;
       }

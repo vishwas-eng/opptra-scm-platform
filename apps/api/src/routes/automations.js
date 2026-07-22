@@ -6,12 +6,19 @@ import { enqueue } from '../queue.js';
 
 const SO_CODE = { type: 'string', pattern: '^[A-Za-z0-9/_-]{2,40}$' };
 
+// Per-user (not per-IP) rate limits on job-producing routes: the global HTTP limit
+// doesn't stop one insider from flooding the concurrency-1 worker queue.
+const perUser = (max, timeWindow) => ({
+  rateLimit: { max, timeWindow, keyGenerator: (req) => req.user?.email || req.ip },
+});
+
 export default async function automationRoutes(app) {
   const opsOnly = app.requireRole('admin', 'ops');
 
   // --- Return + re-dispatch: process one SO (optionally cancelling the wrong one) ---
   app.post('/api/automations/return/process', {
     preHandler: opsOnly,
+    config: perUser(30, '1 minute'),
     schema: {
       body: {
         type: 'object', required: ['saleOrder'],
@@ -39,12 +46,13 @@ export default async function automationRoutes(app) {
   // --- Return: batch of pairs (original SO → correct SO), sequential by design ---
   app.post('/api/automations/return/batch', {
     preHandler: opsOnly,
+    config: perUser(5, '1 minute'),
     schema: {
       body: {
         type: 'object', required: ['pairs'],
         properties: {
           pairs: {
-            type: 'array', minItems: 1, maxItems: 200,
+            type: 'array', minItems: 1, maxItems: 50,
             items: {
               type: 'object', required: ['correctSO'],
               properties: { originalSO: { ...SO_CODE, nullable: true }, correctSO: SO_CODE },
@@ -68,8 +76,10 @@ export default async function automationRoutes(app) {
   });
 
   // --- UC probe: read-only SO status (used by the UI before acting) ---
+  // ops-only: even read probes consume the single shared UC session/worker.
   app.post('/api/automations/uc/so-status', {
-    preHandler: app.requireUser,
+    preHandler: opsOnly,
+    config: perUser(30, '1 minute'),
     schema: {
       body: {
         type: 'object', required: ['saleOrder'],

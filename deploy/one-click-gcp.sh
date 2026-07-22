@@ -55,6 +55,20 @@ fi
 STATIC_IP=$(gcloud compute addresses describe "$IP_NAME" --region "$REGION" --format='value(address)')
 ok "Static IP: $STATIC_IP   ← give this to Unicommerce for whitelisting"
 
+# HTTPS is MANDATORY: Google Sign-In refuses insecure origins and browsers drop
+# Secure cookies over plain HTTP (login would silently loop). If .env still has the
+# ":80" placeholder, switch it to <IP>.sslip.io — a public DNS trick that resolves
+# to the IP, letting Caddy issue a real Let's Encrypt certificate with zero DNS setup.
+if grep -qE '^SITE_ADDRESS=:80$' "$REPO_DIR/.env"; then
+  SSLIP="${STATIC_IP}.sslip.io"
+  say "   .env has no domain — enabling automatic HTTPS via ${SSLIP}"
+  sed -i.bak -e "s|^SITE_ADDRESS=:80$|SITE_ADDRESS=${SSLIP}|" \
+             -e "s|^PUBLIC_URL=.*$|PUBLIC_URL=https://${SSLIP}|" "$REPO_DIR/.env"
+  rm -f "$REPO_DIR/.env.bak"
+  ok "SITE_ADDRESS=${SSLIP} · PUBLIC_URL=https://${SSLIP} (swap in scm.opptra.com later)"
+fi
+SITE=$(grep -E '^SITE_ADDRESS=' "$REPO_DIR/.env" | cut -d= -f2)
+
 say "3/7 Firewall for HTTP/HTTPS…"
 if ! gcloud compute firewall-rules describe opptra-scm-web >/dev/null 2>&1; then
   gcloud compute firewall-rules create opptra-scm-web \
@@ -117,15 +131,15 @@ ok "Stack is up"
 
 echo
 echo "════════════════════════════════════════════════════════════════"
-echo "  Platform URL : http://$STATIC_IP   (open it and sign in)"
+echo "  Platform URL : https://$SITE   (open it and sign in)"
 echo "  Static IP    : $STATIC_IP  ← send to Unicommerce for whitelisting"
-echo "  Health       : http://$STATIC_IP/healthz"
+echo "  Health       : https://$SITE/healthz"
 echo
 echo "  Next steps:"
-echo "   1. In GCP Console → Credentials, add http://$STATIC_IP to the"
+echo "   1. In GCP Console → Credentials, add https://$SITE to the"
 echo "      OAuth client's Authorized JavaScript origins."
-echo "   2. (Later) point scm.opptra.com → $STATIC_IP, set SITE_ADDRESS"
-echo "      and PUBLIC_URL in .env, re-run ./deploy/update.sh — HTTPS is automatic."
+echo "   2. (Later) point scm.opptra.com → $STATIC_IP, set SITE_ADDRESS=scm.opptra.com"
+echo "      and PUBLIC_URL in .env, re-run ./deploy/update.sh — HTTPS re-issues automatically."
 echo "   3. Sign in with your @opptra.com account (first ADMIN_EMAILS user = admin),"
 echo "      open Admin tab, paste a fresh UC JSESSIONID → session goes ALIVE."
 echo "════════════════════════════════════════════════════════════════"
