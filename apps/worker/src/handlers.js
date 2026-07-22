@@ -11,7 +11,7 @@ export const RETURN_PENDING_RETRY_MS = 90_000;
 
 export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) {
   const { markRunning, markPendingRetry, finishRun } = runs;
-  const { returnPipeline, ewaybillPipeline, inventoryPipeline } = pipelines;
+  const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, reverseDcPipeline } = pipelines;
 
   return {
     // Keep-alive: ping UC, record liveness. Death triggers refresh/alert inside uc-client.
@@ -60,6 +60,22 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) 
       const ok = ['INWARD_DONE', 'OUTWARD_DONE', 'FULLCYCLE_DONE'].includes(result.status);
       await finishRun(runUid, { ok, result });
       if (!ok) await alert('inventory-partial', `${input.op} did not fully complete`, { runUid, status: result.status, error: result.outwardError });
+      return result;
+    },
+
+    // ASN compile: SO + channel → one downloadable file (base64 in the run result).
+    'asn.compile': async ({ data: { runUid, input } }) => {
+      await markRunning(runUid);
+      const result = await asnPipeline.compile(input.saleOrder, input.channel);
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      return result;
+    },
+
+    // Reverse DC: credit note → edited Delivery Challan PDF (base64 in the run result).
+    'reversedc.build': async ({ data: { runUid, input } }) => {
+      await markRunning(runUid);
+      const result = await reverseDcPipeline.build(input);
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
       return result;
     },
 

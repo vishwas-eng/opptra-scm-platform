@@ -12,6 +12,8 @@ import { ucClient, SessionError, ConfigError } from '@opptra/uc-client';
 import { makeReturnPipeline } from '@opptra/automation-return';
 import { makeEwaybillPipeline } from '@opptra/automation-ewaybill';
 import { makeInventoryPipeline } from '@opptra/automation-inventory';
+import { makeAsnPipeline } from '@opptra/automation-asn';
+import { makeReverseDcPipeline } from '@opptra/automation-reversedc';
 import { makeHandlers } from './handlers.js';
 
 const cfg = config();
@@ -32,6 +34,8 @@ const handlers = makeHandlers({
     returnPipeline: makeReturnPipeline(uc, cfg),
     ewaybillPipeline: makeEwaybillPipeline(uc),
     inventoryPipeline: makeInventoryPipeline(uc, cfg, memoStep),
+    asnPipeline: makeAsnPipeline(uc, cfg),
+    reverseDcPipeline: makeReverseDcPipeline(uc, cfg),
   },
   reenqueue: (name, data, opts) => queue.add(name, data, opts),
 });

@@ -171,6 +171,45 @@ export default async function automationRoutes(app) {
     return { runUid: run.run_uid, queued: true };
   });
 
+  // --- ASN compile: SO + channel → downloadable file ---
+  app.post('/api/automations/asn/compile', {
+    preValidation: opsOnly,
+    config: perUser(20, '1 minute'),
+    schema: {
+      body: {
+        type: 'object', required: ['saleOrder', 'channel'],
+        properties: { saleOrder: SO_CODE, channel: { type: 'string', enum: ['flipkart', 'myntra', 'zepto'] } },
+        additionalProperties: false,
+      },
+    },
+  }, async (req) => {
+    const run = await createRun({ userEmail: req.user.email, automation: 'asn', action: 'compile', input: req.body });
+    await enqueue('asn.compile', { runUid: run.run_uid, input: req.body });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  // --- Reverse DC: credit note → Delivery Challan PDF ---
+  app.post('/api/automations/reversedc/build', {
+    preValidation: opsOnly,
+    config: perUser(20, '1 minute'),
+    schema: {
+      body: {
+        type: 'object', required: ['creditNote'],
+        properties: {
+          creditNote: { type: 'string', minLength: 3, maxLength: 40 },
+          fromLines: { type: 'array', items: { type: 'string', maxLength: 60 }, maxItems: 12 },
+          toLines: { type: 'array', items: { type: 'string', maxLength: 60 }, maxItems: 12 },
+          removeBarcode: { type: 'boolean', default: true },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (req) => {
+    const run = await createRun({ userEmail: req.user.email, automation: 'reversedc', action: 'build', input: { creditNote: req.body.creditNote } });
+    await enqueue('reversedc.build', { runUid: run.run_uid, input: req.body });
+    return { runUid: run.run_uid, queued: true };
+  });
+
   // --- UC probe: read-only SO status (used by the UI before acting) ---
   // ops-only: even read probes consume the single shared UC session/worker.
   app.post('/api/automations/uc/so-status', {

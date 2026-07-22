@@ -30,8 +30,9 @@
         <button data-tab="return"><i>↺</i> Return Flow</button>
         <button data-tab="ewaybill"><i>▤</i> E-way Bill</button>
         <button data-tab="inventory"><i>⇅</i> Inward / Outward</button>
-        <button data-tab="asn" disabled title="Migrating — Phase 3"><i>▤</i> ASN Compile</button>
-        <button data-tab="packing" disabled title="Migrating — Phase 3"><i>✉</i> Packing Mail</button>
+        <button data-tab="asn"><i>▤</i> ASN Compile</button>
+        <button data-tab="reversedc"><i>⤺</i> Reverse DC</button>
+        <button data-tab="packing" disabled title="Needs Gmail delegation"><i>✉</i> Packing Mail</button>
         <div class="side-group">Tools</div>
         <button data-tab="extensions"><i>⤓</i> Extensions</button>
         <button data-tab="admin" id="admin-nav-btn" class="hidden"><i>⚙</i> Admin</button>
@@ -167,6 +168,39 @@
               <span class="hint">A retry with the same result is safe — steps are idempotent (never double-creates a PO/invoice).</span>
             </div>
             <div id="inv-output" class="result hidden"></div>
+          </div>
+        </section>
+
+        <!-- ASN Compile -->
+        <section id="tab-asn" class="tab hidden">
+          <h2>ASN / Packaging Compile</h2>
+          <p class="lead">Enter one SO and its channel. The platform finds the order across facilities and generates the channel's ASN file for that SO only.</p>
+          <div class="panel">
+            <label>Sale Order<input id="asn-so" placeholder="e.g. SO02696" autocomplete="off" /></label>
+            <div class="row">
+              <label class="check"><input type="radio" name="asn-ch" value="flipkart" checked> Flipkart</label>
+              <label class="check"><input type="radio" name="asn-ch" value="myntra"> Myntra</label>
+              <label class="check"><input type="radio" name="asn-ch" value="zepto"> Zepto</label>
+              <button id="asn-run-btn" class="primary">Compile ASN</button>
+            </div>
+            <div id="asn-output" class="result hidden"></div>
+          </div>
+        </section>
+
+        <!-- Reverse DC -->
+        <section id="tab-reversedc" class="tab hidden">
+          <h2>Reverse Delivery Challan</h2>
+          <p class="lead">Enter a credit note number. The platform downloads the original Uniware CN PDF and edits it in place into a Delivery Challan (barcode removed, title + From/To rewritten) — not a new template.</p>
+          <div class="panel">
+            <label>Credit Note number<input id="rdc-cn" placeholder="e.g. SRRMH2627/0134" autocomplete="off" /></label>
+            <label>From (customer) — one line each, optional
+              <textarea id="rdc-from" rows="3" class="textarea" placeholder="Customer Name&#10;Address line&#10;GSTIN: ..."></textarea>
+            </label>
+            <div class="row">
+              <label class="check"><input type="checkbox" id="rdc-barcode" checked> Remove barcode</label>
+              <button id="rdc-run-btn" class="primary">Build Delivery Challan</button>
+            </div>
+            <div id="rdc-output" class="result hidden"></div>
           </div>
         </section>
 

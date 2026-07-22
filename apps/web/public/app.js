@@ -1,7 +1,7 @@
 /* Opptra SCM Platform — sidebar SPA (plain ES2020, no build). */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', extensions: 'Extensions', admin: 'Admin' };
+  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', asn: 'ASN Compile', reversedc: 'Reverse DC', extensions: 'Extensions', admin: 'Admin' };
   let me = null;
   let pollTimer = null;
   let ucLoginUrl = null;
@@ -270,6 +270,32 @@
     });
   });
 
+  /* ---------------- ASN tab ---------------- */
+  $('asn-run-btn')?.addEventListener('click', () => {
+    const so = $('asn-so').value.trim();
+    const channel = document.querySelector('input[name="asn-ch"]:checked').value;
+    return runJob({
+      btn: $('asn-run-btn'), out: $('asn-output'), working: `Compiling ${channel} ASN for ${so}…`,
+      validate: () => (!so ? 'Enter a Sale Order code.' : null),
+      submit: () => api('/api/automations/asn/compile', { body: { saleOrder: so, channel } }),
+      render: (r) => renderFileResult(r, r.ok ? `ASN ready — ${r.lineCount} line(s)` : (r.error || 'Failed'),
+        [['SO', r.so], ['Channel', r.channel], ['Facility', r.facility], ['PO', r.po], ['Invoice', r.invoice]]),
+    });
+  });
+
+  /* ---------------- Reverse DC tab ---------------- */
+  $('rdc-run-btn')?.addEventListener('click', () => {
+    const creditNote = $('rdc-cn').value.trim();
+    const fromLines = $('rdc-from').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    return runJob({
+      btn: $('rdc-run-btn'), out: $('rdc-output'), working: `Building Delivery Challan for ${creditNote}…`,
+      validate: () => (!creditNote ? 'Enter a Credit Note number.' : null),
+      submit: () => api('/api/automations/reversedc/build', { body: { creditNote, fromLines, removeBarcode: $('rdc-barcode').checked } }),
+      render: (r) => renderFileResult(r, r.ok ? 'Delivery Challan ready' : (r.error || 'Failed'),
+        [['Credit note', r.creditNote], ['Facility', r.facility]]),
+    });
+  });
+
   /* ---------------- admin ---------------- */
   $('admin-cookie-btn')?.addEventListener('click', async () => {
     const v = $('admin-cookie').value.trim();
@@ -424,6 +450,29 @@
     const inv = r.inventory ? kv(Object.entries(r.inventory).map(([sku, q]) => [sku, q])) : '';
     return resultHead(ok, ok ? `${op[0].toUpperCase() + op.slice(1)} complete` : (r.status || 'Incomplete'))
       + kv(pairs) + (inv ? `<p class="result-note">Inventory now:</p>${inv}` : '') + raw(r);
+  }
+
+  // Result with a generated file (ASN / Reverse DC): show fields + a Download button.
+  function renderFileResult(r, title, pairs) {
+    const head = resultHead(r.ok, title);
+    if (!r.ok) return head + raw(r);
+    const btnId = 'dl-' + (++toastSeq);
+    setTimeout(() => {
+      const b = document.getElementById(btnId);
+      if (b) b.addEventListener('click', () => downloadFile(r.file));
+    }, 0);
+    return head + kv(pairs)
+      + `<button id="${btnId}" class="primary mt-sm">⤓ Download ${esc(r.file.filename)}</button>`
+      + raw({ ...r, file: { filename: r.file.filename, contentType: r.file.contentType, base64: '…' } });
+  }
+
+  function downloadFile(file) {
+    const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: file.contentType }));
+    const a = document.createElement('a');
+    a.href = url; a.download = file.filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
   /* ---------------- UI primitives ---------------- */

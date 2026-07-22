@@ -44,6 +44,10 @@ const Env = z.object({
   UC_RETURN_POOL_METHOD: z.string().default('Standard-Prepaid'),
   UC_RETURN_ALLOC_POLL: z.coerce.number().int().min(1).max(20).default(4),
 
+  // --- ASN / Reverse-DC ---
+  UC_ASN_FACILITIES: z.string().default(''), // comma list; RSG is always tried first
+  UC_REVERSEDC_TO_LINES: z.string().default('Opptra Retail Private Limited'), // '|'-separated To block
+
   // --- Human auth (Google SSO) ---
   GOOGLE_CLIENT_ID: z.string().min(1),
   ALLOWED_DOMAIN: z.string().default('opptra.com'),
