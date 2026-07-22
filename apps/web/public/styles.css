@@ -29,8 +29,10 @@ code { font-family: Menlo, ui-monospace, monospace; font-size: 12px; background:
 /* ───────── app shell: sidebar + content ───────── */
 #app-view { display: flex; min-height: 100vh; }
 #sidebar { width: 232px; background: var(--navy); color: #cdd0e0; display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; }
-.side-brand { font-family: 'Spectral', Georgia, serif; font-weight: 300; font-size: 20px; letter-spacing: -0.02em; color: #fff; padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,.08); }
-.side-brand span { color: var(--orange); font-weight: 700; }
+.side-brand { display: flex; align-items: center; gap: 8px; padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.side-brand .wordmark { font-family: 'Spectral', Georgia, serif; font-weight: 600; font-size: 21px; letter-spacing: -0.01em; color: #fff; }
+.side-brand .wordmark::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--orange); margin-right: 8px; vertical-align: middle; }
+.side-brand .badge-scm { font-family: 'Raleway', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #fff; background: var(--orange); padding: 3px 7px; border-radius: 5px; }
 #side-nav { flex: 1; padding: 12px 12px; overflow-y: auto; }
 .side-group { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: #7a83a8; margin: 16px 10px 6px; }
 #side-nav button { width: 100%; text-align: left; background: none; border: 0; color: #cdd0e0; padding: 9px 12px; border-radius: 8px; cursor: pointer; font-size: 13.5px; font-family: inherit; font-weight: 500; display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
@@ -67,7 +69,7 @@ main { padding: 24px; max-width: 1040px; width: 100%; }
 
 h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
 label { display: block; margin-bottom: 12px; color: var(--grey); font-size: 12px; font-weight: 600; }
-input { display: block; width: 100%; margin-top: 4px; padding: 10px 12px; background: #fff; color: var(--navy); border: 1px solid var(--grey-l); border-radius: 8px; font-family: Menlo, ui-monospace, monospace; font-size: 13px; }
+input { display: block; width: 100%; margin-top: 4px; padding: 10px 12px; background: #fff; color: var(--navy); border: 1px solid var(--grey-l); border-radius: 8px; font-family: inherit; font-size: 14px; }
 input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,88,0,.12); }
 .row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .row input { margin-top: 0; flex: 1; min-width: 200px; }
@@ -104,7 +106,7 @@ select { background: #fff; color: var(--navy); border: 1px solid var(--grey-l); 
 .link-btn { background: none; border: 0; color: var(--orange); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; padding: 0; }
 
 /* ───────── form utilities (replaces inline styles) ───────── */
-.textarea { width: 100%; margin-top: 4px; padding: 10px 12px; background: #fff; color: var(--navy); border: 1px solid var(--grey-l); border-radius: 8px; font-family: Menlo, ui-monospace, monospace; font-size: 13px; resize: vertical; }
+.textarea { width: 100%; margin-top: 4px; padding: 10px 12px; background: #fff; color: var(--navy); border: 1px solid var(--grey-l); border-radius: 8px; font-family: inherit; font-size: 14px; line-height: 1.6; resize: vertical; }
 .textarea:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,88,0,.12); }
 .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 14px; }
 .field-grid label { margin: 0; }
