@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Opptra SCM Platform</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div id="login-view" class="hidden">
+    <div class="login-card">
+      <h1>Opptra <span>SCM Platform</span></h1>
+      <p>Supply-chain automations — sign in with your @opptra.com account.</p>
+      <div id="gsi-button"></div>
+      <p id="login-error" class="error hidden"></p>
+    </div>
+  </div>
+
+  <div id="app-view" class="hidden">
+    <header>
+      <div class="brand">Opptra <span>SCM</span></div>
+      <nav id="tabs">
+        <button data-tab="dashboard" class="active">Dashboard</button>
+        <button data-tab="return">Return Flow</button>
+        <button data-tab="ewaybill" disabled title="Migrating — coming in Phase 2">E-way Bill</button>
+        <button data-tab="asn" disabled title="Migrating — coming in Phase 2">ASN</button>
+        <button data-tab="packing" disabled title="Migrating — coming in Phase 3">Packing Mail</button>
+        <button data-tab="admin" id="admin-tab-btn" class="hidden">Admin</button>
+      </nav>
+      <div class="user-chip">
+        <img id="user-pic" alt="" />
+        <span id="user-name"></span>
+        <button id="logout-btn" title="Sign out">↦</button>
+      </div>
+    </header>
+
+    <div id="session-banner" class="banner hidden"></div>
+
+    <main>
+      <!-- Dashboard -->
+      <section id="tab-dashboard" class="tab">
+        <div class="cards">
+          <div class="card" id="card-session">
+            <h3>Unicommerce Session</h3>
+            <div class="big" id="session-status">…</div>
+            <div class="meta" id="session-meta"></div>
+          </div>
+          <div class="card">
+            <h3>Recent Activity</h3>
+            <div class="meta">Latest runs across all users, refreshed every 10s.</div>
+          </div>
+        </div>
+        <table id="runs-table">
+          <thead><tr><th>When</th><th>User</th><th>Automation</th><th>Action</th><th>Input</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- Return automation -->
+      <section id="tab-return" class="tab hidden">
+        <h2>Return + Re-dispatch</h2>
+        <div class="panel">
+          <label>Sale Order (the CORRECT SO to process)
+            <input id="ret-so" placeholder="e.g. SO02696" autocomplete="off" />
+          </label>
+          <label>Cancel this SO first (optional — the wrong/original SO)
+            <input id="ret-cancel" placeholder="e.g. SO02690" autocomplete="off" />
+          </label>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="ret-return-in" /> Run return-in after delivery (bulk return + put-away)</label>
+            <label class="check"><input type="checkbox" id="ret-deliver" checked /> Drive to DELIVERED</label>
+          </div>
+          <div class="row">
+            <button id="ret-status-btn" class="secondary">Check SO status</button>
+            <button id="ret-run-btn" class="primary">Process SO</button>
+          </div>
+          <pre id="ret-output" class="output hidden"></pre>
+        </div>
+      </section>
+
+      <!-- Admin -->
+      <section id="tab-admin" class="tab hidden">
+        <h2>Admin</h2>
+        <div class="panel">
+          <h3>Unicommerce session cookie</h3>
+          <p class="meta">Bridge until scripted login: paste a fresh JSESSIONID captured from a logged-in browser (DevTools → Application → Cookies). The worker uses it immediately — no redeploy.</p>
+          <div class="row">
+            <input id="admin-cookie" placeholder="JSESSIONID value" autocomplete="off" />
+            <button id="admin-cookie-btn" class="primary">Save session</button>
+          </div>
+          <p id="admin-cookie-msg" class="meta"></p>
+        </div>
+        <div class="panel">
+          <h3>Users</h3>
+          <table id="users-table">
+            <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Active</th><th>Last login</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

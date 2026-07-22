@@ -1,0 +1,13 @@
+{
+  "name": "@opptra/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@opptra/automation-return": "*",
+    "@opptra/core": "*",
+    "@opptra/uc-client": "*",
+    "bullmq": "^5.21.2",
+    "ioredis": "^5.4.1"
+  }
+}

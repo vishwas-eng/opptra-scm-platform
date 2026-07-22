@@ -1,0 +1,5 @@
+# SITE_ADDRESS=":80" (IP-only) or "scm.opptra.com" (auto-HTTPS via Let's Encrypt).
+{$SITE_ADDRESS::80} {
+	encode gzip
+	reverse_proxy api:8080
+}
