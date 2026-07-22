@@ -136,30 +136,29 @@
       <td><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td>
     </tr>`;
 
-  /* ---------------- return tab ---------------- */
-  $('ret-status-btn').addEventListener('click', () => runReturn('status'));
-  $('ret-run-btn').addEventListener('click', () => runReturn('process'));
-
-  async function runReturn(kind) {
-    const so = $('ret-so').value.trim();
-    const out = $('ret-output');
-    if (!so) { out.textContent = 'Enter a Sale Order code.'; out.classList.remove('hidden'); return; }
-    const btn = kind === 'status' ? $('ret-status-btn') : $('ret-run-btn');
-    btn.disabled = true;
+  /* ----------------------------------------------------------------------
+   * runJob — the ONE async-action flow every automation tab shares:
+   *   validate → enqueue → poll → render result. Handles the button spinner,
+   *   the live "working…" state, errors (toast), and final rendering.
+   * Callers supply: { btn, out, validate, submit, render }.
+   * -------------------------------------------------------------------- */
+  async function runJob({ btn, out, validate, submit, render, working = 'Working…' }) {
+    const err = validate?.();
+    if (err) { toast(err, 'bad'); return; }
+    setLoading(btn, true);
     out.classList.remove('hidden');
-    out.textContent = kind === 'status' ? 'Checking status…' : 'Queued — the worker is processing (can take a few minutes)…';
+    out.innerHTML = `<div class="result-head"><span class="badge info">running</span><span class="title">${esc(working)}</span></div>`;
     try {
-      const body = kind === 'status'
-        ? await api('/api/automations/uc/so-status', { body: { saleOrder: so } })
-        : await api('/api/automations/return/process', {
-            body: { saleOrder: so, cancelSO: $('ret-cancel').value.trim() || null, returnIn: $('ret-return-in').checked, deliver: $('ret-deliver').checked },
-          });
-      const final = await pollRun(body.runUid, out);
-      out.textContent = JSON.stringify(final.result ?? final, null, 2);
-    } catch (err) {
-      out.textContent = 'Error: ' + err.message;
+      const { runUid, ...immediate } = await submit();
+      const run = runUid ? await pollRun(runUid, out) : { status: 'succeeded', result: immediate };
+      out.innerHTML = render(run.result ?? run, run);
+      wireRaw(out);
+      if (run.status === 'failed') toast('Job failed — see the result panel.', 'bad');
+    } catch (e) {
+      out.innerHTML = `<div class="result-head"><span class="badge bad">error</span><span class="title">${esc(e.message)}</span></div>`;
+      toast(e.message, 'bad');
     } finally {
-      btn.disabled = false;
+      setLoading(btn, false);
     }
   }
 
@@ -169,40 +168,52 @@
       await new Promise((r) => setTimeout(r, 2500));
       const run = await api('/api/runs/' + runUid);
       if (['succeeded', 'failed'].includes(run.status)) return run;
-      if (run.status === 'pending_retry') out.textContent = 'Pending (UC async step) — auto-retrying…\n' + JSON.stringify(run.result || {}, null, 2);
+      if (run.status === 'pending_retry') {
+        out.innerHTML = `<div class="result-head"><span class="badge warn">retrying</span>
+          <span class="title">Unicommerce async step — auto-retrying…</span></div>
+          ${run.result ? stepChips(run.result.steps) : ''}`;
+      }
       if (Date.now() - t0 > timeoutMs) return run;
     }
   }
 
+  /* ---------------- return tab ---------------- */
+  $('ret-status-btn').addEventListener('click', () => runReturn('status'));
+  $('ret-run-btn').addEventListener('click', () => runReturn('process'));
+
+  function runReturn(kind) {
+    const so = $('ret-so').value.trim();
+    return runJob({
+      btn: kind === 'status' ? $('ret-status-btn') : $('ret-run-btn'),
+      out: $('ret-output'),
+      working: kind === 'status' ? 'Checking SO status…' : 'Processing — the worker may take a few minutes…',
+      validate: () => (!so ? 'Enter a Sale Order code.' : null),
+      submit: () => kind === 'status'
+        ? api('/api/automations/uc/so-status', { body: { saleOrder: so } })
+        : api('/api/automations/return/process', {
+            body: { saleOrder: so, cancelSO: $('ret-cancel').value.trim() || null, returnIn: $('ret-return-in').checked, deliver: $('ret-deliver').checked },
+          }),
+      render: (r) => renderReturn(r, kind),
+    });
+  }
+
   /* ---------------- e-way bill tab ---------------- */
-  $('ewb-run-btn')?.addEventListener('click', async () => {
+  $('ewb-run-btn')?.addEventListener('click', () => {
     const sos = $('ewb-sos').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    const out = $('ewb-output');
-    out.classList.remove('hidden');
-    if (!sos.length) { out.textContent = 'Enter at least one SO number.'; return; }
     const gstin = $('ewb-gstin').value.trim();
-    if (gstin && gstin.length !== 15) { out.textContent = 'GSTIN must be exactly 15 characters (or leave it blank).'; return; }
-    const shared = {
-      gstin, transporterName: $('ewb-tname').value.trim(), transMode: $('ewb-mode').value.trim(),
-      vehicleType: $('ewb-vtype').value.trim(), vehicleNo: $('ewb-vno').value.trim(), distance: $('ewb-dist').value.trim(),
-    };
-    const rows = sos.map((so) => ({ so, ...shared }));
     const dryRun = $('ewb-dry').checked;
-    const btn = $('ewb-run-btn');
-    btn.disabled = true;
-    out.textContent = dryRun ? 'Previewing (dry run — no e-way bills created)…' : 'Generating e-way bills…';
-    try {
-      const { runUid } = await api('/api/automations/ewaybill/generate', { body: { dryRun, rows } });
-      const run = await pollRun(runUid, out);
-      const r = run.result || run;
-      const lines = (r.results || []).map((x) =>
-        `${x.ok ? '✓' : '✗'} ${x.so}  ${x.skipped ? 'already had EWB: ' + x.ewb : x.dryRun ? 'would generate (inv ' + x.invoiceCode + ')' : x.ewb ? 'EWB ' + x.ewb : x.error}`);
-      out.textContent = `${r.ok ?? '?'} ok · ${r.failed ?? '?'} failed\n\n` + lines.join('\n');
-    } catch (err) {
-      out.textContent = 'Error: ' + err.message;
-    } finally {
-      btn.disabled = false;
-    }
+    const rows = sos.map((so) => ({
+      so, gstin, transporterName: $('ewb-tname').value.trim(), transMode: $('ewb-mode').value.trim(),
+      vehicleType: $('ewb-vtype').value.trim(), vehicleNo: $('ewb-vno').value.trim(), distance: $('ewb-dist').value.trim(),
+    }));
+    return runJob({
+      btn: $('ewb-run-btn'), out: $('ewb-output'),
+      working: dryRun ? 'Previewing (no e-way bills created)…' : 'Generating e-way bills…',
+      validate: () => (!sos.length ? 'Enter at least one SO number.'
+        : gstin && gstin.length !== 15 ? 'GSTIN must be exactly 15 characters (or leave it blank).' : null),
+      submit: () => api('/api/automations/ewaybill/generate', { body: { dryRun, rows } }),
+      render: (r) => renderBatch(r, 'E-way bill'),
+    });
   });
 
   /* ---------------- inward/outward/full-cycle tab ---------------- */
@@ -215,35 +226,26 @@
     return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
       const [sku, qty, unitPrice, sellingPrice] = l.split(/[,\t]/).map((x) => x.trim());
       const item = { sku, quantity: Number(qty || 1) };
-      if (unitPrice !== undefined && unitPrice !== '') item.unitPrice = Number(unitPrice);
-      if (sellingPrice !== undefined && sellingPrice !== '') item.sellingPrice = Number(sellingPrice);
+      if (unitPrice) item.unitPrice = Number(unitPrice);
+      if (sellingPrice) item.sellingPrice = Number(sellingPrice);
       return item;
     });
   }
 
-  $('inv-run-btn')?.addEventListener('click', async () => {
+  $('inv-run-btn')?.addEventListener('click', () => {
     const op = document.querySelector('input[name="inv-op"]:checked').value;
     const items = parseItems($('inv-items').value);
-    const out = $('inv-output');
-    out.classList.remove('hidden');
-    if (!items.length || items.some((i) => !i.sku)) { out.textContent = 'Enter at least one line: SKU, qty, unitPrice[, sellingPrice]'; return; }
     const body = { items };
     if (op !== 'inward') {
       if ($('inv-order').value.trim()) body.orderCode = $('inv-order').value.trim();
       if ($('inv-cust').value.trim()) body.customerName = $('inv-cust').value.trim();
     }
-    const btn = $('inv-run-btn');
-    btn.disabled = true;
-    out.textContent = `Running ${op}…`;
-    try {
-      const { runUid } = await api('/api/automations/' + op, { body });
-      const run = await pollRun(runUid, out);
-      out.textContent = JSON.stringify(run.result ?? run, null, 2);
-    } catch (err) {
-      out.textContent = 'Error: ' + err.message;
-    } finally {
-      btn.disabled = false;
-    }
+    return runJob({
+      btn: $('inv-run-btn'), out: $('inv-output'), working: `Running ${op}…`,
+      validate: () => (!items.length || items.some((i) => !i.sku) ? 'Enter at least one line: SKU, qty, unitPrice[, sellingPrice]' : null),
+      submit: () => api('/api/automations/' + op, { body }),
+      render: (r) => renderInventory(r, op),
+    });
   });
 
   /* ---------------- admin ---------------- */
@@ -253,10 +255,11 @@
     if (!v) { msg.textContent = 'Paste a JSESSIONID first.'; return; }
     try {
       await api('/api/admin/uc-session', { body: { jsessionid: v } });
-      msg.textContent = '✓ Saved. Next keep-alive/automation call uses it.';
+      msg.textContent = '';
       $('admin-cookie').value = '';
+      toast('Session saved — next call uses it.', 'ok');
       refreshDashboard();
-    } catch (err) { msg.textContent = 'Error: ' + err.message; }
+    } catch (err) { toast(err.message, 'bad'); }
   });
 
   $('token-create-btn')?.addEventListener('click', async () => {
@@ -265,8 +268,9 @@
       const out = $('token-out');
       out.classList.remove('hidden');
       out.textContent = 'Copy this token into the Session Helper extension now (shown once):\n\n' + token;
+      toast('Token created — copy it now, it won\'t be shown again.', 'ok', 8000);
       loadTokens();
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast(err.message, 'bad'); }
   });
 
   async function loadTokens() {
@@ -323,15 +327,95 @@
           <td>${u.is_active ? '✓' : '✗'}</td><td>${fmt(u.last_login)}</td>
         </tr>`).join('');
       document.querySelectorAll('.role-select').forEach((sel) => sel.addEventListener('change', async () => {
-        try { await api('/api/admin/users/' + encodeURIComponent(sel.dataset.email), { body: { role: sel.value } }); }
-        catch (err) { alert(err.message); loadAdmin(); }
+        try { await api('/api/admin/users/' + encodeURIComponent(sel.dataset.email), { body: { role: sel.value } }); toast(`Role updated for ${sel.dataset.email}.`, 'ok'); }
+        catch (err) { toast(err.message, 'bad'); loadAdmin(); }
       }));
     } catch {}
   }
 
+  /* ---------------- result renderers ---------------- */
+  // A run's outcome → clean HTML. Each automation shows the fields that matter,
+  // a step timeline, and a collapsible raw view — never a bare JSON dump.
+  function resultHead(ok, title, extra = '') {
+    const badge = ok === true ? '<span class="badge ok">success</span>'
+      : ok === false ? '<span class="badge bad">failed</span>'
+      : '<span class="badge info">done</span>';
+    return `<div class="result-head">${badge}<span class="title">${esc(title)}</span>${extra}</div>`;
+  }
+  const kv = (pairs) => `<dl class="kv">${pairs.filter(([, v]) => v != null && v !== '')
+    .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(String(v))}</dd>`).join('')}</dl>`;
+  function stepChips(steps) {
+    if (!steps || typeof steps !== 'object') return '';
+    const chips = Object.entries(steps).map(([k, v]) =>
+      `<span class="step-chip done"><b>${esc(k)}</b>${v && v !== 'ok' ? ' · ' + esc(String(v).slice(0, 28)) : ''}</span>`).join('');
+    return chips ? `<div class="steps-flow">${chips}</div>` : '';
+  }
+  const raw = (obj) => `<details class="raw"><summary>Raw response</summary><pre class="output">${esc(JSON.stringify(obj, null, 2))}</pre></details>`;
+
+  function renderReturn(r, kind) {
+    if (kind === 'status') {
+      return resultHead(null, 'SO status')
+        + kv([['Status', r.status], ['Package', r.pkg], ['Package status', r.pkgStatus], ['Invoice', r.invoice], ['Tracking', r.tracking]])
+        + raw(r);
+    }
+    const ok = r.ok === true;
+    return resultHead(ok, ok ? `Processed ${r.saleOrder}` : (r.error || 'Did not complete'))
+      + kv([['Sale order', r.saleOrder], ['Package', r.shippingPackage], ['Invoice', r.invoiceCode], ['Tracking', r.tracking], ['Package status', r.pkgStatus]])
+      + stepChips(r.steps)
+      + (r.pending ? `<p class="result-note">Still working through an async step — this may finish on a later retry.</p>` : '')
+      + raw(r);
+  }
+
+  function renderBatch(r, label) {
+    const items = r.results || [];
+    const head = resultHead(r.failed === 0, `${label}: ${r.ok ?? 0} ok · ${r.failed ?? 0} failed`);
+    const list = items.map((x) => {
+      const line = x.skipped ? `already had EWB ${x.ewb}`
+        : x.dryRun ? `would generate · invoice ${x.invoiceCode}`
+        : x.ewb ? `EWB ${x.ewb}` : (x.error || '—');
+      return `<li class="${x.ok ? 'ok' : 'bad'}"><span class="so">${esc(x.so)}</span><span>${esc(line)}</span></li>`;
+    }).join('');
+    return head + `<ul class="result-list">${list}</ul>` + raw(r);
+  }
+
+  function renderInventory(r, op) {
+    if (op === 'fullcycle') {
+      const ok = r.status === 'FULLCYCLE_DONE';
+      return resultHead(ok, ok ? 'Full cycle complete' : 'Outward failed after inward')
+        + `<div class="steps-flow"><span class="step-chip done"><b>inward</b> · ${esc(r.inward?.status || '—')}</span>
+           <span class="step-chip ${r.outward ? 'done' : ''}"><b>outward</b> · ${esc(r.outward?.status || r.outwardError || 'failed')}</span></div>`
+        + kv([['PO', r.inward?.poCode], ['GRN', r.inward?.grnCode], ['Put-away', r.inward?.putawayCode],
+              ['Sale order', r.outward?.soCode], ['Invoices', (r.outward?.invoices || []).map((i) => i.invoiceCode).join(', ')]])
+        + raw(r);
+    }
+    const ok = r.status === 'INWARD_DONE' || r.status === 'OUTWARD_DONE';
+    const pairs = op === 'inward'
+      ? [['Mode', r.mode], ['PO', r.poCode], ['GRN', r.grnCode], ['Put-away', r.putawayCode]]
+      : [['Sale order', r.soCode], ['Packages', (r.shippingPackages || []).join(', ')], ['Invoices', (r.invoices || []).map((i) => i.invoiceCode).join(', ')]];
+    const inv = r.inventory ? kv(Object.entries(r.inventory).map(([sku, q]) => [sku, q])) : '';
+    return resultHead(ok, ok ? `${op[0].toUpperCase() + op.slice(1)} complete` : (r.status || 'Incomplete'))
+      + kv(pairs) + (inv ? `<p class="result-note">Inventory now:</p>${inv}` : '') + raw(r);
+  }
+
+  /* ---------------- UI primitives ---------------- */
+  function setLoading(btn, on) { if (btn) { btn.classList.toggle('loading', on); btn.disabled = on; } }
+  function wireRaw() { /* <details> is native; hook kept for future interactivity */ }
+
+  let toastSeq = 0;
+  function toast(message, type = 'info', ms = 5000) {
+    const id = 'toast-' + (++toastSeq);
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.id = id;
+    el.innerHTML = `<span>${esc(message)}</span><span class="x">×</span>`;
+    el.querySelector('.x').addEventListener('click', () => el.remove());
+    $('toasts').appendChild(el);
+    setTimeout(() => el.remove(), ms);
+  }
+
   /* ---------------- helpers ---------------- */
   const statCard = (label, val, cls) => `<div class="card"><h3>${label}</h3><div class="big ${cls}">${esc(String(val))}</div></div>`;
-  const emptyRow = (cols) => `<tr><td colspan="${cols}" class="meta">No data yet.</td></tr>`;
+  const emptyRow = (cols) => `<tr><td colspan="${cols}" class="empty">No data yet.</td></tr>`;
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = (t) => t ? new Date(t).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
   const shortInput = (input) => {

@@ -8,6 +8,8 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+  <div id="toasts"></div>
+
   <!-- ───────── Login (landing) ───────── -->
   <div id="login-view" class="hidden">
     <div class="login-card">
@@ -60,7 +62,7 @@
               <h3>Unicommerce Session</h3>
               <div class="big" id="session-status">…</div>
               <div class="meta" id="session-meta"></div>
-              <button id="dash-relogin-btn" class="primary hidden" style="margin-top:12px">Re-login to Unicommerce</button>
+              <button id="dash-relogin-btn" class="primary hidden">Re-login to Unicommerce</button>
             </div>
             <div class="card">
               <h3>In flight</h3>
@@ -73,8 +75,8 @@
               <div class="meta" id="week-breakdown">—</div>
             </div>
           </div>
-          <h2 style="margin-top:20px">Recent Activity</h2>
-          <p class="meta" style="margin-bottom:10px">Latest runs across all users · refreshes every 10s.</p>
+          <h2>Recent Activity</h2>
+          <p class="lead">Latest runs across all users · refreshes every 10s.</p>
           <table id="runs-table">
             <thead><tr><th>When</th><th>User</th><th>Automation</th><th>Action</th><th>Input</th><th>Status</th></tr></thead>
             <tbody></tbody>
@@ -84,7 +86,7 @@
         <!-- Return -->
         <section id="tab-return" class="tab hidden">
           <h2>Return + Re-dispatch</h2>
-          <p class="meta" style="margin-bottom:14px">Cancel the wrong SO, punch + allocate the correct one, drive it to delivered — one order at a time so inventory never leaks to B2C.</p>
+          <p class="lead">Cancel the wrong SO, punch + allocate the correct one, drive it to delivered — one order at a time so inventory never leaks to B2C.</p>
           <div class="panel">
             <label>Sale Order — the CORRECT SO to process
               <input id="ret-so" placeholder="e.g. SO02696" autocomplete="off" />
@@ -100,52 +102,38 @@
               <button id="ret-status-btn" class="secondary">Check SO status</button>
               <button id="ret-run-btn" class="primary">Process SO</button>
             </div>
-            <pre id="ret-output" class="output hidden"></pre>
+            <div id="ret-output" class="result hidden"></div>
           </div>
         </section>
 
         <!-- E-way Bill -->
         <section id="tab-ewaybill" class="tab hidden">
           <h2>E-way Bill Generation</h2>
-          <p class="meta" style="margin-bottom:14px">Paste SO numbers (one per line). The platform finds each invoice across facilities and generates its e-way bill. Transporter details below apply to all rows.</p>
+          <p class="lead">Paste SO numbers (one per line). The platform finds each invoice across facilities and generates its e-way bill. Transporter details below apply to all rows.</p>
           <div class="panel">
             <label>Sale Orders (one per line)
-              <textarea id="ewb-sos" rows="5" placeholder="SO02444&#10;SO02445" style="width:100%;font-family:Menlo,monospace;font-size:13px;padding:10px 12px;border:1px solid var(--grey-l);border-radius:8px"></textarea>
+              <textarea id="ewb-sos" rows="5" class="textarea" placeholder="SO02444&#10;SO02445"></textarea>
             </label>
-            <div class="row">
-              <label style="flex:1;margin:0">Transporter GSTIN (15 chars)
-                <input id="ewb-gstin" placeholder="29ABCDE1234F1Z5" maxlength="15" />
-              </label>
-              <label style="flex:1;margin:0">Transporter name
-                <input id="ewb-tname" placeholder="ABC Logistics" />
-              </label>
-            </div>
-            <div class="row">
-              <label style="flex:1;margin:0">Transport mode
-                <input id="ewb-mode" placeholder="ROAD" value="ROAD" />
-              </label>
-              <label style="flex:1;margin:0">Vehicle type
-                <input id="ewb-vtype" placeholder="REGULAR" value="REGULAR" />
-              </label>
-              <label style="flex:1;margin:0">Vehicle no.
-                <input id="ewb-vno" placeholder="optional" />
-              </label>
-              <label style="flex:1;margin:0">Distance (km)
-                <input id="ewb-dist" placeholder="optional" />
-              </label>
+            <div class="field-grid mb-md">
+              <label>Transporter GSTIN (15 chars)<input id="ewb-gstin" placeholder="29ABCDE1234F1Z5" maxlength="15" /></label>
+              <label>Transporter name<input id="ewb-tname" placeholder="ABC Logistics" /></label>
+              <label>Transport mode<input id="ewb-mode" placeholder="ROAD" value="ROAD" /></label>
+              <label>Vehicle type<input id="ewb-vtype" placeholder="REGULAR" value="REGULAR" /></label>
+              <label>Vehicle no.<input id="ewb-vno" placeholder="optional" /></label>
+              <label>Distance (km)<input id="ewb-dist" placeholder="optional" /></label>
             </div>
             <div class="row">
               <label class="check"><input type="checkbox" id="ewb-dry" checked /> Dry run (preview, no e-way bill created)</label>
               <button id="ewb-run-btn" class="primary">Generate</button>
             </div>
-            <pre id="ewb-output" class="output hidden"></pre>
+            <div id="ewb-output" class="result hidden"></div>
           </div>
         </section>
 
         <!-- Inward / Outward / Full-cycle -->
         <section id="tab-inventory" class="tab hidden">
           <h2>Inward / Outward / Full-cycle</h2>
-          <p class="meta" style="margin-bottom:14px">Inward brings stock in (PO → GRN → put-away or adjust). Outward sells it (Sale Order → allocate → invoice). Full-cycle does both, gated.</p>
+          <p class="lead">Inward brings stock in (PO → GRN → put-away or adjust). Outward sells it (Sale Order → allocate → invoice). Full-cycle does both, gated.</p>
           <div class="panel">
             <div class="row">
               <label class="check"><input type="radio" name="inv-op" value="inward" checked> Inward</label>
@@ -153,26 +141,26 @@
               <label class="check"><input type="radio" name="inv-op" value="fullcycle"> Full-cycle</label>
             </div>
             <label>Line items — one per line: <code>SKU, qty, unitPrice[, sellingPrice]</code>
-              <textarea id="inv-items" rows="5" placeholder="OPTSKU1, 10, 100, 150&#10;OPTSKU2, 5, 80" style="width:100%;font-family:Menlo,monospace;font-size:13px;padding:10px 12px;border:1px solid var(--grey-l);border-radius:8px"></textarea>
+              <textarea id="inv-items" rows="5" class="textarea" placeholder="OPTSKU1, 10, 100, 150&#10;OPTSKU2, 5, 80"></textarea>
             </label>
             <div id="inv-outward-fields" class="hidden">
-              <div class="row">
-                <label style="flex:1;margin:0">Order code (optional)<input id="inv-order" placeholder="auto if blank" /></label>
-                <label style="flex:1;margin:0">Customer name<input id="inv-cust" placeholder="B2B Customer" /></label>
+              <div class="field-grid mb-md">
+                <label>Order code (optional)<input id="inv-order" placeholder="auto if blank" /></label>
+                <label>Customer name<input id="inv-cust" placeholder="B2B Customer" /></label>
               </div>
             </div>
             <div class="row">
               <button id="inv-run-btn" class="primary">Run</button>
-              <span class="meta">A retry with the same result is safe — steps are idempotent (never double-creates a PO/invoice).</span>
+              <span class="hint">A retry with the same result is safe — steps are idempotent (never double-creates a PO/invoice).</span>
             </div>
-            <pre id="inv-output" class="output hidden"></pre>
+            <div id="inv-output" class="result hidden"></div>
           </div>
         </section>
 
         <!-- Extensions -->
         <section id="tab-extensions" class="tab hidden">
           <h2>Browser Extensions</h2>
-          <p class="meta" style="margin-bottom:14px">Some automations use a small Chrome extension. Download, install once, and follow the steps below.</p>
+          <p class="lead">Some automations use a small Chrome extension. Download, install once, and follow the steps below.</p>
 
           <div class="panel">
             <h3>① Opptra Session Helper <span class="pill">recommended</span></h3>
@@ -208,13 +196,13 @@
           <div class="panel" id="admin-session-panel">
             <h3>Unicommerce Session</h3>
             <div class="meta" id="admin-session-meta">…</div>
-            <div class="row" style="margin-top:12px">
+            <div class="row">
               <button id="admin-relogin-btn" class="primary">Re-login to Unicommerce</button>
               <span class="meta">Opens the Unicommerce login in a new tab. Log in (do the CAPTCHA), then capture the session with the helper extension — or paste it below.</span>
             </div>
-            <details style="margin-top:12px">
-              <summary class="meta" style="cursor:pointer">Manual paste (fallback, no extension)</summary>
-              <div class="row" style="margin-top:10px">
+            <details>
+              <summary class="summary-toggle">Manual paste (fallback, no extension)</summary>
+              <div class="row">
                 <input id="admin-cookie" placeholder="JSESSIONID value from DevTools → Application → Cookies" autocomplete="off" />
                 <button id="admin-cookie-btn" class="primary">Save session</button>
               </div>
@@ -227,7 +215,7 @@
             <p class="meta">Create a token for the Session Helper extension (one per person/machine). Shown once — copy it immediately.</p>
             <div class="row"><button id="token-create-btn" class="secondary">Create token</button></div>
             <pre id="token-out" class="output hidden"></pre>
-            <table id="tokens-table" style="margin-top:10px">
+            <table id="tokens-table">
               <thead><tr><th>Label</th><th>Owner</th><th>Created</th><th>Last used</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
@@ -236,11 +224,11 @@
           <div class="panel">
             <h3>Analytics · last 7 days</h3>
             <div class="cards" id="analytics-cards"></div>
-            <h3 style="margin-top:18px">Per automation</h3>
+            <h3>Per automation</h3>
             <table id="autom-table"><thead><tr><th>Automation</th><th>Total</th><th>OK</th><th>Failed</th><th>Active</th></tr></thead><tbody></tbody></table>
-            <h3 style="margin-top:18px">Per user</h3>
+            <h3>Per user</h3>
             <table id="user-usage-table"><thead><tr><th>User</th><th>Total</th><th>OK</th><th>Failed</th></tr></thead><tbody></tbody></table>
-            <h3 style="margin-top:18px">Recent failures</h3>
+            <h3>Recent failures</h3>
             <table id="errors-table"><thead><tr><th>When</th><th>User</th><th>Automation</th><th>Input</th><th>Error</th></tr></thead><tbody></tbody></table>
           </div>
 
