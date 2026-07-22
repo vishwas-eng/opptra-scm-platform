@@ -1,0 +1,11 @@
+{
+  "name": "@opptra/integrations-google",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "dependencies": {
+    "@opptra/core": "*",
+    "googleapis": "^144.0.0"
+  }
+}

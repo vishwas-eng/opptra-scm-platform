@@ -56,6 +56,18 @@ const Env = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
 
   // --- Alerting ---
+  // --- Google Workspace (packing-mail / sheet-update / reports-digest) ---
+  // Base64 of the service-account key JSON + the Workspace user to impersonate.
+  // Empty until domain-wide delegation is provisioned; those automations stay disabled.
+  GOOGLE_SA_KEY_JSON: z.string().default(''),
+  GOOGLE_DELEGATED_USER: z.string().default(''),
+  MASTER_SHEET_ID: z.string().default(''),
+
+  // --- Vinculum (Home Centre sync) ---
+  VINCULUM_BASE_URL: z.string().default(''),
+  VINCULUM_USER: z.string().default(''),
+  VINCULUM_PASS: z.string().default(''),
+
   // Alerting. LOG_LEVEL is intentionally NOT here — the logger reads it straight from
   // the environment to stay dependency-free (see logger.js).
   SLACK_WEBHOOK_URL: z.string().default(''),
