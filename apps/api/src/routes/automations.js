@@ -34,7 +34,7 @@ export default async function automationRoutes(app) {
 
   // --- Return + re-dispatch: process one SO (optionally cancelling the wrong one) ---
   app.post('/api/automations/return/process', {
-    preHandler: opsOnly,
+    preValidation: opsOnly,
     config: perUser(30, '1 minute'),
     schema: {
       body: {
@@ -62,7 +62,7 @@ export default async function automationRoutes(app) {
 
   // --- Return: batch of pairs (original SO → correct SO), sequential by design ---
   app.post('/api/automations/return/batch', {
-    preHandler: opsOnly,
+    preValidation: opsOnly,
     config: perUser(5, '1 minute'),
     schema: {
       body: {
@@ -94,7 +94,7 @@ export default async function automationRoutes(app) {
 
   // --- Inward / Outward / Full-cycle ---
   const inventoryOp = (op, extraProps = {}) => ({
-    preHandler: opsOnly,
+    preValidation: opsOnly,
     config: perUser(20, '1 minute'),
     schema: {
       body: {
@@ -132,7 +132,7 @@ export default async function automationRoutes(app) {
 
   // --- E-way bill: generate for a batch of SO rows ---
   app.post('/api/automations/ewaybill/generate', {
-    preHandler: opsOnly,
+    preValidation: opsOnly,
     config: perUser(20, '1 minute'),
     schema: {
       body: {
@@ -173,7 +173,7 @@ export default async function automationRoutes(app) {
   // --- UC probe: read-only SO status (used by the UI before acting) ---
   // ops-only: even read probes consume the single shared UC session/worker.
   app.post('/api/automations/uc/so-status', {
-    preHandler: opsOnly,
+    preValidation: opsOnly,
     config: perUser(30, '1 minute'),
     schema: {
       body: {
@@ -191,7 +191,7 @@ export default async function automationRoutes(app) {
 
   // Poll a run's outcome (the UI polls this after enqueueing).
   app.get('/api/runs/:runUid', {
-    preHandler: app.requireUser,
+    preValidation: app.requireUser,
     schema: {
       params: { type: 'object', required: ['runUid'], properties: { runUid: { type: 'string', minLength: 8 } } },
     },

@@ -16,9 +16,9 @@ export default async function coreRoutes(app) {
     return { googleClientId: config().GOOGLE_CLIENT_ID };
   });
 
-  app.get('/api/me', { preHandler: app.requireUser }, async (req) => ({ user: req.user }));
+  app.get('/api/me', { preValidation: app.requireUser }, async (req) => ({ user: req.user }));
 
-  app.get('/api/uc-session', { preHandler: app.requireUser }, async () => {
+  app.get('/api/uc-session', { preValidation: app.requireUser }, async () => {
     const { rows } = await query(
       `SELECT status, source, updated_by, updated_at, last_ok_at, last_check_at, fail_count,
               needs_relogin, relogin_since, (jsessionid <> '') AS has_cookie
@@ -27,7 +27,7 @@ export default async function coreRoutes(app) {
   });
 
   app.get('/api/runs', {
-    preHandler: app.requireUser,
+    preValidation: app.requireUser,
     schema: {
       querystring: {
         type: 'object',

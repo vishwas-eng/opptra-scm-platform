@@ -5,7 +5,7 @@ import { query, audit, config } from '@opptra/core';
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
 export default async function adminRoutes(app) {
-  const adminOnly = { preHandler: app.requireRole('admin') };
+  const adminOnly = { preValidation: app.requireRole('admin') };
 
   // Paste a fresh JSESSIONID captured from the browser. Stored in Postgres; the worker
   // picks it up on its next call (it re-reads on session death and on keepalive).
