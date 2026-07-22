@@ -44,10 +44,25 @@ export class SessionManager {
 
   async getCookie() {
     if (!this.#loaded) await this.load();
+    // If we have no cookie in memory, the store may have gained one (admin pasted it in
+    // the API process). Re-read before giving up so a first paste works immediately.
+    if (!this.#cookie) await this.reload();
     if (!this.#cookie) {
       throw new SessionError('no UC session available — paste one in Admin or configure scripted login');
     }
     return this.#cookie;
+  }
+
+  /** Re-read the cookie from the store. The admin paste happens in the API process, so
+   *  the worker's SessionManager must reload to see it. Returns true if it changed. */
+  async reload() {
+    const row = await this.#store.get();
+    const cookie = row.jsessionid || '';
+    this.#loaded = true;
+    if (cookie === this.#cookie) return false;
+    this.#cookie = cookie;
+    logger.info({ source: row.source, hasCookie: !!cookie }, 'uc session cookie reloaded from store');
+    return true;
   }
 
   /** Store a new cookie (admin paste, env override, or scripted login result). */
@@ -84,6 +99,15 @@ export class SessionManager {
 
   async #doRefresh(reason) {
     logger.warn({ reason }, 'uc session death detected — attempting refresh');
+    // FIRST: did an admin paste a fresh cookie into the store since we last read it?
+    // Adopt it and retry before falling back to scripted login / giving up. This is
+    // what makes "paste in Admin → goes ALIVE" work across the API/worker split.
+    const before = this.#cookie;
+    await this.reload();
+    if (this.#cookie && this.#cookie !== before) {
+      logger.info('uc session adopted a freshly-pasted cookie');
+      return true;
+    }
     if (typeof this.loginScripted === 'function') {
       try {
         const fresh = await this.loginScripted();

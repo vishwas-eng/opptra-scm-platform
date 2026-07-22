@@ -147,6 +147,9 @@ export class UcClient {
   /** Cheap probe used by keep-alive; also verifies + records session liveness. */
   async ping() {
     try {
+      // Pick up an admin-pasted cookie proactively (the paste lands in the DB from the
+      // API process; the worker's session only sees it after a reload).
+      await this.session.reload();
       const d = await this.dataGet('/data/user/facilities');
       await this.session.markAlive();
       return { alive: true, currentFacility: d?.currentFacilityCode || null };

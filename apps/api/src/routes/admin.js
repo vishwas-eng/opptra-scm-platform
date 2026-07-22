@@ -1,8 +1,16 @@
 // Admin-only: session cookie paste + helper-extension ingest, user management.
 import { randomBytes, createHash } from 'node:crypto';
 import { query, audit, config } from '@opptra/core';
+import { enqueue } from '../queue.js';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
+
+// Verify a freshly-pasted cookie right away: enqueue a keepalive so the worker reloads
+// the cookie and pings UC within ~1s — the dashboard flips ALIVE without waiting for the
+// 4-min cron. (Immediate, but the poll below also lets the UI report the outcome.)
+async function verifySessionNow() {
+  await enqueue('system.keepalive', {}, { removeOnComplete: true, removeOnFail: true });
+}
 
 export default async function adminRoutes(app) {
   const adminOnly = { preValidation: app.requireRole('admin') };
@@ -21,10 +29,12 @@ export default async function adminRoutes(app) {
     const cookie = req.body.jsessionid.trim().replace(/^JSESSIONID=/i, '');
     await query(
       `UPDATE uc_session SET jsessionid = $1, source = 'admin-paste', status = 'unknown',
-        updated_by = $2, updated_at = now(), fail_count = 0 WHERE id = 1`,
+        updated_by = $2, updated_at = now(), fail_count = 0,
+        needs_relogin = false, relogin_since = NULL WHERE id = 1`,
       [cookie, req.user.email]
     );
     await audit(req.user.email, 'uc-session-paste', {});
+    await verifySessionNow();
     return { ok: true };
   });
 
@@ -61,6 +71,7 @@ export default async function adminRoutes(app) {
       [cookie, `helper:${owner}`, req.body.facility || '']);
     await query('UPDATE ingest_tokens SET last_used = now() WHERE id = $1', [rows[0].id]);
     await audit(`helper:${owner}`, 'uc-session-ingest', {});
+    await verifySessionNow();
     return { ok: true, message: 'session captured — thank you' };
   });
 

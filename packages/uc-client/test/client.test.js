@@ -124,3 +124,26 @@ test('Mutex: preserves order and survives rejections', async () => {
   await Promise.all([p1, p2]);
   assert.deepEqual(order, [1, 'e1', 2]);
 });
+
+test('session paste: worker adopts a cookie written to the store after boot', async () => {
+  const store = new MemorySessionStore({ jsessionid: '', source: 'none' }); // boot with NO cookie
+  let n = 0;
+  const client = new UcClient({
+    baseUrl: 'https://uc.example.com', user: 'u', pass: 'p',
+    sessionStore: store,
+    fetchImpl: async (url, opts) => {
+      n += 1;
+      // succeed only when the freshly-pasted cookie is used
+      return opts.headers.Cookie === 'JSESSIONID=pasted'
+        ? jsonRes({ currentFacilityCode: 'F1' })
+        : jsonRes({}, 401);
+    },
+    alertFn: async () => {},
+  });
+  // first ping: no cookie → dead
+  assert.equal((await client.ping()).alive, false);
+  // admin pastes into the store (as the API process would)
+  await store.set('pasted', 'admin-paste', 'admin@opptra.com');
+  // next ping reloads the store, adopts the cookie, and goes alive
+  assert.deepEqual(await client.ping(), { alive: true, currentFacility: 'F1' });
+});
