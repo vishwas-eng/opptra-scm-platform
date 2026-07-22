@@ -30,6 +30,9 @@ export async function buildApp({ withStatic = true } = {}) {
     allowList: (req) => req.url === '/healthz',
   });
 
+  // Reverse-DC uploads the credit-note PDF. Cap at 15 MB (a CN is well under 1 MB).
+  await app.register(import('@fastify/multipart'), { limits: { fileSize: 15 * 1024 * 1024, files: 1 } });
+
   await app.register(import('./plugins/auth.js'));
   await app.register(import('./routes/core.js'));
   await app.register(import('./routes/admin.js'));

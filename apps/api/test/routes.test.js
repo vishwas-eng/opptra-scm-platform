@@ -39,7 +39,8 @@ test('/api/config exposes only the public Google client id', async () => {
   assert.equal(res.statusCode, 200);
   const body = res.json();
   assert.equal(body.googleClientId, 'test.apps.googleusercontent.com');
-  assert.deepEqual(Object.keys(body), ['googleClientId']); // nothing else leaks
+  // Only public fields: the client id and the dev-login flag. No secrets.
+  assert.deepEqual(Object.keys(body).sort(), ['devLogin', 'googleClientId']);
 });
 
 test('auth login rejects a missing/short credential via schema (400, no DB touched)', async () => {

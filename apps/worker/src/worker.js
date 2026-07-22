@@ -13,7 +13,9 @@ import { makeReturnPipeline } from '@opptra/automation-return';
 import { makeEwaybillPipeline } from '@opptra/automation-ewaybill';
 import { makeInventoryPipeline } from '@opptra/automation-inventory';
 import { makeAsnPipeline } from '@opptra/automation-asn';
-import { makeReverseDcPipeline } from '@opptra/automation-reversedc';
+import { makePackingPipeline } from '@opptra/automation-packing';
+import { makeSheetPipeline } from '@opptra/automation-sheet';
+import { googleClients } from '@opptra/integrations-google';
 import { makeHandlers } from './handlers.js';
 
 const cfg = config();
@@ -25,6 +27,18 @@ const connection = new IORedis(cfg.REDIS_URL, { maxRetriesPerRequest: null });
 const queue = new Queue('automations', { connection });
 const uc = ucClient();
 
+// Build Google clients once at boot if the service account is configured; else null
+// (the Google-dependent automations return a clean "not connected" result).
+let google = null;
+if (cfg.GOOGLE_SA_KEY_JSON && cfg.GOOGLE_DELEGATED_USER) {
+  try {
+    google = await googleClients({ saKeyJson: cfg.GOOGLE_SA_KEY_JSON, delegatedUser: cfg.GOOGLE_DELEGATED_USER });
+    logger.info({ user: cfg.GOOGLE_DELEGATED_USER }, 'google workspace connected');
+  } catch (err) {
+    logger.error({ err: String(err) }, 'google workspace configured but auth FAILED — packing/sheet stay disabled');
+  }
+}
+
 const handlers = makeHandlers({
   uc,
   logger,
@@ -35,7 +49,8 @@ const handlers = makeHandlers({
     ewaybillPipeline: makeEwaybillPipeline(uc),
     inventoryPipeline: makeInventoryPipeline(uc, cfg, memoStep),
     asnPipeline: makeAsnPipeline(uc, cfg),
-    reverseDcPipeline: makeReverseDcPipeline(uc, cfg),
+    packingPipeline: makePackingPipeline(uc, cfg, google),
+    sheetPipeline: makeSheetPipeline(uc, cfg, google),
   },
   reenqueue: (name, data, opts) => queue.add(name, data, opts),
 });

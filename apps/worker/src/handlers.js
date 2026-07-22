@@ -11,7 +11,7 @@ export const RETURN_PENDING_RETRY_MS = 90_000;
 
 export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) {
   const { markRunning, markPendingRetry, finishRun } = runs;
-  const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, reverseDcPipeline } = pipelines;
+  const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, packingPipeline, sheetPipeline } = pipelines;
 
   return {
     // Keep-alive: ping UC, record liveness. Death triggers refresh/alert inside uc-client.
@@ -71,10 +71,20 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) 
       return result;
     },
 
-    // Reverse DC: credit note → edited Delivery Challan PDF (base64 in the run result).
-    'reversedc.build': async ({ data: { runUid, input } }) => {
+    // Packing mail: SO list → per-warehouse Gmail drafts with invoices attached.
+    'packing.createDrafts': async ({ data: { runUid, input } }) => {
       await markRunning(runUid);
-      const result = await reverseDcPipeline.build(input);
+      const result = await packingPipeline.createDrafts(input.saleOrders || []);
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      return result;
+    },
+
+    // Sheet update (A1): first-fill / second-fill / push.
+    'sheet.run': async ({ data: { runUid, input } }) => {
+      await markRunning(runUid);
+      const fn = { 'first-fill': sheetPipeline.firstFill, 'second-fill': sheetPipeline.secondFill, push: sheetPipeline.push }[input.action];
+      if (!fn) throw new Error(`unknown sheet action: ${input.action}`);
+      const result = await fn();
       await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
       return result;
     },

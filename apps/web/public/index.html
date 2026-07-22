@@ -24,7 +24,7 @@
   <!-- ───────── App (sidebar + content) ───────── -->
   <div id="app-view" class="hidden">
     <aside id="sidebar">
-      <div class="side-brand"><span class="wordmark">Opptra</span><span class="badge-scm">SCM</span></div>
+      <div class="side-brand">Opptra <span>SCM</span></div>
       <nav id="side-nav">
         <button data-tab="dashboard" class="active"><i>▪</i> Dashboard</button>
         <div class="side-group">Automations</div>
@@ -35,8 +35,8 @@
         <button data-tab="reversedc"><i>⤺</i> Reverse DC</button>
         <button data-tab="sheet"><i>▦</i> Sheet Update</button>
         <button data-tab="packing"><i>✉</i> Packing Mail</button>
-        <button data-tab="reports"><i>▧</i> Reports Digest</button>
-        <button data-tab="homecentre"><i>⇄</i> Home Centre Sync</button>
+        <button disabled title="Coming soon"><i>▧</i> Reports Digest <span class="soon">soon</span></button>
+        <button disabled title="Coming soon"><i>⇄</i> Home Centre Sync <span class="soon">soon</span></button>
         <div class="side-group">Tools</div>
         <button data-tab="extensions"><i>⤓</i> Extensions</button>
         <button data-tab="admin" id="admin-nav-btn" class="hidden"><i>⚙</i> Admin</button>
@@ -77,7 +77,7 @@
             <div class="card">
               <h3>Last 7 days</h3>
               <div class="big" id="week-count">0</div>
-              <div class="meta" id="week-breakdown">—</div>
+              <div class="meta" id="week-breakdown">-</div>
             </div>
           </div>
           <h2>Recent Activity</h2>
@@ -91,12 +91,12 @@
         <!-- Return -->
         <section id="tab-return" class="tab hidden">
           <h2>Return + Re-dispatch</h2>
-          <p class="lead">Cancel the wrong SO, punch + allocate the correct one, drive it to delivered — one order at a time so inventory never leaks to B2C.</p>
+          <p class="lead">Cancel the wrong SO, punch + allocate the correct one, drive it to delivered, one order at a time so inventory never leaks to B2C.</p>
           <div class="panel">
-            <label>Sale Order — the CORRECT SO to process
+            <label>Sale Order, the CORRECT SO to process
               <input id="ret-so" placeholder="e.g. SO02696" autocomplete="off" />
             </label>
-            <label>Cancel this SO first (optional — the wrong/original SO)
+            <label>Cancel this SO first (optional, the wrong/original SO)
               <input id="ret-cancel" placeholder="e.g. SO02690" autocomplete="off" />
             </label>
             <div class="row">
@@ -111,8 +111,8 @@
           </div>
 
           <div class="panel">
-            <h3>Batch — original → correct SO pairs</h3>
-            <p class="lead">The manager's flow: paste the sheet of pairs, one per line as <code>originalSO, correctSO</code>. Each pair cancels the wrong SO and processes the correct one — sequentially, so inventory never leaks.</p>
+            <h3>Batch, original → correct SO pairs</h3>
+            <p class="lead">The manager's flow: paste the sheet of pairs, one per line as <code>originalSO, correctSO</code>. Each pair cancels the wrong SO and processes the correct one, sequentially, so inventory never leaks.</p>
             <label>Pairs (one per line)
               <textarea id="ret-batch" rows="5" class="textarea" placeholder="SO02690, SO02696&#10;SO02701, SO02705"></textarea>
             </label>
@@ -158,7 +158,7 @@
               <label class="check"><input type="radio" name="inv-op" value="outward"> Outward</label>
               <label class="check"><input type="radio" name="inv-op" value="fullcycle"> Full-cycle</label>
             </div>
-            <label>Line items — one per line: <code>SKU, qty, unitPrice[, sellingPrice]</code>
+            <label>Line items, one per line: <code>SKU, qty, unitPrice[, sellingPrice]</code>
               <textarea id="inv-items" rows="5" class="textarea" placeholder="OPTSKU1, 10, 100, 150&#10;OPTSKU2, 5, 80"></textarea>
             </label>
             <div id="inv-outward-fields" class="hidden">
@@ -169,7 +169,7 @@
             </div>
             <div class="row">
               <button id="inv-run-btn" class="primary">Run</button>
-              <span class="hint">A retry with the same result is safe — steps are idempotent (never double-creates a PO/invoice).</span>
+              <span class="hint">A retry with the same result is safe, steps are idempotent (never double-creates a PO/invoice).</span>
             </div>
             <div id="inv-output" class="result hidden"></div>
           </div>
@@ -181,12 +181,13 @@
           <p class="lead">Enter one SO and its channel. The platform finds the order across facilities and generates the channel's ASN file for that SO only.</p>
           <div class="panel">
             <label>Sale Order<input id="asn-so" placeholder="e.g. SO02696" autocomplete="off" /></label>
-            <div class="row">
+            <label>Marketplace</label>
+            <div class="radio-group">
               <label class="check"><input type="radio" name="asn-ch" value="flipkart" checked> Flipkart</label>
               <label class="check"><input type="radio" name="asn-ch" value="myntra"> Myntra</label>
               <label class="check"><input type="radio" name="asn-ch" value="zepto"> Zepto</label>
-              <button id="asn-run-btn" class="primary">Compile ASN</button>
             </div>
+            <div class="row"><button id="asn-run-btn" class="primary">Compile ASN</button></div>
             <div id="asn-output" class="result hidden"></div>
           </div>
         </section>
@@ -194,11 +195,16 @@
         <!-- Reverse DC -->
         <section id="tab-reversedc" class="tab hidden">
           <h2>Reverse Delivery Challan</h2>
-          <p class="lead">Enter a credit note number. The platform downloads the original Uniware CN PDF and edits it in place into a Delivery Challan (barcode removed, title + From/To rewritten) — not a new template.</p>
+          <p class="lead">Upload the original credit note PDF. We edit that same document into a Delivery Challan: the barcode is removed, "Credit Note" becomes "Delivery Challan", and the From / To addresses are swapped. It is not a new template.</p>
           <div class="panel">
-            <label>Credit Note number<input id="rdc-cn" placeholder="e.g. SRRMH2627/0134" autocomplete="off" /></label>
-            <label>From (customer) — one line each, optional
-              <textarea id="rdc-from" rows="3" class="textarea" placeholder="Customer Name&#10;Address line&#10;GSTIN: ..."></textarea>
+            <label>Credit note PDF
+              <input id="rdc-file" type="file" accept="application/pdf,.pdf" />
+            </label>
+            <label>From (customer), one line each, optional
+              <textarea id="rdc-from" rows="3" class="textarea" placeholder="Customer Name&#10;Address line&#10;GSTIN: 29ABCDE1234F1Z5"></textarea>
+            </label>
+            <label>To (Opptra), one line each, optional
+              <textarea id="rdc-to" rows="2" class="textarea" placeholder="Opptra Retail Private Limited&#10;GSTIN: ..."></textarea>
             </label>
             <div class="row">
               <label class="check"><input type="checkbox" id="rdc-barcode" checked> Remove barcode</label>
@@ -211,13 +217,12 @@
         <!-- Sheet Update (A1) -->
         <section id="tab-sheet" class="tab hidden">
           <h2>Sheet Update</h2>
-          <p class="lead">Pulls the latest Waypoint CREATED sale orders, writes the ones missing from the Master into today's date tab, enriches them with UC invoice/tracking, and pushes the date tab into Master.</p>
-          <div id="sheet-setup" class="panel"></div>
+          <p class="lead">Pulls the latest Waypoint CREATED sale orders, writes the ones missing from the Master into today's date tab, enriches them with UC invoice and tracking, then pushes the date tab into Master.</p>
           <div class="panel">
             <div class="row">
-              <button id="sheet-first-btn" class="primary" disabled>First fill (Waypoint → date tab)</button>
-              <button id="sheet-second-btn" class="secondary" disabled>Second fill (UC invoice enrich)</button>
-              <button id="sheet-push-btn" class="secondary" disabled>Push date tab → Master</button>
+              <button id="sheet-first-btn" class="primary">First fill (Waypoint to date tab)</button>
+              <button id="sheet-second-btn" class="secondary">Second fill (UC invoice enrich)</button>
+              <button id="sheet-push-btn" class="secondary">Push date tab to Master</button>
             </div>
             <div id="sheet-output" class="result hidden"></div>
           </div>
@@ -226,27 +231,12 @@
         <!-- Packing Mail (A2) -->
         <section id="tab-packing" class="tab hidden">
           <h2>Packing Mail</h2>
-          <p class="lead">Paste SO numbers → the platform composes a per-warehouse email (To from the WarehouseMap) with the invoice, label, appointment, and e-way PDFs attached, as a Gmail draft you review before sending.</p>
-          <div id="packing-setup" class="panel"></div>
+          <p class="lead">Paste SO numbers. The platform composes a per-warehouse email with the invoice PDFs attached and saves it as a draft from our supply-chain account for you to review and send.</p>
           <div class="panel">
             <label>Sale Orders (one per line)<textarea id="packing-sos" rows="4" class="textarea" placeholder="SO02741"></textarea></label>
-            <div class="row"><button id="packing-btn" class="primary" disabled>Create drafts</button></div>
+            <div class="row"><button id="packing-btn" class="primary">Create drafts</button></div>
             <div id="packing-output" class="result hidden"></div>
           </div>
-        </section>
-
-        <!-- Reports Digest -->
-        <section id="tab-reports" class="tab hidden">
-          <h2>Reports Digest</h2>
-          <p class="lead">Scheduled job: downloads the daily supply-chain reports, compiles + OCRs them, and emails a per-warehouse digest — the 50-report automation, on a cron.</p>
-          <div id="reports-setup" class="panel"></div>
-        </section>
-
-        <!-- Home Centre Sync -->
-        <section id="tab-homecentre" class="tab hidden">
-          <h2>Home Centre Sync</h2>
-          <p class="lead">Scheduled pull of Home Centre orders from the Vinculum seller portal → creates matching Unicommerce Sale Orders. Runs hands-free once connected.</p>
-          <div id="homecentre-setup" class="panel"></div>
         </section>
 
         <!-- Extensions -->
@@ -264,13 +254,13 @@
               <li>Turn on <b>Developer mode</b> (top-right toggle).</li>
               <li>Click <b>Load unpacked</b> → select the unzipped folder.</li>
               <li>Open the extension, paste your <b>Ingest Token</b> (get it from the Admin tab → “Session Helper token”) and the platform URL. Click <b>Save</b>.</li>
-              <li>When the platform says “Re-login needed”, click <b>Re-login to Unicommerce</b>, log in (do the CAPTCHA), then click the helper’s <b>Capture session</b>. Done — session goes ALIVE.</li>
+              <li>When the platform says “Re-login needed”, click <b>Re-login to Unicommerce</b>, log in (do the CAPTCHA), then click the helper’s <b>Capture session</b>. Done, session goes ALIVE.</li>
             </ol>
           </div>
 
           <div class="panel">
             <h3>② Bulk Invoice / E-way Bill Downloader</h3>
-            <p class="meta">Select orders in Unicommerce and bulk-download invoice + e-way PDFs. Standalone — no token needed.</p>
+            <p class="meta">Select orders in Unicommerce and bulk-download invoice + e-way PDFs. Standalone, no token needed.</p>
             <a class="dl-btn" href="/downloads/bulk-download-extension.zip" download>⤓ Download Bulk Downloader (.zip)</a>
             <ol class="steps">
               <li><b>Download</b> and <b>unzip</b> the .zip above.</li>
@@ -290,7 +280,7 @@
             <div class="meta" id="admin-session-meta">…</div>
             <div class="row">
               <button id="admin-relogin-btn" class="primary">Re-login to Unicommerce</button>
-              <span class="meta">Opens the Unicommerce login in a new tab. Log in (do the CAPTCHA), then capture the session with the helper extension — or paste it below.</span>
+              <span class="meta">Opens the Unicommerce login in a new tab. Log in (do the CAPTCHA), then capture the session with the helper extension, or paste it below.</span>
             </div>
             <details>
               <summary class="summary-toggle">Manual paste (fallback, no extension)</summary>
@@ -304,7 +294,7 @@
 
           <div class="panel">
             <h3>Session Helper token</h3>
-            <p class="meta">Create a token for the Session Helper extension (one per person/machine). Shown once — copy it immediately.</p>
+            <p class="meta">Create a token for the Session Helper extension (one per person/machine). Shown once, copy it immediately.</p>
             <div class="row"><button id="token-create-btn" class="secondary">Create token</button></div>
             <pre id="token-out" class="output hidden"></pre>
             <table id="tokens-table">
@@ -334,7 +324,7 @@
 
           <div class="panel">
             <h3>Audit log</h3>
-            <p class="lead">Security-relevant events — logins, role changes, session updates.</p>
+            <p class="lead">Security-relevant events, logins, role changes, session updates.</p>
             <table id="audit-table">
               <thead><tr><th>When</th><th>Actor</th><th>Event</th><th>Detail</th></tr></thead>
               <tbody></tbody>

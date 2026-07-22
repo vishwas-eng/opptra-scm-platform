@@ -63,6 +63,14 @@ const Env = z.object({
   GOOGLE_SA_KEY_JSON: z.string().default(''),
   GOOGLE_DELEGATED_USER: z.string().default(''),
   MASTER_SHEET_ID: z.string().default(''),
+  // Packing mail: JSON map of facility code → warehouse email, + a fallback recipient.
+  WAREHOUSE_MAP: z.string().default('{}'),
+  PACKING_DEFAULT_TO: z.string().default(''),
+  // Sheet update (A1): Waypoint export API + Master sheet layout.
+  WAYPOINT_BASE_URL: z.string().default(''),
+  WAYPOINT_COOKIE: z.string().default(''),
+  MASTER_TAB: z.string().default('Master'),
+  MASTER_SO_COL: z.string().default('A'),
 
   // --- Vinculum (Home Centre sync) ---
   VINCULUM_BASE_URL: z.string().default(''),

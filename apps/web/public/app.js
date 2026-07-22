@@ -1,8 +1,7 @@
-/* Opptra SCM Platform — sidebar SPA (plain ES2020, no build). */
+/* Opptra SCM Platform, sidebar SPA (plain ES2020, no build). */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', asn: 'ASN Compile', reversedc: 'Reverse DC', sheet: 'Sheet Update', packing: 'Packing Mail', reports: 'Reports Digest', homecentre: 'Home Centre Sync', extensions: 'Extensions', admin: 'Admin' };
-  let integrations = null;
+  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', asn: 'ASN Compile', reversedc: 'Reverse DC', sheet: 'Sheet Update', packing: 'Packing Mail', extensions: 'Extensions', admin: 'Admin' };
   let me = null;
   let pollTimer = null;
   let ucLoginUrl = null;
@@ -89,39 +88,8 @@
     $('tab-' + tab).classList.remove('hidden');
     $('page-title').textContent = PAGE_TITLES[tab] || tab;
     if (tab === 'admin') loadAdmin();
-    if (['sheet', 'packing', 'reports', 'homecentre'].includes(tab)) renderSetup(tab);
   }
 
-  // Setup-required panels for the credential-gated automations. Green when the required
-  // integration is configured; otherwise an amber checklist of what's needed.
-  const SETUP = {
-    sheet: { need: (i) => i.google && i.masterSheet, label: 'Google Workspace + Master sheet',
-      steps: ['Create a Google service account and enable domain-wide delegation (scopes: spreadsheets, drive.readonly).', 'Share the Master sheet with the service-account email (Editor).', 'Set GOOGLE_SA_KEY_JSON, GOOGLE_DELEGATED_USER, MASTER_SHEET_ID, and the Waypoint API config.'],
-      enable: ['sheet-first-btn', 'sheet-second-btn', 'sheet-push-btn'] },
-    packing: { need: (i) => i.google, label: 'Gmail + Drive delegation',
-      steps: ['Same service account, with gmail.compose + gmail.send + drive.readonly delegated, impersonating supplychainauto@opptra.com.', 'Set the label/appointment Drive folder IDs and the WarehouseMap.'],
-      enable: ['packing-btn'] },
-    reports: { need: (i) => i.google, label: 'Google Workspace + report list',
-      steps: ['The Google service account (as above).', 'Provide the list of the ~50 reports, the warehouses, and what the digest email should contain.'], enable: [] },
-    homecentre: { need: (i) => i.vinculum, label: 'Vinculum credentials',
-      steps: ['Set VINCULUM_BASE_URL, VINCULUM_USER, VINCULUM_PASS.', 'Confirm the RSA-login + commonJsonSearch flow (already proven in notes).'], enable: [] },
-  };
-
-  async function renderSetup(tab) {
-    if (!integrations) { try { integrations = await api('/api/integrations'); } catch { return; } }
-    const s = SETUP[tab];
-    const ok = s.need(integrations);
-    const el = $(tab + '-setup');
-    if (ok) {
-      el.innerHTML = `<div class="result-head"><span class="badge ok">connected</span><span class="title">${esc(s.label)} is configured</span></div>`;
-      s.enable.forEach((id) => { const b = $(id); if (b) b.disabled = false; });
-    } else {
-      el.innerHTML = `<div class="result-head"><span class="badge warn">setup required</span><span class="title">Connect ${esc(s.label)} to activate</span></div>`
-        + `<p class="lead">This automation is built and wired — it just needs its integration connected:</p>`
-        + `<ol class="steps">${s.steps.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>`;
-      s.enable.forEach((id) => { const b = $(id); if (b) b.disabled = true; });
-    }
-  }
   document.querySelectorAll('#side-nav button').forEach((btn) => {
     btn.addEventListener('click', () => { if (!btn.disabled) go(btn.dataset.tab); });
   });
@@ -148,7 +116,7 @@
       $('week-breakdown').textContent = `${stats.week.succeeded} ok · ${stats.week.failed} failed`;
       const tbody = $('runs-table').querySelector('tbody');
       tbody.innerHTML = runs.length ? runs.map(runRow).join('') : emptyRow(6);
-    } catch { /* transient — next poll retries */ }
+    } catch { /* transient, next poll retries */ }
   }
 
   function renderSession(s) {
@@ -164,7 +132,7 @@
     $('dash-relogin-btn').classList.toggle('hidden', !needs);
     const banner = $('relogin-banner');
     if (needs) {
-      banner.innerHTML = `⚠ Unicommerce session needs a re-login — automations are paused.
+      banner.innerHTML = `⚠ Unicommerce session needs a re-login, automations are paused.
         ${me.role === 'admin' ? '<button id="banner-relogin">Re-login now</button>' : 'Ask an admin to re-login.'}`;
       banner.classList.remove('hidden');
       $('banner-relogin')?.addEventListener('click', openUcLogin);
@@ -184,7 +152,7 @@
     </tr>`;
 
   /* ----------------------------------------------------------------------
-   * runJob — the ONE async-action flow every automation tab shares:
+   * runJob, the ONE async-action flow every automation tab shares:
    *   validate → enqueue → poll → render result. Handles the button spinner,
    *   the live "working…" state, errors (toast), and final rendering.
    * Callers supply: { btn, out, validate, submit, render }.
@@ -200,7 +168,7 @@
       const run = runUid ? await pollRun(runUid, out) : { status: 'succeeded', result: immediate };
       out.innerHTML = render(run.result ?? run, run);
       wireRaw(out);
-      if (run.status === 'failed') toast('Job failed — see the result panel.', 'bad');
+      if (run.status === 'failed') toast('Job failed, see the result panel.', 'bad');
     } catch (e) {
       out.innerHTML = `<div class="result-head"><span class="badge bad">error</span><span class="title">${esc(e.message)}</span></div>`;
       toast(e.message, 'bad');
@@ -217,7 +185,7 @@
       if (['succeeded', 'failed'].includes(run.status)) return run;
       if (run.status === 'pending_retry') {
         out.innerHTML = `<div class="result-head"><span class="badge warn">retrying</span>
-          <span class="title">Unicommerce async step — auto-retrying…</span></div>
+          <span class="title">Unicommerce async step, auto-retrying…</span></div>
           ${run.result ? stepChips(run.result.steps) : ''}`;
       }
       if (Date.now() - t0 > timeoutMs) return run;
@@ -233,7 +201,7 @@
     return runJob({
       btn: kind === 'status' ? $('ret-status-btn') : $('ret-run-btn'),
       out: $('ret-output'),
-      working: kind === 'status' ? 'Checking SO status…' : 'Processing — the worker may take a few minutes…',
+      working: kind === 'status' ? 'Checking SO status…' : 'Processing, the worker may take a few minutes…',
       validate: () => (!so ? 'Enter a Sale Order code.' : null),
       submit: () => kind === 'status'
         ? api('/api/automations/uc/so-status', { body: { saleOrder: so } })
@@ -317,26 +285,70 @@
     const so = $('asn-so').value.trim();
     const channel = document.querySelector('input[name="asn-ch"]:checked').value;
     return runJob({
-      btn: $('asn-run-btn'), out: $('asn-output'), working: `Compiling ${channel} ASN for ${so}…`,
+      btn: $('asn-run-btn'), out: $('asn-output'), working: `Compiling ${channel} ASN for ${so}`,
       validate: () => (!so ? 'Enter a Sale Order code.' : null),
       submit: () => api('/api/automations/asn/compile', { body: { saleOrder: so, channel } }),
-      render: (r) => renderFileResult(r, r.ok ? `ASN ready — ${r.lineCount} line(s)` : (r.error || 'Failed'),
+      render: (r) => renderFileResult(r, r.ok ? `ASN ready, ${r.lineCount} line(s)` : (r.error || 'Failed'),
         [['SO', r.so], ['Channel', r.channel], ['Facility', r.facility], ['PO', r.po], ['Invoice', r.invoice]]),
     });
   });
 
-  /* ---------------- Reverse DC tab ---------------- */
-  $('rdc-run-btn')?.addEventListener('click', () => {
-    const creditNote = $('rdc-cn').value.trim();
-    const fromLines = $('rdc-from').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  /* ---------------- Reverse DC tab (upload the CN PDF, edit it, download) ---------------- */
+  $('rdc-run-btn')?.addEventListener('click', async () => {
+    const file = $('rdc-file').files[0];
+    const out = $('rdc-output');
+    out.classList.remove('hidden');
+    if (!file) { out.innerHTML = errHead('Choose a credit note PDF to upload.'); toast('Choose a credit note PDF first.', 'bad'); return; }
+    const btn = $('rdc-run-btn');
+    setLoading(btn, true);
+    out.innerHTML = `<div class="result-head"><span class="badge info">working</span><span class="title">Editing the credit note into a Delivery Challan</span></div>`;
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('from', $('rdc-from').value);
+      fd.append('to', $('rdc-to').value);
+      fd.append('removeBarcode', $('rdc-barcode').checked ? 'true' : 'false');
+      const res = await fetch('/api/automations/reversedc/build', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      out.innerHTML = renderFileResult(data, 'Delivery Challan ready', [['Source', file.name]]);
+      wireRaw(out);
+      toast('Delivery Challan ready to download.', 'ok');
+    } catch (err) {
+      out.innerHTML = errHead(err.message);
+      toast(err.message, 'bad');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+
+  /* ---------------- Packing Mail tab ---------------- */
+  $('packing-btn')?.addEventListener('click', () => {
+    const saleOrders = $('packing-sos').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
     return runJob({
-      btn: $('rdc-run-btn'), out: $('rdc-output'), working: `Building Delivery Challan for ${creditNote}…`,
-      validate: () => (!creditNote ? 'Enter a Credit Note number.' : null),
-      submit: () => api('/api/automations/reversedc/build', { body: { creditNote, fromLines, removeBarcode: $('rdc-barcode').checked } }),
-      render: (r) => renderFileResult(r, r.ok ? 'Delivery Challan ready' : (r.error || 'Failed'),
-        [['Credit note', r.creditNote], ['Facility', r.facility]]),
+      btn: $('packing-btn'), out: $('packing-output'), working: 'Composing per-warehouse drafts',
+      validate: () => (!saleOrders.length ? 'Enter at least one SO number.' : null),
+      submit: () => api('/api/automations/packing/drafts', { body: { saleOrders } }),
+      render: (r) => {
+        if (!r.ok && r.error) return errHead(r.error);
+        const head = resultHead(r.ok, `${r.draftCount || 0} draft(s) created`);
+        const list = (r.drafts || []).map((d) => `<li class="ok"><span class="so">${esc(d.warehouse)}</span><span>${esc(d.to)} · ${d.sos.length} order(s) · ${d.attachmentCount} attachment(s)</span></li>`).join('');
+        const un = (r.unresolved || []).map((u) => `<li class="bad"><span class="so">${esc(u.so)}</span><span>${esc(u.reason)}</span></li>`).join('');
+        return head + (list ? `<ul class="result-list">${list}</ul>` : '') + (un ? `<p class="result-note">Skipped:</p><ul class="result-list">${un}</ul>` : '');
+      },
     });
   });
+
+  /* ---------------- Sheet Update tab ---------------- */
+  const sheetRun = (action, btn, working) => () => runJob({
+    btn: $(btn), out: $('sheet-output'), working,
+    submit: () => api('/api/automations/sheet/' + action, { body: {} }),
+    render: (r) => (!r.ok && r.error) ? errHead(r.error)
+      : resultHead(r.ok, r.summary || 'Done') + kv(Object.entries(r.counts || {})),
+  });
+  $('sheet-first-btn')?.addEventListener('click', sheetRun('first-fill', 'sheet-first-btn', 'Pulling Waypoint orders into the date tab'));
+  $('sheet-second-btn')?.addEventListener('click', sheetRun('second-fill', 'sheet-second-btn', 'Enriching rows with UC invoice and tracking'));
+  $('sheet-push-btn')?.addEventListener('click', sheetRun('push', 'sheet-push-btn', 'Pushing the date tab into Master'));
 
   /* ---------------- admin ---------------- */
   $('admin-cookie-btn')?.addEventListener('click', async () => {
@@ -347,7 +359,7 @@
       await api('/api/admin/uc-session', { body: { jsessionid: v } });
       msg.textContent = '';
       $('admin-cookie').value = '';
-      toast('Session saved — next call uses it.', 'ok');
+      toast('Session saved, next call uses it.', 'ok');
       refreshDashboard();
     } catch (err) { toast(err.message, 'bad'); }
   });
@@ -358,7 +370,7 @@
       const out = $('token-out');
       out.classList.remove('hidden');
       out.textContent = 'Copy this token into the Session Helper extension now (shown once):\n\n' + token;
-      toast('Token created — copy it now, it won\'t be shown again.', 'ok', 8000);
+      toast('Token created, copy it now, it won\'t be shown again.', 'ok', 8000);
       loadTokens();
     } catch (err) { toast(err.message, 'bad'); }
   });
@@ -432,13 +444,14 @@
 
   /* ---------------- result renderers ---------------- */
   // A run's outcome → clean HTML. Each automation shows the fields that matter,
-  // a step timeline, and a collapsible raw view — never a bare JSON dump.
+  // a step timeline, and a collapsible raw view, never a bare JSON dump.
   function resultHead(ok, title, extra = '') {
     const badge = ok === true ? '<span class="badge ok">success</span>'
       : ok === false ? '<span class="badge bad">failed</span>'
       : '<span class="badge info">done</span>';
     return `<div class="result-head">${badge}<span class="title">${esc(title)}</span>${extra}</div>`;
   }
+  const errHead = (msg) => `<div class="result-head"><span class="badge bad">error</span><span class="title">${esc(msg)}</span></div>`;
   const kv = (pairs) => `<dl class="kv">${pairs.filter(([, v]) => v != null && v !== '')
     .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(String(v))}</dd>`).join('')}</dl>`;
   function stepChips(steps) {
@@ -459,7 +472,7 @@
     return resultHead(ok, ok ? `Processed ${r.saleOrder}` : (r.error || 'Did not complete'))
       + kv([['Sale order', r.saleOrder], ['Package', r.shippingPackage], ['Invoice', r.invoiceCode], ['Tracking', r.tracking], ['Package status', r.pkgStatus]])
       + stepChips(r.steps)
-      + (r.pending ? `<p class="result-note">Still working through an async step — this may finish on a later retry.</p>` : '')
+      + (r.pending ? `<p class="result-note">Still working through an async step, this may finish on a later retry.</p>` : '')
       + raw(r);
   }
 
@@ -469,7 +482,7 @@
     const list = items.map((x) => {
       const line = x.skipped ? `already had EWB ${x.ewb}`
         : x.dryRun ? `would generate · invoice ${x.invoiceCode}`
-        : x.ewb ? `EWB ${x.ewb}` : (x.error || '—');
+        : x.ewb ? `EWB ${x.ewb}` : (x.error || '-');
       return `<li class="${x.ok ? 'ok' : 'bad'}"><span class="so">${esc(x.so)}</span><span>${esc(line)}</span></li>`;
     }).join('');
     return head + `<ul class="result-list">${list}</ul>` + raw(r);
@@ -479,7 +492,7 @@
     if (op === 'fullcycle') {
       const ok = r.status === 'FULLCYCLE_DONE';
       return resultHead(ok, ok ? 'Full cycle complete' : 'Outward failed after inward')
-        + `<div class="steps-flow"><span class="step-chip done"><b>inward</b> · ${esc(r.inward?.status || '—')}</span>
+        + `<div class="steps-flow"><span class="step-chip done"><b>inward</b> · ${esc(r.inward?.status || '-')}</span>
            <span class="step-chip ${r.outward ? 'done' : ''}"><b>outward</b> · ${esc(r.outward?.status || r.outwardError || 'failed')}</span></div>`
         + kv([['PO', r.inward?.poCode], ['GRN', r.inward?.grnCode], ['Put-away', r.inward?.putawayCode],
               ['Sale order', r.outward?.soCode], ['Invoices', (r.outward?.invoices || []).map((i) => i.invoiceCode).join(', ')]])
@@ -537,7 +550,7 @@
   const statCard = (label, val, cls) => `<div class="card"><h3>${label}</h3><div class="big ${cls}">${esc(String(val))}</div></div>`;
   const emptyRow = (cols) => `<tr><td colspan="${cols}" class="empty">No data yet.</td></tr>`;
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmt = (t) => t ? new Date(t).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+  const fmt = (t) => t ? new Date(t).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
   const shortInput = (input) => {
     if (!input) return '';
     try { const o = typeof input === 'string' ? JSON.parse(input) : input; return o.saleOrder || o.code || JSON.stringify(o).slice(0, 40); }

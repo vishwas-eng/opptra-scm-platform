@@ -2,7 +2,8 @@
 // → enqueue for the worker (the only UC-talking process) → return runUid (async) or
 // wait briefly for the result (sync UI actions).
 import { randomUUID } from 'node:crypto';
-import { createRun, query } from '@opptra/core';
+import { createRun, finishRun, query } from '@opptra/core';
+import { editCreditNoteToDeliveryChallan } from '@opptra/automation-reversedc';
 import { enqueue } from '../queue.js';
 
 const SO_CODE = { type: 'string', pattern: '^[A-Za-z0-9/_-]{2,40}$' };
@@ -188,27 +189,71 @@ export default async function automationRoutes(app) {
     return { runUid: run.run_uid, queued: true };
   });
 
-  // --- Reverse DC: credit note → Delivery Challan PDF ---
+  // --- Reverse DC: the user UPLOADS the credit-note PDF; we edit that same document
+  // into a Delivery Challan (pure PDF transform, no Unicommerce session needed). ---
   app.post('/api/automations/reversedc/build', {
+    preValidation: opsOnly,
+    config: perUser(30, '1 minute'),
+  }, async (req, reply) => {
+    const parts = req.parts();
+    let pdf = null;
+    const fields = {};
+    for await (const part of parts) {
+      if (part.type === 'file') {
+        if (part.mimetype !== 'application/pdf' && !part.filename?.toLowerCase().endsWith('.pdf')) {
+          return reply.code(400).send({ error: 'please upload a PDF file' });
+        }
+        pdf = await part.toBuffer();
+      } else {
+        fields[part.fieldname] = part.value;
+      }
+    }
+    if (!pdf || pdf.length < 500) return reply.code(400).send({ error: 'no credit-note PDF uploaded' });
+
+    const fromLines = String(fields.from || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).slice(0, 12);
+    const toLines = String(fields.to || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).slice(0, 12);
+    const removeBarcode = fields.removeBarcode !== 'false';
+
+    const run = await createRun({ userEmail: req.user.email, automation: 'reversedc', action: 'build', input: { file: 'upload' } });
+    try {
+      const edited = await editCreditNoteToDeliveryChallan(pdf, { fromLines, toLines }, { removeBarcode });
+      await finishRun(run.run_uid, { ok: true, result: { ok: true } });
+      return { runUid: run.run_uid, ok: true, file: { filename: 'Delivery_Challan.pdf', contentType: 'application/pdf', base64: edited.toString('base64') } };
+    } catch (err) {
+      await finishRun(run.run_uid, { ok: false, error: String(err.message || err) });
+      return reply.code(500).send({ error: 'could not edit the PDF: ' + String(err.message || err) });
+    }
+  });
+
+  // --- Packing mail: SO list → per-warehouse Gmail drafts (sent from our account) ---
+  app.post('/api/automations/packing/drafts', {
     preValidation: opsOnly,
     config: perUser(20, '1 minute'),
     schema: {
       body: {
-        type: 'object', required: ['creditNote'],
-        properties: {
-          creditNote: { type: 'string', minLength: 3, maxLength: 40 },
-          fromLines: { type: 'array', items: { type: 'string', maxLength: 60 }, maxItems: 12 },
-          toLines: { type: 'array', items: { type: 'string', maxLength: 60 }, maxItems: 12 },
-          removeBarcode: { type: 'boolean', default: true },
-        },
+        type: 'object', required: ['saleOrders'],
+        properties: { saleOrders: { type: 'array', minItems: 1, maxItems: 200, items: SO_CODE } },
         additionalProperties: false,
       },
     },
   }, async (req) => {
-    const run = await createRun({ userEmail: req.user.email, automation: 'reversedc', action: 'build', input: { creditNote: req.body.creditNote } });
-    await enqueue('reversedc.build', { runUid: run.run_uid, input: req.body });
+    const run = await createRun({ userEmail: req.user.email, automation: 'packing', action: 'drafts', input: { count: req.body.saleOrders.length } });
+    await enqueue('packing.createDrafts', { runUid: run.run_uid, input: req.body });
     return { runUid: run.run_uid, queued: true };
   });
+
+  // --- Sheet update (A1): first-fill / second-fill / push ---
+  for (const action of ['first-fill', 'second-fill', 'push']) {
+    app.post(`/api/automations/sheet/${action}`, {
+      preValidation: opsOnly,
+      config: perUser(10, '1 minute'),
+      schema: { body: { type: 'object', properties: {}, additionalProperties: false } },
+    }, async (req) => {
+      const run = await createRun({ userEmail: req.user.email, automation: 'sheet', action, input: {} });
+      await enqueue('sheet.run', { runUid: run.run_uid, input: { action } });
+      return { runUid: run.run_uid, queued: true };
+    });
+  }
 
   // --- UC probe: read-only SO status (used by the UI before acting) ---
   // ops-only: even read probes consume the single shared UC session/worker.

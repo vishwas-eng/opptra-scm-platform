@@ -29,17 +29,16 @@ code { font-family: Menlo, ui-monospace, monospace; font-size: 12px; background:
 /* ───────── app shell: sidebar + content ───────── */
 #app-view { display: flex; min-height: 100vh; }
 #sidebar { width: 232px; background: var(--navy); color: #cdd0e0; display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; }
-.side-brand { display: flex; align-items: center; gap: 8px; padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,.08); }
-.side-brand .wordmark { font-family: 'Spectral', Georgia, serif; font-weight: 600; font-size: 21px; letter-spacing: -0.01em; color: #fff; }
-.side-brand .wordmark::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--orange); margin-right: 8px; vertical-align: middle; }
-.side-brand .badge-scm { font-family: 'Raleway', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #fff; background: var(--orange); padding: 3px 7px; border-radius: 5px; }
+.side-brand { font-family: 'Spectral', Georgia, serif; font-weight: 300; font-size: 20px; letter-spacing: -0.02em; color: #fff; padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.side-brand span { color: var(--orange); font-weight: 700; }
 #side-nav { flex: 1; padding: 12px 12px; overflow-y: auto; }
 .side-group { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: #7a83a8; margin: 16px 10px 6px; }
 #side-nav button { width: 100%; text-align: left; background: none; border: 0; color: #cdd0e0; padding: 9px 12px; border-radius: 8px; cursor: pointer; font-size: 13.5px; font-family: inherit; font-weight: 500; display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
 #side-nav button i { font-style: normal; width: 16px; text-align: center; opacity: .8; }
 #side-nav button.active { background: var(--orange); color: #fff; }
 #side-nav button:not(:disabled):not(.active):hover { background: rgba(255,255,255,.08); color: #fff; }
-#side-nav button:disabled { opacity: .38; cursor: not-allowed; }
+#side-nav button:disabled { opacity: .55; cursor: not-allowed; }
+.soon { margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #9aa3c4; border: 1px solid rgba(255,255,255,.15); padding: 1px 5px; border-radius: 4px; }
 .side-foot { padding: 14px 16px; border-top: 1px solid rgba(255,255,255,.08); }
 .side-session { font-size: 11.5px; color: #9aa3c4; }
 .side-session b { color: #fff; }
@@ -73,8 +72,10 @@ input { display: block; width: 100%; margin-top: 4px; padding: 10px 12px; backgr
 input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,88,0,.12); }
 .row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .row input { margin-top: 0; flex: 1; min-width: 200px; }
-.check { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--navy); font-size: 13px; font-weight: 500; }
-.check input { width: auto; }
+.check { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--navy); font-size: 13px; font-weight: 500; cursor: pointer; }
+.check input[type="radio"], .check input[type="checkbox"] { width: 16px; height: 16px; flex: none; margin: 0; accent-color: var(--orange); cursor: pointer; }
+/* compact radio group so the dot hugs its label */
+.radio-group { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin-bottom: 12px; }
 
 button.primary { background: var(--orange); color: #fff; border: 0; padding: 11px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit; }
 button.primary:hover { background: var(--orange-h); }
@@ -111,6 +112,9 @@ select { background: #fff; color: var(--navy); border: 1px solid var(--grey-l); 
 .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 14px; }
 .field-grid label { margin: 0; }
 .hint { color: var(--grey); font-size: 12px; }
+input[type="file"] { padding: 9px 12px; font-size: 13px; cursor: pointer; }
+input[type="file"]::file-selector-button { font-family: inherit; font-weight: 600; font-size: 13px; color: #fff; background: var(--navy); border: 0; border-radius: 6px; padding: 7px 12px; margin-right: 12px; cursor: pointer; }
+input[type="file"]::file-selector-button:hover { background: var(--navy-2); }
 .lead { color: var(--grey); font-size: 12.5px; margin-bottom: 14px; max-width: 68ch; }
 .mt-sm { margin-top: 8px; } .mt-md { margin-top: 16px; } .mb-md { margin-bottom: 14px; }
 
