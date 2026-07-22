@@ -20,6 +20,21 @@ const Env = z.object({
   UC_DEFAULT_FACILITY: z.string().default(''),
   // Keep-alive cadence. Internal /data sessions idle out in minutes; 4 min is proven safe.
   UC_KEEPALIVE_MINUTES: z.coerce.number().int().min(1).max(30).default(4),
+  // Global throttle so we never trip Unicommerce's rate limit. rps = sustained calls/sec
+  // across ALL automations; burst = how many may fire back-to-back before pacing.
+  UC_MAX_RPS: z.coerce.number().positive().max(50).default(4),
+  UC_BURST: z.coerce.number().int().positive().max(100).default(8),
+
+  // --- Inward / Outward / Full-cycle config (proven defaults from the Apps Script app) ---
+  UC_VENDOR_CODE: z.string().default(''),
+  UC_SHELF_CODE: z.string().default('DEFAULT'),
+  UC_CURRENCY: z.string().default('INR'),
+  UC_TAX_CODE: z.string().default(''),
+  // ADJUST = bearer-only stock add (no session, cannot be blocked). GRN_PUTAWAY = full internal route.
+  UC_INWARD_MODE: z.enum(['ADJUST', 'GRN_PUTAWAY']).default('ADJUST'),
+  UC_GRN_TRAIL: z.coerce.boolean().default(true),
+  UC_OUTWARD_CHANNEL: z.string().default('CUSTOM'), // B2C CUSTOM binds warehouse line items (not *_B2B)
+  UC_OUTWARD_SHIP_METHOD: z.string().default('STD'),
 
   // --- Human auth (Google SSO) ---
   GOOGLE_CLIENT_ID: z.string().min(1),

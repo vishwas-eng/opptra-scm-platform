@@ -27,7 +27,8 @@
         <div class="side-group">Automations</div>
         <button data-tab="return"><i>↺</i> Return Flow</button>
         <button data-tab="ewaybill"><i>▤</i> E-way Bill</button>
-        <button data-tab="asn" disabled title="Migrating — Phase 2"><i>▤</i> ASN Compile</button>
+        <button data-tab="inventory"><i>⇅</i> Inward / Outward</button>
+        <button data-tab="asn" disabled title="Migrating — Phase 3"><i>▤</i> ASN Compile</button>
         <button data-tab="packing" disabled title="Migrating — Phase 3"><i>✉</i> Packing Mail</button>
         <div class="side-group">Tools</div>
         <button data-tab="extensions"><i>⤓</i> Extensions</button>
@@ -138,6 +139,33 @@
               <button id="ewb-run-btn" class="primary">Generate</button>
             </div>
             <pre id="ewb-output" class="output hidden"></pre>
+          </div>
+        </section>
+
+        <!-- Inward / Outward / Full-cycle -->
+        <section id="tab-inventory" class="tab hidden">
+          <h2>Inward / Outward / Full-cycle</h2>
+          <p class="meta" style="margin-bottom:14px">Inward brings stock in (PO → GRN → put-away or adjust). Outward sells it (Sale Order → allocate → invoice). Full-cycle does both, gated.</p>
+          <div class="panel">
+            <div class="row">
+              <label class="check"><input type="radio" name="inv-op" value="inward" checked> Inward</label>
+              <label class="check"><input type="radio" name="inv-op" value="outward"> Outward</label>
+              <label class="check"><input type="radio" name="inv-op" value="fullcycle"> Full-cycle</label>
+            </div>
+            <label>Line items — one per line: <code>SKU, qty, unitPrice[, sellingPrice]</code>
+              <textarea id="inv-items" rows="5" placeholder="OPTSKU1, 10, 100, 150&#10;OPTSKU2, 5, 80" style="width:100%;font-family:Menlo,monospace;font-size:13px;padding:10px 12px;border:1px solid var(--grey-l);border-radius:8px"></textarea>
+            </label>
+            <div id="inv-outward-fields" class="hidden">
+              <div class="row">
+                <label style="flex:1;margin:0">Order code (optional)<input id="inv-order" placeholder="auto if blank" /></label>
+                <label style="flex:1;margin:0">Customer name<input id="inv-cust" placeholder="B2B Customer" /></label>
+              </div>
+            </div>
+            <div class="row">
+              <button id="inv-run-btn" class="primary">Run</button>
+              <span class="meta">A retry with the same result is safe — steps are idempotent (never double-creates a PO/invoice).</span>
+            </div>
+            <pre id="inv-output" class="output hidden"></pre>
           </div>
         </section>
 

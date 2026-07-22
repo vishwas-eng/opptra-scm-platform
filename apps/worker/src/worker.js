@@ -7,10 +7,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker, Queue } from 'bullmq';
 import IORedis from 'ioredis';
-import { config, logger, migrate, closeDb, markRunning, markPendingRetry, finishRun, alert } from '@opptra/core';
+import { config, logger, migrate, closeDb, markRunning, markPendingRetry, finishRun, alert, memoStep } from '@opptra/core';
 import { ucClient, SessionError, ConfigError } from '@opptra/uc-client';
 import { makeReturnPipeline } from '@opptra/automation-return';
 import { makeEwaybillPipeline } from '@opptra/automation-ewaybill';
+import { makeInventoryPipeline } from '@opptra/automation-inventory';
 
 const cfg = config();
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -22,6 +23,7 @@ const queue = new Queue('automations', { connection });
 const uc = ucClient();
 const returnPipeline = makeReturnPipeline(uc, { facility: cfg.UC_DEFAULT_FACILITY });
 const ewaybillPipeline = makeEwaybillPipeline(uc);
+const inventoryPipeline = makeInventoryPipeline(uc, cfg, memoStep);
 
 const MAX_PENDING_RETRIES = 40;      // resumable pipeline: ~40 × 90s ≈ 1h of patience
 const PENDING_RETRY_DELAY_MS = 90_000;
@@ -60,6 +62,22 @@ const handlers = {
     await finishRun(runUid, { ok: failed === 0, result: { results, ok, failed } });
     if (failed) await alert('ewaybill-failures', `E-way bill: ${failed} of ${results.length} failed`, { runUid });
     return { results, ok, failed };
+  },
+
+  // Inward / Outward / Full-cycle. Idempotent per reqId (memoStep) so a retry resumes.
+  'inventory.run': async (job) => {
+    const { runUid, input } = job.data;
+    await markRunning(runUid);
+    const form = { ...input.form, reqId: input.reqId };
+    let result;
+    if (input.op === 'inward') result = await inventoryPipeline.runInward(form);
+    else if (input.op === 'outward') result = await inventoryPipeline.runOutward(form);
+    else if (input.op === 'fullcycle') result = await inventoryPipeline.runFullCycle(form);
+    else throw new Error(`unknown inventory op: ${input.op}`);
+    const ok = result.status === 'INWARD_DONE' || result.status === 'OUTWARD_DONE' || result.status === 'FULLCYCLE_DONE';
+    await finishRun(runUid, { ok, result });
+    if (!ok) await alert('inventory-partial', `${input.op} did not fully complete`, { runUid, status: result.status, error: result.outwardError });
+    return result;
   },
 
   // Read-only SO status probe for the UI.

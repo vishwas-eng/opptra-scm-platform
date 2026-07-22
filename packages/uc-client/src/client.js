@@ -9,6 +9,7 @@
 // Death handling: a SessionError triggers ONE mutex'd refresh + ONE retry, then throws.
 import { logger } from '@opptra/core';
 import { makeHttp, Mutex } from './http.js';
+import { RateLimiter } from './ratelimit.js';
 import { BearerManager } from './bearer.js';
 import { SessionManager } from './session.js';
 import { UcError, SessionError } from './errors.js';
@@ -19,10 +20,12 @@ export class UcClient {
   #http; #mutex = new Mutex();
   #currentFacility = null;
 
-  constructor({ baseUrl, user, pass, overrideCookie = '', defaultFacility = '', fetchImpl, sessionStore, alertFn } = {}) {
+  constructor({ baseUrl, user, pass, overrideCookie = '', defaultFacility = '', fetchImpl, sessionStore, alertFn, rps, burst } = {}) {
     this.base = baseUrl.replace(/\/+$/, '');
     this.defaultFacility = defaultFacility;
-    this.#http = makeHttp({ fetchImpl });
+    // One shared limiter throttles ALL public + internal calls across every automation.
+    this.limiter = new RateLimiter({ rps: rps ?? 4, burst: burst ?? 8 });
+    this.#http = makeHttp({ fetchImpl, limiter: this.limiter });
     this.bearer = new BearerManager({ http: this.#http, baseUrl: this.base, user, pass });
     this.session = new SessionManager({ overrideCookie, store: sessionStore, alertFn });
   }

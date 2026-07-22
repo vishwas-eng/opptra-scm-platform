@@ -1,7 +1,7 @@
 /* Opptra SCM Platform — sidebar SPA (plain ES2020, no build). */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', extensions: 'Extensions', admin: 'Admin' };
+  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', extensions: 'Extensions', admin: 'Admin' };
   let me = null;
   let pollTimer = null;
   let ucLoginUrl = null;
@@ -198,6 +198,47 @@
       const lines = (r.results || []).map((x) =>
         `${x.ok ? '✓' : '✗'} ${x.so}  ${x.skipped ? 'already had EWB: ' + x.ewb : x.dryRun ? 'would generate (inv ' + x.invoiceCode + ')' : x.ewb ? 'EWB ' + x.ewb : x.error}`);
       out.textContent = `${r.ok ?? '?'} ok · ${r.failed ?? '?'} failed\n\n` + lines.join('\n');
+    } catch (err) {
+      out.textContent = 'Error: ' + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /* ---------------- inward/outward/full-cycle tab ---------------- */
+  document.querySelectorAll('input[name="inv-op"]').forEach((r) => r.addEventListener('change', () => {
+    const op = document.querySelector('input[name="inv-op"]:checked').value;
+    $('inv-outward-fields').classList.toggle('hidden', op === 'inward');
+  }));
+
+  function parseItems(text) {
+    return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+      const [sku, qty, unitPrice, sellingPrice] = l.split(/[,\t]/).map((x) => x.trim());
+      const item = { sku, quantity: Number(qty || 1) };
+      if (unitPrice !== undefined && unitPrice !== '') item.unitPrice = Number(unitPrice);
+      if (sellingPrice !== undefined && sellingPrice !== '') item.sellingPrice = Number(sellingPrice);
+      return item;
+    });
+  }
+
+  $('inv-run-btn')?.addEventListener('click', async () => {
+    const op = document.querySelector('input[name="inv-op"]:checked').value;
+    const items = parseItems($('inv-items').value);
+    const out = $('inv-output');
+    out.classList.remove('hidden');
+    if (!items.length || items.some((i) => !i.sku)) { out.textContent = 'Enter at least one line: SKU, qty, unitPrice[, sellingPrice]'; return; }
+    const body = { items };
+    if (op !== 'inward') {
+      if ($('inv-order').value.trim()) body.orderCode = $('inv-order').value.trim();
+      if ($('inv-cust').value.trim()) body.customerName = $('inv-cust').value.trim();
+    }
+    const btn = $('inv-run-btn');
+    btn.disabled = true;
+    out.textContent = `Running ${op}…`;
+    try {
+      const { runUid } = await api('/api/automations/' + op, { body });
+      const run = await pollRun(runUid, out);
+      out.textContent = JSON.stringify(run.result ?? run, null, 2);
     } catch (err) {
       out.textContent = 'Error: ' + err.message;
     } finally {

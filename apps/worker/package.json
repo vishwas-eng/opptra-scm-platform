@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@opptra/automation-ewaybill": "*",
+    "@opptra/automation-inventory": "*",
     "@opptra/automation-return": "*",
     "@opptra/core": "*",
     "@opptra/uc-client": "*",

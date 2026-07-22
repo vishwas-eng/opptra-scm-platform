@@ -5,9 +5,11 @@
 // dispatch) are not idempotent and a blind retry can double-execute. Callers that
 // know a call is safe pass { idempotent: true }.
 import { logger } from '@opptra/core/logger';
+import { retryAfterMs } from './ratelimit.js';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const MAX_429_RETRIES = 4;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -17,7 +19,9 @@ function safeUrl(url) {
   try { const u = new URL(url); return u.origin + u.pathname; } catch { return '[unparseable-url]'; }
 }
 
-export function makeHttp({ fetchImpl = fetch } = {}) {
+// `limiter` (a RateLimiter) is optional; when present, every request waits for a
+// token before firing so the whole client stays under Unicommerce's throttle.
+export function makeHttp({ fetchImpl = fetch, limiter = null } = {}) {
   async function request(url, opts = {}) {
     const {
       method = 'GET',
@@ -30,9 +34,11 @@ export function makeHttp({ fetchImpl = fetch } = {}) {
     } = opts;
 
     let attempt = 0;
+    let throttled = 0;
     // First attempt + up to maxRetries retries when allowed.
     for (;;) {
       attempt += 1;
+      if (limiter) await limiter.take(); // pace EVERY call (incl. retries) globally
       let res;
       try {
         res = await fetchImpl(url, {
@@ -52,6 +58,16 @@ export function makeHttp({ fetchImpl = fetch } = {}) {
           continue;
         }
         throw err;
+      }
+      // 429 = rejected BEFORE processing, so retrying is safe for ALL methods (even
+      // non-idempotent POSTs). Honor Retry-After; back off and slow the whole client.
+      if (res.status === 429 && throttled < MAX_429_RETRIES) {
+        throttled += 1;
+        const wait = retryAfterMs(res.headers.get('retry-after')) ?? (1000 * 2 ** throttled + Math.floor(Math.random() * 400));
+        logger.warn({ url: safeUrl(url), throttled, waitMs: wait }, 'uc http 429 — backing off');
+        await sleep(wait);
+        attempt -= 1; // a throttle is not one of the network-error attempts
+        continue;
       }
       if (idempotent && RETRYABLE_STATUS.has(res.status) && attempt <= maxRetries) {
         const delay = 750 * attempt + Math.floor(Math.random() * 250);

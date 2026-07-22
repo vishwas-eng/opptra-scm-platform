@@ -1,10 +1,27 @@
 // Automation endpoints. Pattern for every automation: validate input → create Run row
 // → enqueue for the worker (the only UC-talking process) → return runUid (async) or
 // wait briefly for the result (sync UI actions).
+import { randomUUID } from 'node:crypto';
 import { createRun } from '@opptra/core';
 import { enqueue } from '../queue.js';
 
 const SO_CODE = { type: 'string', pattern: '^[A-Za-z0-9/_-]{2,40}$' };
+
+const INVENTORY_ITEMS = {
+  type: 'array', minItems: 1, maxItems: 100,
+  items: {
+    type: 'object', required: ['sku'],
+    properties: {
+      sku: { type: 'string', minLength: 1, maxLength: 60 },
+      quantity: { type: 'number', minimum: 0 },
+      unitPrice: { type: 'number', minimum: 0 },
+      sellingPrice: { type: 'number', minimum: 0 },
+      maxRetailPrice: { type: 'number', minimum: 0 },
+      taxCode: { type: 'string', maxLength: 20 },
+    },
+    additionalProperties: false,
+  },
+};
 
 // Per-user (not per-IP) rate limits on job-producing routes: the global HTTP limit
 // doesn't stop one insider from flooding the concurrency-1 worker queue.
@@ -74,6 +91,44 @@ export default async function automationRoutes(app) {
     }
     return { queued: runs.length, runs };
   });
+
+  // --- Inward / Outward / Full-cycle ---
+  const inventoryOp = (op, extraProps = {}) => ({
+    preHandler: opsOnly,
+    config: perUser(20, '1 minute'),
+    schema: {
+      body: {
+        type: 'object', required: ['items'],
+        properties: {
+          reqId: { type: 'string', maxLength: 80 }, // pass to retry idempotently; auto if omitted
+          items: INVENTORY_ITEMS,
+          vendorInvoiceNumber: { type: 'string', maxLength: 60 },
+          vendorInvoiceDate: { type: 'string', maxLength: 40 },
+          ...extraProps,
+        },
+        additionalProperties: false,
+      },
+    },
+  });
+  const OUTWARD_PROPS = {
+    orderCode: { type: 'string', maxLength: 40 },
+    customerCode: { type: 'string', maxLength: 60 }, customerName: { type: 'string', maxLength: 120 },
+    phone: { type: 'string', maxLength: 20 }, email: { type: 'string', maxLength: 120 },
+    addressLine1: { type: 'string', maxLength: 200 }, city: { type: 'string', maxLength: 60 },
+    state: { type: 'string', maxLength: 60 }, pincode: { type: 'string', maxLength: 12 }, country: { type: 'string', maxLength: 60 },
+  };
+
+  const runInventory = (op) => async (req) => {
+    const reqId = (req.body.reqId && String(req.body.reqId)) || randomUUID();
+    const { reqId: _omit, ...form } = req.body;
+    const run = await createRun({ userEmail: req.user.email, automation: op, action: op, input: { reqId, items: form.items } });
+    await enqueue('inventory.run', { runUid: run.run_uid, op, reqId, form });
+    return { runUid: run.run_uid, reqId, queued: true };
+  };
+
+  app.post('/api/automations/inward', inventoryOp('inward'), runInventory('inward'));
+  app.post('/api/automations/outward', inventoryOp('outward', OUTWARD_PROPS), runInventory('outward'));
+  app.post('/api/automations/fullcycle', inventoryOp('fullcycle', OUTWARD_PROPS), runInventory('fullcycle'));
 
   // --- E-way bill: generate for a batch of SO rows ---
   app.post('/api/automations/ewaybill/generate', {
