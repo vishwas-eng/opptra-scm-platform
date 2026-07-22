@@ -202,12 +202,20 @@ export function makeReturnPipeline(uc, cfg = {}) {
       let st = await state(so);
 
       if (!st.pkg) { // 1) allocate
-        if (!st.status || st.status === 'CREATED') {
+        // Fire allocate AT MOST ONCE across re-enqueues. On staging B2B allocation is
+        // async (minutes) and the SO can sit in CREATED while it processes — without this
+        // guard a retry in that window would re-POST allocate (not idempotent → could
+        // double-commit inventory). options.allocated is threaded by the worker.
+        if (options.allocated) {
+          out.allocated = true;
+          out.steps.detect = 'allocate already fired — waiting for package';
+        } else if (!st.status || st.status === 'CREATED') {
           const items = await detectItems(so);
           if (!items.length) { out.pending = true; out.steps.detect = 'order not processed yet, retrying'; return out; }
           out.items = items;
           out.steps.detect = items.map((i) => `${i.sku} x${i.qty}`).join(', ');
           await fireAllocate(so, items);
+          out.allocated = true; // record so the next retry does NOT re-fire
         } else {
           out.steps.detect = 'already ' + st.status;
         }

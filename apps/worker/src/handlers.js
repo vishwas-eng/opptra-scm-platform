@@ -72,13 +72,14 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) 
     },
 
     // The return + re-dispatch pipeline. Resumable: pending results re-enqueue themselves.
-    'return.process': async ({ data: { runUid, input, retryCount = 0 } }) => {
+    'return.process': async ({ data: { runUid, input, retryCount = 0, allocated = false } }) => {
       await markRunning(runUid);
       const out = await returnPipeline.processSO(input.saleOrder, {
         cancelSO: input.cancelSO || '',
         awbFromSO: input.awbFromSO || '',
         returnIn: !!input.returnIn,
         deliver: input.deliver !== false,
+        allocated, // don't re-fire allocate on a retry (see pipeline C2 guard)
       });
 
       if (out.pending) {
@@ -88,7 +89,10 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) 
           return out;
         }
         await markPendingRetry(runUid, out);
-        await reenqueue('return.process', { runUid, input, retryCount: retryCount + 1 }, { delay: RETURN_PENDING_RETRY_MS });
+        // Carry the allocate-fired flag forward so the next attempt never re-allocates.
+        await reenqueue('return.process',
+          { runUid, input, retryCount: retryCount + 1, allocated: allocated || !!out.allocated },
+          { delay: RETURN_PENDING_RETRY_MS });
         logger.info({ so: input.saleOrder, retryCount }, 'return pipeline pending — re-enqueued');
         return out;
       }
