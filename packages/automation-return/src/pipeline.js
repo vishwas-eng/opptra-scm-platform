@@ -172,6 +172,27 @@ export function makeReturnPipeline(uc, cfgIn = {}) {
   async function processSO(so, options = {}) {
     const out = { saleOrder: so, steps: {}, ok: false };
     try {
+      // DRY RUN: read-only preview. NO writes — reports state and the planned steps only.
+      if (options.dryRun) {
+        const st = await state(so);
+        const items = await detectItems(so);
+        out.dryRun = true;
+        out.ok = true;
+        out.pkgStatus = st.pkgStatus;
+        out.invoiceCode = st.invoice;
+        out.items = items;
+        out.plan = [
+          options.cancelSO ? `cancel ${options.cancelSO}` : null,
+          !st.pkg ? `allocate ${items.map((i) => `${i.sku} x${i.qty}`).join(', ') || '(no items detected)'}` : `already allocated (pkg ${st.pkg})`,
+          !st.invoice ? 'create invoice' : `already invoiced (${st.invoice})`,
+          st.pkgStatus !== 'DISPATCHED' && st.pkgStatus !== 'DELIVERED' ? 'dispatch (+ manifest)' : null,
+          (options.deliver !== false || options.returnIn) && st.pkgStatus !== 'DELIVERED' ? 'mark delivered' : null,
+          options.returnIn ? 'bulk return + put-away' : null,
+        ].filter(Boolean);
+        out.steps.dryRun = out.plan.join(' → ');
+        return out;
+      }
+
       if (options.cancelSO) {
         await safe(() => uc.public('/services/rest/v1/oms/saleOrder/cancel', { saleOrderCode: options.cancelSO }, fac));
         out.steps.cancel = options.cancelSO;
