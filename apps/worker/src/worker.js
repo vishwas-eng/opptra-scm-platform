@@ -12,6 +12,7 @@ import { ucClient, SessionError, ConfigError } from '@opptra/uc-client';
 import { makeReturnPipeline } from '@opptra/automation-return';
 import { makeEwaybillPipeline } from '@opptra/automation-ewaybill';
 import { makeInventoryPipeline } from '@opptra/automation-inventory';
+import { makeHandlers } from './handlers.js';
 
 const cfg = config();
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,104 +22,19 @@ await migrate(path.join(here, '../../../packages/core/src/migrations'));
 const connection = new IORedis(cfg.REDIS_URL, { maxRetriesPerRequest: null });
 const queue = new Queue('automations', { connection });
 const uc = ucClient();
-const returnPipeline = makeReturnPipeline(uc, { facility: cfg.UC_DEFAULT_FACILITY });
-const ewaybillPipeline = makeEwaybillPipeline(uc);
-const inventoryPipeline = makeInventoryPipeline(uc, cfg, memoStep);
 
-const MAX_PENDING_RETRIES = 40;      // resumable pipeline: ~40 × 90s ≈ 1h of patience
-const PENDING_RETRY_DELAY_MS = 90_000;
-
-/* ------------------------------ job handlers ------------------------------ */
-
-const handlers = {
-  // Keep-alive: ping UC, record liveness. Session death triggers refresh/alert inside uc-client.
-  'system.keepalive': async () => {
-    const r = await uc.ping();
-    logger.info({ alive: r.alive, facility: r.currentFacility || null }, 'uc keepalive');
-    return r;
+const handlers = makeHandlers({
+  uc,
+  logger,
+  alert,
+  runs: { markRunning, markPendingRetry, finishRun },
+  pipelines: {
+    returnPipeline: makeReturnPipeline(uc, cfg),
+    ewaybillPipeline: makeEwaybillPipeline(uc),
+    inventoryPipeline: makeInventoryPipeline(uc, cfg, memoStep),
   },
-
-  // E-way bill: generate for a batch of SO rows. Each row is independent; one bad
-  // row (e.g. bad GSTIN, not invoiced) fails only itself. dryRun previews with no write.
-  'ewaybill.generate': async (job) => {
-    const { runUid, input } = job.data;
-    await markRunning(runUid);
-    const rows = input.rows || [];
-    const results = [];
-    for (const row of rows) {
-      try {
-        results.push(await ewaybillPipeline.generateOne(row, { dryRun: !!input.dryRun }));
-      } catch (err) {
-        if (err instanceof SessionError) { // session died mid-batch — stop, don't churn
-          results.push({ so: row.so, ok: false, error: 'session expired' });
-          for (const r of rows.slice(rows.indexOf(row) + 1)) results.push({ so: r.so, ok: false, error: 'skipped (session expired)' });
-          break;
-        }
-        results.push({ so: row.so, ok: false, error: String(err.message || err) });
-      }
-    }
-    const ok = results.filter((r) => r.ok).length;
-    const failed = results.length - ok;
-    await finishRun(runUid, { ok: failed === 0, result: { results, ok, failed } });
-    if (failed) await alert('ewaybill-failures', `E-way bill: ${failed} of ${results.length} failed`, { runUid });
-    return { results, ok, failed };
-  },
-
-  // Inward / Outward / Full-cycle. Idempotent per reqId (memoStep) so a retry resumes.
-  'inventory.run': async (job) => {
-    const { runUid, input } = job.data;
-    await markRunning(runUid);
-    const form = { ...input.form, reqId: input.reqId };
-    let result;
-    if (input.op === 'inward') result = await inventoryPipeline.runInward(form);
-    else if (input.op === 'outward') result = await inventoryPipeline.runOutward(form);
-    else if (input.op === 'fullcycle') result = await inventoryPipeline.runFullCycle(form);
-    else throw new Error(`unknown inventory op: ${input.op}`);
-    const ok = result.status === 'INWARD_DONE' || result.status === 'OUTWARD_DONE' || result.status === 'FULLCYCLE_DONE';
-    await finishRun(runUid, { ok, result });
-    if (!ok) await alert('inventory-partial', `${input.op} did not fully complete`, { runUid, status: result.status, error: result.outwardError });
-    return result;
-  },
-
-  // Read-only SO status probe for the UI.
-  'uc.soStatus': async (job) => {
-    const { runUid, input } = job.data;
-    await markRunning(runUid);
-    const st = await returnPipeline.state(input.saleOrder);
-    await finishRun(runUid, { ok: true, result: st });
-    return st;
-  },
-
-  // The return + re-dispatch pipeline. Resumable: pending results re-enqueue themselves.
-  'return.process': async (job) => {
-    const { runUid, input, retryCount = 0 } = job.data;
-    await markRunning(runUid);
-    const out = await returnPipeline.processSO(input.saleOrder, {
-      cancelSO: input.cancelSO || '',
-      awbFromSO: input.awbFromSO || '',
-      returnIn: !!input.returnIn,
-      deliver: input.deliver !== false,
-    });
-
-    if (out.pending) {
-      if (retryCount >= MAX_PENDING_RETRIES) {
-        await finishRun(runUid, { ok: false, result: out, error: `still pending after ${retryCount} retries — needs a human look` });
-        await alert('return-stuck', `Return pipeline stuck on ${input.saleOrder}`, { runUid, steps: JSON.stringify(out.steps) });
-        return out;
-      }
-      await markPendingRetry(runUid, out);
-      await queue.add('return.process',
-        { runUid, input, retryCount: retryCount + 1 },
-        { delay: PENDING_RETRY_DELAY_MS });
-      logger.info({ so: input.saleOrder, retryCount }, 'return pipeline pending — re-enqueued');
-      return out;
-    }
-
-    await finishRun(runUid, { ok: out.ok, result: out, error: out.error || null });
-    if (!out.ok) await alert('return-failed', `Return pipeline FAILED on ${input.saleOrder}`, { runUid, error: out.error });
-    return out;
-  },
-};
+  reenqueue: (name, data, opts) => queue.add(name, data, opts),
+});
 
 /* ------------------------------ worker loop ------------------------------ */
 

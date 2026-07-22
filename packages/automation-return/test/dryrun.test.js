@@ -24,7 +24,7 @@ function recordingUc(calls) {
 test('dryRun performs NO writes, returns a plan', async () => {
   const calls = [];
   const uc = recordingUc(calls);
-  const { processSO } = makeReturnPipeline(uc, { facility: 'F1' });
+  const { processSO } = makeReturnPipeline(uc, { UC_DEFAULT_FACILITY: 'F1' });
 
   const out = await processSO('SO123', { dryRun: true, cancelSO: 'SO999', returnIn: true });
 
@@ -40,7 +40,7 @@ test('dryRun performs NO writes, returns a plan', async () => {
 test('non-dry run DOES issue writes (guards against the preview accidentally becoming permanent)', async () => {
   const calls = [];
   const uc = recordingUc(calls);
-  const { processSO } = makeReturnPipeline(uc, { facility: 'F1' });
+  const { processSO } = makeReturnPipeline(uc, { UC_DEFAULT_FACILITY: 'F1' });
 
   // allocPoll loops a few times; with no package ever appearing it returns pending,
   // but the allocate write must have been attempted.

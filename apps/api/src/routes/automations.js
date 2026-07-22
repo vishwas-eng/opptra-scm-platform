@@ -122,7 +122,8 @@ export default async function automationRoutes(app) {
     const reqId = (req.body.reqId && String(req.body.reqId)) || randomUUID();
     const { reqId: _omit, ...form } = req.body;
     const run = await createRun({ userEmail: req.user.email, automation: op, action: op, input: { reqId, items: form.items } });
-    await enqueue('inventory.run', { runUid: run.run_uid, op, reqId, form });
+    // Standard job contract: always { runUid, input }. The worker reads input.{op,reqId,form}.
+    await enqueue('inventory.run', { runUid: run.run_uid, input: { op, reqId, form } });
     return { runUid: run.run_uid, reqId, queued: true };
   };
 

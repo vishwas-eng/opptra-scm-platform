@@ -36,6 +36,14 @@ const Env = z.object({
   UC_OUTWARD_CHANNEL: z.string().default('CUSTOM'), // B2C CUSTOM binds warehouse line items (not *_B2B)
   UC_OUTWARD_SHIP_METHOD: z.string().default('STD'),
 
+  // --- Return + re-dispatch config (was raw process.env; now validated at boot) ---
+  UC_RETURN_CHANNEL: z.string().default('CUSTOM_B2B'),
+  UC_RETURN_B2B_CUSTOMER: z.string().default('OPPB2B01'),
+  UC_RETURN_FILL_POOL: z.coerce.boolean().default(false), // top up AWB pool — staging only; off in prod
+  UC_RETURN_POOL_PROVIDER: z.string().default('CUSTOM'),
+  UC_RETURN_POOL_METHOD: z.string().default('Standard-Prepaid'),
+  UC_RETURN_ALLOC_POLL: z.coerce.number().int().min(1).max(20).default(4),
+
   // --- Human auth (Google SSO) ---
   GOOGLE_CLIENT_ID: z.string().min(1),
   ALLOWED_DOMAIN: z.string().default('opptra.com'),

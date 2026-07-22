@@ -19,15 +19,17 @@ const safe = async (fn) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function makeReturnPipeline(uc, cfgIn = {}) {
+// `cfg` is the validated config object from @opptra/core (same source every automation
+// uses). No raw process.env reads here — settings are validated at boot, not at 2am.
+export function makeReturnPipeline(uc, cfg = {}) {
   const CFG = {
-    channel: cfgIn.channel || process.env.SO_CHANNEL || 'CUSTOM_B2B',
-    b2bCustomer: cfgIn.b2bCustomer || process.env.B2B_CUSTOMER || 'OPPB2B01',
-    facility: cfgIn.facility || process.env.FACILITY || '',
-    fillPool: cfgIn.fillPool ?? process.env.FILL_POOL !== '0',
-    poolProvider: cfgIn.poolProvider || process.env.POOL_PROVIDER || 'CUSTOM',
-    poolMethod: cfgIn.poolMethod || process.env.POOL_METHOD || 'Standard-Prepaid',
-    allocPoll: Number(cfgIn.allocPoll || process.env.ALLOC_POLL || 4),
+    channel: cfg.UC_RETURN_CHANNEL || 'CUSTOM_B2B',
+    b2bCustomer: cfg.UC_RETURN_B2B_CUSTOMER || 'OPPB2B01',
+    facility: cfg.UC_DEFAULT_FACILITY || '',
+    fillPool: cfg.UC_RETURN_FILL_POOL ?? false,
+    poolProvider: cfg.UC_RETURN_POOL_PROVIDER || 'CUSTOM',
+    poolMethod: cfg.UC_RETURN_POOL_METHOD || 'Standard-Prepaid',
+    allocPoll: Number(cfg.UC_RETURN_ALLOC_POLL || 4),
   };
   const fac = CFG.facility ? { facility: CFG.facility } : {};
 
