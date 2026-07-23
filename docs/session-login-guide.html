@@ -1,0 +1,170 @@
+<title>Get the Unicommerce session — step by step</title>
+<style>
+  :root {
+    --navy: #131A48; --navy-2: #232c63; --orange: #FF5800; --orange-soft: #ffe9df;
+    --paper: #F7F6F3; --card: #ffffff; --ink: #1b2030; --slate: #5A6273; --hair: #dce0e8;
+    --public: #2f855a; --public-bg: #e7f4ec; --internal: #2b5f9e; --internal-bg: #e8f0fb;
+    --warn: #b7791f; --warn-bg: #fff6e0;
+    --bg: var(--paper); --fg: var(--ink); --muted: var(--slate); --line: var(--hair); --surface: var(--card);
+    --serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1120; --fg: #e9ecf5; --muted: #9aa2ba; --line: #2a3150; --surface: #161b2e;
+      --navy: #cdd4f0; --orange: #ff7a45; --warn-bg: #2a2210; }
+  }
+  :root[data-theme="light"] { --bg: var(--paper); --fg: var(--ink); --muted: var(--slate); --line: var(--hair); --surface: var(--card); --navy: #131A48; --orange: #FF5800; }
+  :root[data-theme="dark"] { --bg: #0e1120; --fg: #e9ecf5; --muted: #9aa2ba; --line: #2a3150; --surface: #161b2e; --navy: #cdd4f0; --orange: #ff7a45; --warn-bg: #2a2210; }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 640px; margin: 0 auto; padding: 40px 22px 90px; }
+
+  .eyebrow { font-size: 11.5px; text-transform: uppercase; letter-spacing: .16em; color: var(--orange); font-weight: 700; }
+  h1 { font-family: var(--serif); font-size: 30px; line-height: 1.15; margin: 10px 0 10px; letter-spacing: -.01em; text-wrap: balance; }
+  .lead { font-size: 15px; color: var(--muted); }
+
+  .warn { display: flex; gap: 10px; background: var(--warn-bg); border: 1px solid rgba(183,121,31,.3); border-radius: 10px; padding: 12px 14px; margin-top: 18px; font-size: 13px; }
+  .warn b { color: var(--warn); }
+
+  .steps { display: flex; flex-direction: column; gap: 14px; margin-top: 30px; }
+  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 18px 18px; display: flex; gap: 14px; }
+  .num { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; font-family: var(--sans); }
+  .step.done .num { background: var(--public); }
+  .step-body { flex: 1; min-width: 0; }
+  .step-body h3 { margin: 2px 0 5px; font-size: 15.5px; }
+  .step-body p { margin: 0 0 8px; font-size: 13.5px; color: var(--muted); }
+  .step-body code { font-family: var(--mono); font-size: .9em; background: var(--internal-bg); color: var(--internal); padding: 1px 7px; border-radius: 5px; }
+
+  /* schematic mockups (illustrative, not real screenshots) */
+  .mock { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-top: 8px; background: var(--bg); }
+  .mock .bar { background: var(--navy); color: #cdd4f0; font-size: 11px; padding: 6px 10px; display: flex; align-items: center; gap: 6px; }
+  .mock .bar .dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.35); }
+  .mock .bar .url { font-family: var(--mono); background: rgba(255,255,255,.1); border-radius: 5px; padding: 2px 8px; margin-left: 4px; flex: 1; }
+  .mock .body { padding: 14px; }
+
+  .login-mock { display: flex; flex-direction: column; gap: 8px; align-items: center; padding: 18px; }
+  .login-mock .field { width: 78%; height: 26px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  .login-mock .field.filled::after { content: '••••••••••'; display: block; padding: 5px 10px; font-size: 12px; color: var(--muted); }
+  .login-mock .field.filled.email::after { content: 'sc.automations@opptra.com'; font-family: var(--mono); font-size: 10.5px; }
+  .login-mock .btn { width: 40%; height: 26px; background: var(--orange); border-radius: 6px; margin-top: 4px; }
+
+  .devtools-mock .tabs { display: flex; gap: 2px; background: var(--line); padding: 2px; font-size: 10.5px; }
+  .devtools-mock .tabs span { padding: 5px 10px; background: var(--surface); color: var(--muted); }
+  .devtools-mock .tabs span.on { background: var(--navy); color: #fff; font-weight: 600; }
+  .devtools-mock table { width: 100%; border-collapse: collapse; font-size: 10.5px; font-family: var(--mono); }
+  .devtools-mock th { text-align: left; padding: 5px 8px; color: var(--muted); font-family: var(--sans); font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--line); }
+  .devtools-mock td { padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--muted); }
+  .devtools-mock tr.hit td { background: var(--orange-soft); color: var(--fg); font-weight: 700; }
+  .devtools-mock tr.hit td:first-child::after { content: ' ←'; color: var(--orange); }
+
+  .paste-mock { padding: 14px; }
+  .paste-mock .field { border: 1px solid var(--internal); background: var(--internal-bg); border-radius: 6px; padding: 8px 10px; font-family: var(--mono); font-size: 10.5px; color: var(--internal); }
+  .paste-mock .btn { display: inline-block; margin-top: 8px; background: var(--orange); color: #fff; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 6px; }
+
+  .success { margin-top: 30px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; text-align: center; }
+  .success .badge { display: inline-flex; align-items: center; gap: 8px; background: var(--public-bg); color: var(--public); font-weight: 700; padding: 8px 18px; border-radius: 999px; font-size: 15px; }
+  .success .badge .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--public); }
+  .success p { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+
+  .qbox { margin-top: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .qbox h3 { margin: 0 0 8px; font-size: 14px; font-family: var(--serif); }
+  .qbox ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+  .qbox li { margin-bottom: 4px; }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; text-align: center; }
+</style>
+
+<div class="page">
+  <div class="eyebrow">Opptra SCM Platform</div>
+  <h1>Get the live Unicommerce session</h1>
+  <p class="lead">Five steps, about two minutes. This is the one manual thing the platform needs from a human — after this, it keeps itself alive on its own.</p>
+
+  <div class="warn"><span>🔒</span><div><b>Don't forward the password over chat/email.</b> Share it the way you'd share any login — in person, a password manager, or a call. This page intentionally doesn't repeat it.</div></div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="num">1</div>
+      <div class="step-body">
+        <h3>Open Unicommerce</h3>
+        <p>In a normal browser tab, go to <code>oppdoor.unicommerce.co.in</code> — this is the production account.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div class="step-body">
+        <h3>Log in as the automation account</h3>
+        <p>Username: <code>sc.automations@opptra.com</code> — password as shared separately. Note the "s" — <b>automations</b>, plural.</p>
+        <div class="mock">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">oppdoor.unicommerce.co.in/login</span></div>
+          <div class="body login-mock">
+            <div class="field filled email"></div>
+            <div class="field filled"></div>
+            <div class="btn"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div class="step-body">
+        <h3>Tell us what the login asked for</h3>
+        <p>Did anything besides username + password show up — a CAPTCHA, an OTP, a code sent somewhere? Just note yes/no, you'll report this back.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">4</div>
+      <div class="step-body">
+        <h3>Open DevTools and find <code>JSESSIONID</code></h3>
+        <p>Right-click the page → <b>Inspect</b> → <b>Application</b> tab → <b>Cookies</b> → click the site. Find the row named exactly <code>JSESSIONID</code> and copy its <b>Value</b> column only.</p>
+        <div class="mock devtools-mock">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">DevTools — Application → Cookies</span></div>
+          <div class="body" style="padding:0">
+            <div class="tabs"><span>Elements</span><span>Console</span><span class="on">Application</span><span>Network</span></div>
+            <table>
+              <thead><tr><th>Name</th><th>Value</th><th>Domain</th></tr></thead>
+              <tbody>
+                <tr><td>_ga</td><td>GA1.2.19384…</td><td>.unicommerce.co.in</td></tr>
+                <tr class="hit"><td>JSESSIONID</td><td>8F3A1C0D9B2E…</td><td>oppdoor.unicommerce.co.in</td></tr>
+                <tr><td>uni_locale</td><td>en_US</td><td>oppdoor.unicommerce.co.in</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p style="margin-top:8px">A real value looks like the highlighted row above: long, random letters and numbers, <b>no dashes</b>. If what you copied has dashes in groups of 8-4-4-4-12, it's the wrong field — keep looking.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">5</div>
+      <div class="step-body">
+        <h3>Paste it into the platform</h3>
+        <p>Open the Opptra SCM Platform → <b>Admin</b> tab → <b>Manual paste</b> → paste the value → <b>Save session</b>.</p>
+        <div class="mock">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">Admin → Unicommerce Session</span></div>
+          <div class="paste-mock"><div class="field">8F3A1C0D9B2E7A6F5D4C3B2A1908F7E6</div><span class="btn">Save session</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="success">
+    <span class="badge"><span class="dot"></span>ALIVE</span>
+    <p>This is what the Dashboard's session card shows when it worked. If it still says <b>DEAD</b>, the value was probably wrong — go back to step 4.</p>
+  </div>
+
+  <div class="qbox">
+    <h3>Report back</h3>
+    <ul>
+      <li>Did step 3 show a CAPTCHA or OTP? Yes / no.</li>
+      <li>Did the dashboard turn <b>ALIVE</b>?</li>
+      <li>If no CAPTCHA/OTP appeared: a HAR capture of this login (DevTools → Network → Preserve log → do the login → Save all as HAR) lets the platform log itself in automatically from now on — this manual step would never be needed again.</li>
+    </ul>
+  </div>
+
+  <footer>Opptra SCM Platform — one-time session setup. The session then keeps itself alive automatically.</footer>
+</div>
