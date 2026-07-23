@@ -14,7 +14,9 @@ export function makeAsnPipeline(uc, cfg = {}) {
 
   async function fetchSoDto(so) {
     for (const facility of facilities) {
-      const res = await uc.data('/data/oms/saleorder/fetch', { code: so }, { facility }).catch(() => null);
+      // A dead session must fail loudly, not read as "SO not found in any facility".
+      const res = await uc.data('/data/oms/saleorder/fetch', { code: so }, { facility })
+        .catch((e) => { if (e?.name === 'SessionError') throw e; return null; });
       const dto = res && res.successful !== false ? res.saleOrderDTO : null;
       if (dto && (dto.code || (dto.saleOrderItems || []).length)) return { dto, facility };
     }

@@ -26,9 +26,22 @@ const INVENTORY_ITEMS = {
 
 // Per-user (not per-IP) rate limits on job-producing routes: the global HTTP limit
 // doesn't stop one insider from flooding the concurrency-1 worker queue.
-const perUser = (max, timeWindow) => ({
-  rateLimit: { max, timeWindow, keyGenerator: (req) => req.user?.email || req.ip },
-});
+//
+// The limiter runs in onRequest, BEFORE auth populates req.user, so we read the email
+// straight from the JWT cookie payload for bucketing. No signature check is needed here
+// (real auth still verifies the token later) - this only picks a stable per-user bucket.
+function userBucket(req) {
+  try {
+    const m = (req.headers.cookie || '').match(/(?:^|;\s*)opptra_session=([^;]+)/);
+    if (m) {
+      const payload = decodeURIComponent(m[1]).split('.')[1];
+      const claims = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+      if (claims.email) return `u:${claims.email}`;
+    }
+  } catch { /* fall through to IP */ }
+  return `ip:${req.ip}`;
+}
+const perUser = (max, timeWindow) => ({ rateLimit: { max, timeWindow, keyGenerator: userBucket } });
 
 export default async function automationRoutes(app) {
   const opsOnly = app.requireRole('admin', 'ops');

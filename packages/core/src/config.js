@@ -2,6 +2,12 @@
 // misconfiguration fails loud at startup, never silently at 2am inside a job.
 import { z } from 'zod';
 
+// Strict boolean from an env string. z.coerce.boolean() is Boolean(str), so "false"/"0"
+// wrongly become true — a dangerous trap for flags like UC_RETURN_FILL_POOL (it would
+// fire fabricated AWB pool numbers into production). Unset/empty uses the default.
+const zbool = (def) => z.string().optional().transform((v) =>
+  (v === undefined || v === '' ? def : /^(1|true|yes|on)$/i.test(String(v).trim())));
+
 const Env = z.object({
   NODE_ENV: z.enum(['production', 'development', 'test']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
@@ -32,14 +38,14 @@ const Env = z.object({
   UC_TAX_CODE: z.string().default(''),
   // ADJUST = bearer-only stock add (no session, cannot be blocked). GRN_PUTAWAY = full internal route.
   UC_INWARD_MODE: z.enum(['ADJUST', 'GRN_PUTAWAY']).default('ADJUST'),
-  UC_GRN_TRAIL: z.coerce.boolean().default(true),
+  UC_GRN_TRAIL: zbool(true),
   UC_OUTWARD_CHANNEL: z.string().default('CUSTOM'), // B2C CUSTOM binds warehouse line items (not *_B2B)
   UC_OUTWARD_SHIP_METHOD: z.string().default('STD'),
 
   // --- Return + re-dispatch config (was raw process.env; now validated at boot) ---
   UC_RETURN_CHANNEL: z.string().default('CUSTOM_B2B'),
   UC_RETURN_B2B_CUSTOMER: z.string().default('OPPB2B01'),
-  UC_RETURN_FILL_POOL: z.coerce.boolean().default(false), // top up AWB pool - staging only; off in prod
+  UC_RETURN_FILL_POOL: zbool(false), // top up AWB pool - staging only; off in prod
   UC_RETURN_POOL_PROVIDER: z.string().default('CUSTOM'),
   UC_RETURN_POOL_METHOD: z.string().default('Standard-Prepaid'),
   UC_RETURN_ALLOC_POLL: z.coerce.number().int().min(1).max(20).default(4),

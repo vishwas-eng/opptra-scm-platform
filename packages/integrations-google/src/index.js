@@ -61,4 +61,14 @@ export const sheetsApi = {
     sheets.spreadsheets.values.append({ spreadsheetId, range, valueInputOption: 'USER_ENTERED', requestBody: { values: rows } }),
   update: (sheets, spreadsheetId, range, rows) =>
     sheets.spreadsheets.values.update({ spreadsheetId, range, valueInputOption: 'USER_ENTERED', requestBody: { values: rows } }),
+  // Create a tab if it doesn't exist. Returns true if it was created.
+  ensureTab: async (sheets, spreadsheetId, title) => {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
+    const exists = (meta.data.sheets || []).some((s) => s.properties.title === title);
+    if (!exists) await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: [{ addSheet: { properties: { title } } }] } });
+    return !exists;
+  },
 };
+
+// A1 range with a properly single-quoted sheet name (required when the name has a space).
+export const a1 = (tab, range) => `'${String(tab).replace(/'/g, "''")}'!${range}`;

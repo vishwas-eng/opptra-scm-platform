@@ -71,3 +71,18 @@ test('alert never throws even with no Slack webhook configured', async () => {
   await core.alert('unit-key', 'a test alert', { detail: 1 });
   assert.ok(true);
 });
+
+test('config booleans: "false"/"0" turn a flag OFF (not coerced to true)', async () => {
+  // config() caches per-process, so test each value in a fresh subprocess.
+  const path = await import('node:path'); const { fileURLToPath } = await import('node:url');
+  const cfgUrl = new URL('../src/config.js', import.meta.url).href;
+  const read = (fillPool) => {
+    const base = { DATABASE_URL: 'postgres://x', UC_BASE_URL: 'https://x', JWT_SECRET: 'x'.repeat(32), UC_RETURN_FILL_POOL: fillPool };
+    const script = `Object.assign(process.env, ${JSON.stringify(base)}); const {config}=await import(${JSON.stringify(cfgUrl)}); process.stdout.write(String(config().UC_RETURN_FILL_POOL));`;
+    return execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env: { PATH: process.env.PATH } }).trim();
+  };
+  assert.equal(read('false'), 'false', '"false" must be OFF');
+  assert.equal(read('0'), 'false', '"0" must be OFF');
+  assert.equal(read('true'), 'true', '"true" must be ON');
+  assert.equal(read('1'), 'true', '"1" must be ON');
+});

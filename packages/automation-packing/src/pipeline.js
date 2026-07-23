@@ -12,12 +12,15 @@ const FACILITIES = ['Opp_RSG_MH', 'Opp_WIQ_MH_1', 'Opp_BSB_HR_1P', 'Opp_WIQ_KA',
 export function makePackingPipeline(uc, cfg = {}, google = null) {
   const warehouseMap = parseMap(cfg.WAREHOUSE_MAP);
   const sender = cfg.GOOGLE_DELEGATED_USER || '';
-  const configured = ['Opp_RSG_MH', ...FACILITIES];
+  const configured = [...new Set(FACILITIES)]; // RSG is already first in FACILITIES
+
+  // Rethrow a dead session so it fails loudly, instead of masking it as "no invoice found".
+  const orNull = (e) => { if (e?.name === 'SessionError') throw e; return null; };
 
   // Resolve an SO's invoice by hopping facilities (fetchShippingPackageDetails is scoped).
   async function resolveInvoice(so) {
     for (const facility of configured) {
-      const d = await uc.data('/data/oms/saleorder/fetchShippingPackageDetails', { saleOrderCode: so }, { facility }).catch(() => null);
+      const d = await uc.data('/data/oms/saleorder/fetchShippingPackageDetails', { saleOrderCode: so }, { facility }).catch(orNull);
       const sp = (d?.shippingPackages || []).find((p) => p.invoiceCode);
       if (sp) return { invoiceCode: sp.invoiceCode, facility, ewbUrl: sp.ewayBillPdfUrl || null };
     }
@@ -26,7 +29,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null) {
 
   async function downloadInvoicePdf(invoiceCode, facility) {
     const path = `/oms/invoice/show?invoiceCodes=${encodeURIComponent(invoiceCode)}&legacy=1`;
-    const res = await uc.dataBinary(path, { facility }).catch(() => null);
+    const res = await uc.dataBinary(path, { facility }).catch(orNull);
     return res && res.contentType.includes('pdf') && res.buffer.length > 500 ? res.buffer : null;
   }
 

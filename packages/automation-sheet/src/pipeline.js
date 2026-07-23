@@ -1,22 +1,31 @@
 // Sheet update (A1) - ported from b2b DailySync.gs, on the Google Sheets integration.
 //   first-fill  : Waypoint CREATED orders not already in Master -> today's date tab
-//   second-fill : for date-tab rows still missing an invoice, enrich from UC
+//   second-fill : for date-tab rows still missing an invoice, enrich from UC (facility hop)
 //   push        : append the date tab's rows into Master
 //
 // Google Sheets client is INJECTED. When it (or Waypoint) is not configured the pipeline
 // returns a clear "not connected" result rather than throwing.
-import { sheetsApi } from '@opptra/integrations-google';
+import { sheetsApi, a1 } from '@opptra/integrations-google';
 
-const todayTab = () => {
-  const d = new Date();
-  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
-  return `${String(d.getDate()).padStart(2, '0')} ${mon}`;
-};
+// Today's tab label in IST (e.g. "23 Jul"), matching the b2b app's todayIST_.
+function istToday() {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' })
+    .formatToParts(new Date());
+  const day = parts.find((p) => p.type === 'day').value;
+  const mon = parts.find((p) => p.type === 'month').value;
+  return `${day} ${mon}`;
+}
+function istDate() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+const FACILITIES = ['Opp_RSG_MH', 'Opp_WIQ_MH_1', 'Opp_BSB_HR_1P', 'Opp_WIQ_KA', 'Opp_WIQ_HR'];
 
 export function makeSheetPipeline(uc, cfg = {}, google = null) {
   const sheetId = cfg.MASTER_SHEET_ID;
   const masterTab = cfg.MASTER_TAB || 'Master';
   const soCol = cfg.MASTER_SO_COL || 'A';
+  const facilities = [...new Set([...FACILITIES, ...String(cfg.UC_ASN_FACILITIES || '').split(',').map((s) => s.trim()).filter(Boolean)])];
 
   const notReady = () => {
     if (!google) return 'Google Sheets is not connected on the server yet.';
@@ -31,15 +40,27 @@ export function makeSheetPipeline(uc, cfg = {}, google = null) {
     const res = await fetch(url, { headers: cfg.WAYPOINT_COOKIE ? { Cookie: cfg.WAYPOINT_COOKIE } : {} });
     if (!res.ok) throw new Error(`Waypoint export failed (HTTP ${res.status})`);
     const rows = parseCsv(await res.text());
-    // Expect a header with an SO/GP number column and a status column.
     const soKey = findKey(rows[0], ['so number', 'gp number', 'sale order', 'so']);
     const stKey = findKey(rows[0], ['status', 'order status']);
     return rows.filter((r) => !stKey || /created/i.test(r[stKey] || '')).map((r) => ({ so: String(r[soKey] || '').trim(), row: r })).filter((x) => x.so);
   }
 
   async function masterSOset() {
-    const vals = await sheetsApi.read(google.sheets, sheetId, `${masterTab}!${soCol}2:${soCol}`);
+    const vals = await sheetsApi.read(google.sheets, sheetId, a1(masterTab, `${soCol}2:${soCol}`));
     return new Set(vals.flat().map((v) => String(v || '').trim()).filter(Boolean));
+  }
+
+  // fetchShippingPackageDetails is facility-scoped: hop facilities until the invoice is found.
+  async function resolveInvoice(so) {
+    for (const facility of facilities) {
+      const d = await uc.data('/data/oms/saleorder/fetchShippingPackageDetails', { saleOrderCode: so }, { facility }).catch((e) => {
+        if (e?.name === 'SessionError') throw e; // dead session must fail loud, not read as "not found"
+        return null;
+      });
+      const p = (d?.shippingPackages || []).find((x) => x.invoiceCode);
+      if (p) return { invoiceCode: p.invoiceCode, tracking: p.trackingNumber || '' };
+    }
+    return null;
   }
 
   async function firstFill() {
@@ -47,37 +68,39 @@ export function makeSheetPipeline(uc, cfg = {}, google = null) {
     const created = await waypointCreatedSOs();
     const inMaster = await masterSOset();
     const missing = created.filter((c) => !inMaster.has(c.so));
-    const tab = todayTab();
+    const tab = istToday();
+    await sheetsApi.ensureTab(google.sheets, sheetId, tab);
     if (missing.length) {
-      await sheetsApi.append(google.sheets, sheetId, `${tab}!A1`, missing.map((m) => [m.so, new Date().toISOString().slice(0, 10)]));
+      await sheetsApi.append(google.sheets, sheetId, a1(tab, 'A1'), missing.map((m) => [m.so, istDate()]));
     }
     return { ok: true, summary: `${missing.length} new order(s) written to ${tab}`, counts: { waypoint: created.length, alreadyInMaster: created.length - missing.length, written: missing.length } };
   }
 
   async function secondFill() {
     const err = notReady(); if (err) return { ok: false, error: err };
-    const tab = todayTab();
-    const rows = await sheetsApi.read(google.sheets, sheetId, `${tab}!A2:D`);
+    const tab = istToday();
+    await sheetsApi.ensureTab(google.sheets, sheetId, tab);
+    const rows = await sheetsApi.read(google.sheets, sheetId, a1(tab, 'A2:D'));
     let enriched = 0;
     for (let i = 0; i < rows.length; i++) {
       const so = String(rows[i][0] || '').trim();
       if (!so || rows[i][2]) continue; // has invoice already
-      const d = await uc.data('/data/oms/saleorder/fetchShippingPackageDetails', { saleOrderCode: so }).catch(() => null);
-      const p = (d?.shippingPackages || []).find((x) => x.invoiceCode);
-      if (p) {
-        await sheetsApi.update(google.sheets, sheetId, `${tab}!C${i + 2}:D${i + 2}`, [[p.invoiceCode, p.trackingNumber || '']]);
+      const inv = await resolveInvoice(so);
+      if (inv) {
+        await sheetsApi.update(google.sheets, sheetId, a1(tab, `C${i + 2}:D${i + 2}`), [[inv.invoiceCode, inv.tracking]]);
         enriched += 1;
       }
     }
-    return { ok: true, summary: `${enriched} row(s) enriched with invoice/tracking`, counts: { scanned: rows.length, enriched } };
+    return { ok: true, summary: `${enriched} row(s) enriched with invoice and tracking`, counts: { scanned: rows.length, enriched } };
   }
 
   async function push() {
     const err = notReady(); if (err) return { ok: false, error: err };
-    const tab = todayTab();
-    const rows = await sheetsApi.read(google.sheets, sheetId, `${tab}!A2:D`);
+    const tab = istToday();
+    await sheetsApi.ensureTab(google.sheets, sheetId, tab);
+    const rows = await sheetsApi.read(google.sheets, sheetId, a1(tab, 'A2:D'));
     const fresh = rows.filter((r) => String(r[0] || '').trim());
-    if (fresh.length) await sheetsApi.append(google.sheets, sheetId, `${masterTab}!A1`, fresh);
+    if (fresh.length) await sheetsApi.append(google.sheets, sheetId, a1(masterTab, 'A1'), fresh);
     return { ok: true, summary: `${fresh.length} row(s) pushed from ${tab} into ${masterTab}`, counts: { pushed: fresh.length } };
   }
 
