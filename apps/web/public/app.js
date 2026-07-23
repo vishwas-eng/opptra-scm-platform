@@ -354,14 +354,37 @@
   $('admin-cookie-btn')?.addEventListener('click', async () => {
     const v = $('admin-cookie').value.trim();
     const msg = $('admin-cookie-msg');
-    if (!v) { msg.textContent = 'Paste a JSESSIONID first.'; return; }
+    const btn = $('admin-cookie-btn');
+    if (!v) { msg.textContent = 'Paste a JSESSIONID first.'; msg.className = 'meta error'; return; }
+    setLoading(btn, true);
+    msg.className = 'meta';
+    msg.textContent = 'Testing this session against Unicommerce…';
     try {
-      await api('/api/admin/uc-session', { body: { jsessionid: v } });
-      msg.textContent = '';
-      $('admin-cookie').value = '';
-      toast('Session saved, next call uses it.', 'ok');
+      // api() throws on non-2xx, but the 400-with-reason body is what we want to show,
+      // so read the raw response instead of letting a bad-session 400 look like a network error.
+      const res = await fetch('/api/admin/uc-session', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsessionid: v }), credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.alive) {
+        msg.className = 'meta ok';
+        msg.textContent = `Verified ALIVE${data.facility ? ' on facility ' + data.facility : ''}. Automations are unblocked.`;
+        $('admin-cookie').value = '';
+        toast('Session verified and saved. It is ALIVE.', 'ok');
+      } else {
+        msg.className = 'meta error';
+        msg.textContent = data.error || 'Unicommerce rejected this session.';
+        toast('That session did not work: ' + (data.error || 'rejected by Unicommerce'), 'bad');
+      }
       refreshDashboard();
-    } catch (err) { toast(err.message, 'bad'); }
+    } catch (err) {
+      msg.className = 'meta error';
+      msg.textContent = 'Could not reach the platform to test the session: ' + err.message;
+      toast(err.message, 'bad');
+    } finally {
+      setLoading(btn, false);
+    }
   });
 
   $('token-create-btn')?.addEventListener('click', async () => {

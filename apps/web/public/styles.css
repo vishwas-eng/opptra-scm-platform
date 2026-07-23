@@ -64,6 +64,8 @@ main { padding: 24px; max-width: 1040px; width: 100%; }
 .big { font-size: 26px; font-weight: 700; font-family: 'Spectral', Georgia, serif; color: var(--navy); }
 .big.ok { color: var(--green); } .big.bad { color: var(--orange); } .big.warn { color: #b7791f; }
 .meta { color: var(--grey); font-size: 12.5px; margin-top: 4px; }
+.meta.ok { color: var(--green); font-weight: 600; }
+.meta.error { color: var(--orange); font-weight: 600; }
 .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #edf0f7; color: var(--navy); }
 
 h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }

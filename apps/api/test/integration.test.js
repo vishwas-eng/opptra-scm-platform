@@ -85,16 +85,56 @@ test('unknown run id is 404', async () => {
 });
 
 /* ---------------------------- session paste ------------------------------ */
-test('admin session paste persists, clears re-login, and surfaces via /api/uc-session', async () => {
+// The paste route tests the cookie against real Unicommerce (fetch to UC_BASE_URL).
+// Intercept only that call so the test is deterministic and needs no live network.
+const realFetch = globalThis.fetch;
+function mockUcFacilities(behavior) {
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('/data/user/facilities')) return behavior(opts);
+    return realFetch(url, opts);
+  };
+}
+
+test('admin session paste: a VALID cookie is verified alive and saved', async () => {
   const a = agent(app); await a.devLogin();
-  const paste = await a.post('/api/admin/uc-session', { jsessionid: 'INTEGRATION_COOKIE_123' });
-  assert.equal(paste.statusCode, 200);
-  const s = (await a.get('/api/uc-session')).json();
-  assert.equal(s.has_cookie, true);
-  assert.equal(s.source, 'admin-paste');
-  assert.equal(s.needs_relogin, false);
-  // the actual cookie value is never exposed
-  assert.equal(s.jsessionid, undefined);
+  mockUcFacilities(() => ({ status: 200, json: async () => ({ successful: true, currentFacilityCode: 'Opp_TEST' }) }));
+  try {
+    const paste = await a.post('/api/admin/uc-session', { jsessionid: 'GOOD_COOKIE_123' });
+    assert.equal(paste.statusCode, 200);
+    const body = paste.json();
+    assert.equal(body.alive, true);
+    assert.equal(body.facility, 'Opp_TEST');
+    const s = (await a.get('/api/uc-session')).json();
+    assert.equal(s.has_cookie, true);
+    assert.equal(s.status, 'alive');
+    assert.equal(s.source, 'admin-paste');
+    assert.equal(s.needs_relogin, false);
+    assert.equal(s.jsessionid, undefined); // the cookie value is never exposed
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('admin session paste: an INVALID cookie is rejected with a reason, not silently saved', async () => {
+  const a = agent(app); await a.devLogin();
+  // first, seed a genuinely alive session so we can prove it survives a bad paste
+  mockUcFacilities(() => ({ status: 200, json: async () => ({ successful: true, currentFacilityCode: 'Opp_KEEP' }) }));
+  let before;
+  try {
+    await a.post('/api/admin/uc-session', { jsessionid: 'ALIVE_ONE' });
+    before = (await a.get('/api/uc-session')).json();
+  } finally { globalThis.fetch = realFetch; }
+
+  mockUcFacilities(() => ({ status: 401, json: async () => ({}) }));
+  try {
+    const paste = await a.post('/api/admin/uc-session', { jsessionid: 'GARBAGE_TOKEN' });
+    assert.equal(paste.statusCode, 400);
+    const body = paste.json();
+    assert.equal(body.alive, false);
+    assert.match(body.error, /rejected|expired|HTTP 401/i);
+    // a bad paste must NOT clobber the previously-alive session
+    const after = (await a.get('/api/uc-session')).json();
+    assert.equal(after.status, 'alive');
+    assert.equal(after.updated_at, before.updated_at);
+  } finally { globalThis.fetch = realFetch; }
 });
 
 /* --------------------------- reverse dc upload --------------------------- */

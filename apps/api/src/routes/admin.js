@@ -1,15 +1,40 @@
 // Admin-only: session cookie paste + helper-extension ingest, user management.
 import { randomBytes, createHash } from 'node:crypto';
-import { query, audit, config } from '@opptra/core';
+import { query, audit, config, logger } from '@opptra/core';
 import { enqueue } from '../queue.js';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
-// Verify a freshly-pasted cookie right away: enqueue a keepalive so the worker reloads
-// the cookie and pings UC within ~1s - the dashboard flips ALIVE without waiting for the
-// 4-min cron. (Immediate, but the poll below also lets the UI report the outcome.)
-async function verifySessionNow() {
-  await enqueue('system.keepalive', {}, { removeOnComplete: true, removeOnFail: true });
+// Test a JSESSIONID against Unicommerce RIGHT NOW, synchronously, so the admin gets an
+// immediate real answer (not "saved" that might silently still be dead). Hits a cheap
+// endpoint with the cookie directly - no worker round-trip, no waiting for a cron tick.
+async function testUcCookie(cookie) {
+  const base = config().UC_BASE_URL.replace(/\/+$/, '');
+  try {
+    const res = await fetch(`${base}/data/user/facilities`, {
+      headers: { Cookie: 'JSESSIONID=' + cookie, Accept: 'application/json' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(15_000),
+    });
+    if ([301, 302, 401, 403].includes(res.status)) {
+      return { alive: false, reason: `Unicommerce rejected the session (HTTP ${res.status}). It may be expired, or from the wrong instance (checking against ${base}).` };
+    }
+    const data = await res.json().catch(() => null);
+    if (!data) return { alive: false, reason: `Unexpected response from Unicommerce (HTTP ${res.status}, not JSON).` };
+    if (data.successful === false) {
+      return { alive: false, reason: (data.errors || []).map((e) => e.description || e.message).join('; ') || 'Unicommerce rejected the session.' };
+    }
+    return { alive: true, facility: data.currentFacilityCode || null };
+  } catch (err) {
+    logger.warn({ err: String(err) }, 'uc session test call failed');
+    return { alive: false, reason: `Could not reach Unicommerce at ${base}: ${err.message || err}` };
+  }
+}
+
+// After a verified-alive paste, wake the worker immediately (it owns automations) so it
+// reloads the new cookie in seconds instead of waiting for the ~4-min keepalive cron.
+async function nudgeWorker() {
+  await enqueue('system.keepalive', {}, { removeOnComplete: true, removeOnFail: true }).catch(() => {});
 }
 
 export default async function adminRoutes(app) {
@@ -25,17 +50,27 @@ export default async function adminRoutes(app) {
         properties: { jsessionid: { type: 'string', minLength: 8, maxLength: 512 } },
       },
     },
-  }, async (req) => {
+  }, async (req, reply) => {
     const cookie = req.body.jsessionid.trim().replace(/^JSESSIONID=/i, '');
+    const test = await testUcCookie(cookie);
+
+    if (!test.alive) {
+      // Do NOT overwrite a working session with one that just failed verification.
+      // Record the attempt so it's visible in the audit trail either way.
+      await audit(req.user.email, 'uc-session-paste-rejected', { reason: test.reason });
+      return reply.code(400).send({ ok: false, alive: false, error: test.reason });
+    }
+
     await query(
-      `UPDATE uc_session SET jsessionid = $1, source = 'admin-paste', status = 'unknown',
-        updated_by = $2, updated_at = now(), fail_count = 0,
-        needs_relogin = false, relogin_since = NULL WHERE id = 1`,
-      [cookie, req.user.email]
+      `UPDATE uc_session SET jsessionid = $1, source = 'admin-paste', status = 'alive',
+        updated_by = $2, updated_at = now(), last_ok_at = now(), last_check_at = now(), fail_count = 0,
+        needs_relogin = false, relogin_since = NULL,
+        facility = COALESCE(NULLIF($3,''), facility) WHERE id = 1`,
+      [cookie, req.user.email, test.facility || '']
     );
-    await audit(req.user.email, 'uc-session-paste', {});
-    await verifySessionNow();
-    return { ok: true };
+    await audit(req.user.email, 'uc-session-paste', { facility: test.facility });
+    await nudgeWorker();
+    return { ok: true, alive: true, facility: test.facility };
   });
 
   // ── Session-helper ingest ────────────────────────────────────────────────
@@ -63,16 +98,21 @@ export default async function adminRoutes(app) {
     if (!rows.length) return reply.code(401).send({ error: 'invalid or revoked ingest token' });
     const owner = rows[0].owner_email;
     const cookie = req.body.jsessionid.trim().replace(/^JSESSIONID=/i, '');
+    const test = await testUcCookie(cookie);
+    if (!test.alive) {
+      await audit(`helper:${owner}`, 'uc-session-ingest-rejected', { reason: test.reason });
+      return reply.code(400).send({ ok: false, alive: false, error: test.reason });
+    }
     await query(
-      `UPDATE uc_session SET jsessionid = $1, source = 'admin-paste', status = 'unknown',
-        updated_by = $2, updated_at = now(), fail_count = 0,
+      `UPDATE uc_session SET jsessionid = $1, source = 'admin-paste', status = 'alive',
+        updated_by = $2, updated_at = now(), last_ok_at = now(), last_check_at = now(), fail_count = 0,
         needs_relogin = false, relogin_since = NULL,
         facility = COALESCE(NULLIF($3,''), facility) WHERE id = 1`,
-      [cookie, `helper:${owner}`, req.body.facility || '']);
+      [cookie, `helper:${owner}`, req.body.facility || test.facility || '']);
     await query('UPDATE ingest_tokens SET last_used = now() WHERE id = $1', [rows[0].id]);
-    await audit(`helper:${owner}`, 'uc-session-ingest', {});
-    await verifySessionNow();
-    return { ok: true, message: 'session captured, thank you' };
+    await audit(`helper:${owner}`, 'uc-session-ingest', { facility: test.facility });
+    await nudgeWorker();
+    return { ok: true, alive: true, message: 'session captured and verified alive' };
   });
 
   // Where the admin should log in (drives the "Re-login" button in the UI).
