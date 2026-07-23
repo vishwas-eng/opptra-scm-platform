@@ -48,7 +48,7 @@ export async function buildApp({ withStatic = true } = {}) {
 
   app.setErrorHandler((err, req, reply) => {
     if (err.validation) return reply.code(400).send({ error: 'invalid input', detail: err.message });
-    if (err.statusCode === 429) return reply.code(429).send({ error: 'too many requests — slow down' });
+    if (err.statusCode === 429) return reply.code(429).send({ error: 'too many requests. Please slow down.' });
     if (err.statusCode === 503) return reply.code(503).send({ error: err.message });
     req.log.error({ err }, 'unhandled route error');
     return reply.code(500).send({ error: 'internal error' });

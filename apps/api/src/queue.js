@@ -37,7 +37,7 @@ export async function enqueue(name, payload, opts = {}) {
   const q = automationQueue();
   const depth = (await q.getWaitingCount()) + (await q.getDelayedCount());
   if (depth >= MAX_QUEUE_DEPTH) {
-    const err = new Error(`queue is full (${depth} jobs waiting) — try again later`);
+    const err = new Error(`queue is full (${depth} jobs waiting). Try again shortly.`);
     err.statusCode = 503;
     throw err;
   }

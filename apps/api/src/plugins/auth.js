@@ -50,7 +50,7 @@ export default fp(async function authPlugin(app) {
     const user = rows[0];
     if (!user.is_active) {
       await audit(email, 'login-rejected', { reason: 'deactivated' });
-      return reply.code(403).send({ error: 'account deactivated — contact an admin' });
+      return reply.code(403).send({ error: 'account deactivated. Contact an admin.' });
     }
 
     const token = await reply.jwtSign({ email: user.email, name: user.name, role: user.role });

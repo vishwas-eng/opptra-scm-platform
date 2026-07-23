@@ -58,6 +58,30 @@ test('inventory.run throws on an unknown op (not a silent no-op)', async () => {
   await assert.rejects(() => handlers['inventory.run']({ data: { runUid: 'r', input: { op: 'nope', reqId: 'q', form: {} } } }), /unknown inventory op/);
 });
 
+test('RELIABILITY: session death mid e-way-bill batch stops cleanly, remaining rows skipped', async () => {
+  const { SessionError } = await import('@opptra/uc-client');
+  const finished = [];
+  const handlers = makeHandlers({
+    uc: { ping: async () => ({}) },
+    logger: { info() {}, warn() {}, error() {} },
+    alert: async () => {},
+    runs: { markRunning: async () => {}, markPendingRetry: async () => {}, finishRun: async (u, r) => finished.push(r) },
+    pipelines: {
+      returnPipeline: {}, inventoryPipeline: {},
+      ewaybillPipeline: { generateOne: async (row) => {
+        if (row.so === 'SO2') throw new SessionError('session expired'); // dies on row 2
+        return { so: row.so, ok: true, ewb: 'EWB' };
+      } },
+    },
+    reenqueue: async () => {},
+  });
+  const r = await handlers['ewaybill.generate']({ data: { runUid: 'r', input: { rows: [{ so: 'SO1' }, { so: 'SO2' }, { so: 'SO3' }], dryRun: false } } });
+  assert.equal(r.ok, 1);          // SO1 succeeded
+  assert.equal(r.failed, 2);      // SO2 died, SO3 skipped
+  assert.equal(r.results.find((x) => x.so === 'SO2').error, 'session expired');
+  assert.match(r.results.find((x) => x.so === 'SO3').error, /skipped/); // did NOT keep hammering UC
+});
+
 test('ewaybill.generate reads { runUid, input:{rows,dryRun} } and summarizes ok/failed', async () => {
   const { handlers, finished } = harness();
   const r = await handlers['ewaybill.generate']({ data: { runUid: 'r', input: { rows: [{ so: 'SO1' }, { so: 'SO2' }], dryRun: false } } });

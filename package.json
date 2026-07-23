@@ -12,7 +12,8 @@
     "api": "node apps/api/src/server.js",
     "worker": "node apps/worker/src/worker.js",
     "migrate": "node packages/core/src/migrate.js",
-    "test": "node --test \"packages/*/test/*.test.js\" \"apps/*/test/*.test.js\"",
+    "test:unit": "node --test \"packages/*/test/*.test.js\" \"apps/*/test/*.test.js\"",
+    "test": "node --test --test-concurrency=1 \"packages/*/test/*.test.js\" \"apps/*/test/*.test.js\"",
     "check": "node scripts/syntax-check.js"
   }
 }
