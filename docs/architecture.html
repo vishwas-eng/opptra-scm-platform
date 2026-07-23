@@ -1,0 +1,439 @@
+<title>Opptra SCM Platform — System Design</title>
+<style>
+  :root {
+    --navy: #131A48; --navy-2: #232c63; --orange: #FF5800; --orange-soft: #ffe9df;
+    --paper: #F7F6F3; --card: #ffffff; --ink: #1b2030; --slate: #5A6273; --hair: #dce0e8;
+    --public: #2f855a; --public-bg: #e7f4ec; --internal: #2b5f9e; --internal-bg: #e8f0fb;
+    --bg: var(--paper); --fg: var(--ink); --muted: var(--slate); --line: var(--hair);
+    --surface: var(--card); --rail: #eef0f5;
+    --serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1120; --fg: #e9ecf5; --muted: #9aa2ba; --line: #2a3150;
+      --surface: #161b2e; --rail: #141a2e; --navy: #cdd4f0; --orange: #ff7a45; }
+  }
+  :root[data-theme="light"] { --bg: var(--paper); --fg: var(--ink); --muted: var(--slate); --line: var(--hair);
+    --surface: var(--card); --rail: #eef0f5; --navy: #131A48; --orange: #FF5800; }
+  :root[data-theme="dark"] { --bg: #0e1120; --fg: #e9ecf5; --muted: #9aa2ba; --line: #2a3150;
+    --surface: #161b2e; --rail: #141a2e; --navy: #cdd4f0; --orange: #ff7a45; }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 0; max-width: 1180px; margin: 0 auto; }
+
+  /* rail */
+  nav.rail { position: sticky; top: 0; align-self: start; height: 100vh; padding: 30px 20px; border-right: 1px solid var(--line); overflow-y: auto; }
+  .brand { font-family: var(--serif); font-size: 20px; font-weight: 700; letter-spacing: -.01em; color: var(--fg); margin-bottom: 2px; }
+  .brand b { color: var(--orange); }
+  .brand-sub { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 24px; }
+  .rail a { display: block; color: var(--muted); text-decoration: none; font-size: 13px; padding: 6px 10px; border-radius: 7px; border-left: 2px solid transparent; }
+  .rail a:hover { color: var(--fg); background: var(--rail); }
+  .rail a.on { color: var(--fg); border-left-color: var(--orange); font-weight: 600; }
+  .rail .grp { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 18px 10px 6px; opacity: .7; }
+
+  main { padding: 46px 44px 120px; min-width: 0; }
+  header.top { margin-bottom: 40px; }
+  .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .16em; color: var(--orange); font-weight: 700; }
+  h1 { font-family: var(--serif); font-size: 40px; line-height: 1.1; margin: 12px 0 14px; letter-spacing: -.02em; text-wrap: balance; }
+  .lead { font-size: 17px; color: var(--muted); max-width: 64ch; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .chip { font-size: 12px; font-family: var(--mono); background: var(--rail); border: 1px solid var(--line); color: var(--fg); padding: 4px 10px; border-radius: 999px; }
+
+  section { margin-top: 56px; scroll-margin-top: 20px; }
+  h2 { font-family: var(--serif); font-size: 25px; letter-spacing: -.01em; margin: 0 0 4px; display: flex; align-items: baseline; gap: 12px; }
+  h2 .n { font-family: var(--mono); font-size: 13px; color: var(--orange); font-weight: 700; }
+  .sec-lead { color: var(--muted); max-width: 70ch; margin: 0 0 18px; }
+
+  /* blueprint canvas — kept paper-light in both themes for diagram legibility */
+  .canvas { background: #fbfaf7; border: 1px solid var(--line); border-radius: 14px; padding: 26px 22px; overflow-x: auto;
+    background-image: radial-gradient(#e7e5df 1px, transparent 1px); background-size: 22px 22px; box-shadow: 0 1px 2px rgba(19,26,72,.05); }
+  :root[data-theme="dark"] .canvas, .canvas { }
+  .mermaid { display: flex; justify-content: center; min-width: 640px; }
+
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 16px; }
+  .lg { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface); }
+  .lg h4 { margin: 0 0 4px; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+  .lg p { margin: 0; font-size: 13px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .dot.pub { background: var(--public); } .dot.int { background: var(--internal); }
+  .dot.org { background: var(--orange); } .dot.nav { background: var(--navy); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  @media (max-width: 820px) { .cols { grid-template-columns: 1fr; } }
+  .note { border-left: 3px solid var(--orange); background: var(--surface); border-radius: 0 10px 10px 0; padding: 14px 16px; font-size: 14px; }
+  .note b { color: var(--fg); }
+  code, .k { font-family: var(--mono); font-size: .88em; background: var(--rail); padding: 1px 6px; border-radius: 5px; }
+
+  table.mods { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 6px; }
+  table.mods th, table.mods td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.mods th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  table.mods td:first-child { font-family: var(--mono); color: var(--orange); white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 600; }
+  .tag.live { background: var(--public-bg); color: var(--public); }
+  .tag.soon { background: var(--rail); color: var(--muted); }
+
+  footer { margin-top: 70px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  @media (max-width: 720px) { .wrap { grid-template-columns: 1fr; } nav.rail { display: none; } main { padding: 28px 18px 80px; } h1 { font-size: 30px; } }
+</style>
+
+<div class="wrap">
+  <nav class="rail">
+    <div class="brand">Opptra <b>SCM</b></div>
+    <div class="brand-sub">System Design</div>
+    <div class="grp">Platform</div>
+    <a href="#overview" class="on">Overview</a>
+    <a href="#architecture">1 · Architecture</a>
+    <a href="#auth">2 · Two auth layers</a>
+    <a href="#session">3 · Session lifecycle</a>
+    <a href="#request">4 · Request lifecycle</a>
+    <a href="#modules">5 · Module map</a>
+    <div class="grp">Automations</div>
+    <a href="#asn">ASN Compile</a>
+    <a href="#reversedc">Reverse DC</a>
+    <a href="#packing">Packing Mail</a>
+    <a href="#sheet">Sheet Update</a>
+    <div class="grp">Run</div>
+    <a href="#deploy">6 · Deployment</a>
+    <a href="#reliability">7 · Reliability</a>
+  </nav>
+
+  <main>
+    <header class="top" id="overview">
+      <div class="eyebrow">Unicommerce Supply-Chain Automation</div>
+      <h1>One backend, one web app, every automation.</h1>
+      <p class="lead">A single Node.js platform that runs all of Opptra's supply-chain automations on top of Unicommerce. Humans sign in with Google; the backend owns one Unicommerce session and does the work. Every action is queued, attributed, and audited.</p>
+      <div class="meta-row">
+        <span class="chip">Node 20 · TypeScript-ready</span>
+        <span class="chip">Fastify · BullMQ · Postgres · Redis</span>
+        <span class="chip">Google Cloud · Docker Compose</span>
+        <span class="chip">One static IP for UC whitelisting</span>
+      </div>
+    </header>
+
+    <!-- 1 · ARCHITECTURE -->
+    <section id="architecture">
+      <h2><span class="n">01</span> System architecture</h2>
+      <p class="sec-lead">Five containers on one box. The API only accepts requests and enqueues work; the worker is the <b>only</b> process that talks to Unicommerce, so exactly one process owns the session.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800','clusterBkg':'#f6f5f1','clusterBorder':'#c9cddb'}}}%%
+flowchart LR
+  U([Supply-chain users]):::user -->|Google SSO| CA
+  subgraph BOX["Google Cloud VM · Docker Compose"]
+    direction LR
+    CA[Caddy · TLS]:::infra --> WEB[Web SPA]:::app
+    WEB -->|JWT REST| API[API · Fastify]:::app
+    API -->|enqueue| RQ[(Redis · queue)]:::store
+    API --> PG[(Postgres · runs, audit, session)]:::store
+    WK[Worker · BullMQ]:::app -->|dequeue| RQ
+    WK --> PG
+  end
+  WK ==>|only UC caller| UC[Unicommerce]:::ext
+  WK --> GG[Google Workspace]:::ext
+  WK -.planned.-> VN[Vinculum]:::ext
+  classDef user fill:#131A48,stroke:#131A48,color:#fff;
+  classDef app fill:#eef1f8,stroke:#131A48,color:#131A48;
+  classDef store fill:#fff,stroke:#2b5f9e,color:#2b5f9e;
+  classDef ext fill:#ffe9df,stroke:#FF5800,color:#8a2f00;
+  classDef infra fill:#f2f2ee,stroke:#9aa0b0,color:#333;
+</pre>
+      </div>
+      <div class="legend">
+        <div class="lg"><h4><span class="dot nav"></span>API — accept &amp; enqueue</h4><p>Auth, validation, run records. Never calls Unicommerce directly.</p></div>
+        <div class="lg"><h4><span class="dot nav"></span>Worker — the doer</h4><p>Concurrency 1. Owns the UC session, runs every automation pipeline.</p></div>
+        <div class="lg"><h4><span class="dot int"></span>Postgres &amp; Redis</h4><p>Runs, audit, users, the session row; the job queue. Bound to localhost.</p></div>
+        <div class="lg"><h4><span class="dot org"></span>External</h4><p>Unicommerce (live), Google Workspace (packing/sheet), Vinculum (planned).</p></div>
+      </div>
+    </section>
+
+    <!-- 2 · AUTH -->
+    <section id="auth">
+      <h2><span class="n">02</span> Two authentication layers</h2>
+      <p class="sec-lead">A human identity and a machine identity, kept separate. People never see or touch the Unicommerce credentials.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800'}}}%%
+flowchart TB
+  subgraph H["Human identity"]
+    direction LR
+    P([Person]) -->|Google Sign-In · opptra.com only| J[Signed JWT cookie]
+    J --> R{Role}
+    R -->|admin| RA[Full + session + users]
+    R -->|ops| RO[Run automations]
+    R -->|viewer| RV[Read only]
+  end
+  subgraph M["Machine identity · one bot account"]
+    direction LR
+    S[(uc_session row)] --> B1[JSESSIONID · internal /data]
+    S --> B2[OAuth bearer · public /services/rest]
+  end
+  RO -.each action writes.-> RUN[(runs + audit)]
+  classDef d fill:#eef1f8,stroke:#131A48,color:#131A48;
+  class P,J,R,RA,RO,RV,S,B1,B2,RUN d;
+</pre>
+      </div>
+      <div class="cols">
+        <div class="note"><b>Attribution on a shared account.</b> Everyone shares one Unicommerce bot login, but every click creates a <span class="k">runs</span> row — who, what, which SO, result. The Dashboard answers “who ran what” without anyone guessing.</div>
+        <div class="note"><b>Role checks re-read the database</b> on every request, so deactivating or demoting a user takes effect immediately, not when their 12-hour token expires.</div>
+      </div>
+    </section>
+
+    <!-- 3 · SESSION -->
+    <section id="session">
+      <h2><span class="n">03</span> Unicommerce session lifecycle</h2>
+      <p class="sec-lead">Internal <span class="k">/data</span> calls need a browser <span class="k">JSESSIONID</span> that idles out in minutes. One owner keeps it alive; when it dies, an admin re-logs in and the worker adopts the new cookie within a second.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800'}}}%%
+sequenceDiagram
+  autonumber
+  participant Ad as Admin
+  participant API
+  participant DB as uc_session (Postgres)
+  participant WK as Worker (session owner)
+  participant UC as Unicommerce
+  Note over WK,UC: keep-alive every ~4 min
+  WK->>UC: ping facilities endpoint
+  UC-->>WK: 200 → mark ALIVE
+  Note over WK,UC: cookie idles out → 401
+  WK->>DB: mark DEAD + alert
+  Ad->>API: paste fresh JSESSIONID
+  API->>DB: store cookie + enqueue keepalive
+  WK->>DB: reload cookie (adopt paste)
+  WK->>UC: ping with new cookie
+  UC-->>WK: 200 → ALIVE (within ~1s)
+</pre>
+      </div>
+      <div class="cols">
+        <div class="note"><b>Session death is narrowly defined:</b> only <span class="k">401</span>, a login redirect, or <span class="k">USER_NOT_LOGGED_IN</span>. A <span class="k">403</span> or <span class="k">successful:false</span> is a business response, never “dead” — a hard-won lesson kept as a test.</div>
+        <div class="note"><b>Temporary by design.</b> Paste is the bridge until Unicommerce whitelists our account; then the backend scripts login itself and the paste step disappears. The static IP is what makes the whitelist hold.</div>
+      </div>
+    </section>
+
+    <!-- 4 · REQUEST -->
+    <section id="request">
+      <h2><span class="n">04</span> Request lifecycle</h2>
+      <p class="sec-lead">Every automation follows the same path, so a new one is a known quantity: validate → record → enqueue → run → report.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800'}}}%%
+sequenceDiagram
+  autonumber
+  participant UI as Web SPA
+  participant API
+  participant Q as Redis
+  participant WK as Worker
+  participant EX as UC / Google
+  UI->>API: POST /api/automations/…  (JWT)
+  API->>API: auth → validate → rate-limit
+  API->>API: create run (queued)
+  API->>Q: enqueue { runUid, input }
+  API-->>UI: { runUid }
+  WK->>Q: pick up job
+  WK->>EX: run pipeline (paced, idempotent)
+  WK->>API: finishRun (succeeded / failed)
+  UI->>API: poll /api/runs/{runUid}
+  API-->>UI: result → render card
+</pre>
+      </div>
+      <div class="note"><b>One contract everywhere:</b> jobs are always <span class="k">{ runUid, input }</span>. That shape is unit-tested against the worker, so a mismatch can’t reach production (it once did — now it can’t).</div>
+    </section>
+
+    <!-- 5 · MODULES -->
+    <section id="modules">
+      <h2><span class="n">05</span> Module map</h2>
+      <p class="sec-lead">An npm-workspaces monorepo. Apps are thin; the reusable logic lives in packages. Each automation is its own package with the same shape: <span class="k">make…Pipeline(uc, cfg[, google])</span>.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800','clusterBkg':'#f6f5f1','clusterBorder':'#c9cddb'}}}%%
+flowchart TB
+  subgraph APPS["apps/"]
+    A1[api]:::app
+    A2[worker]:::app
+    A3[web]:::app
+  end
+  subgraph PKG["packages/"]
+    C[core · config, db, runs, alerts]:::core
+    UCC[uc-client · session, rate-limit, facility]:::core
+    G[integrations-google · gmail, drive, sheets]:::core
+    AR[automation-return]:::auto
+    AE[automation-ewaybill]:::auto
+    AI[automation-inventory]:::auto
+    AA[automation-asn]:::auto
+    AD[automation-reversedc]:::auto
+    AP[automation-packing]:::auto
+    AS[automation-sheet]:::auto
+  end
+  A1 --> C & UCC
+  A2 --> C & UCC & G
+  A2 --> AR & AE & AI & AA & AP & AS
+  A1 --> AD
+  AP --> G
+  AS --> G
+  classDef app fill:#131A48,stroke:#131A48,color:#fff;
+  classDef core fill:#eef1f8,stroke:#131A48,color:#131A48;
+  classDef auto fill:#ffe9df,stroke:#FF5800,color:#8a2f00;
+</pre>
+      </div>
+      <table class="mods">
+        <thead><tr><th>Package</th><th>Responsibility</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>core</td><td>Validated config, Postgres + migrations, run/audit records, Slack alerts, idempotency ledger.</td><td></td></tr>
+          <tr><td>uc-client</td><td>The only door to Unicommerce: session manager, global rate limiter, facility-safe HTTP, bearer tokens.</td><td></td></tr>
+          <tr><td>integrations-google</td><td>Gmail / Drive / Sheets via a service account (domain-wide delegation), injected into automations.</td><td></td></tr>
+          <tr><td>automation-asn</td><td>SO + channel → Flipkart / Myntra / Zepto ASN file.</td><td><span class="tag live">live</span></td></tr>
+          <tr><td>automation-reversedc</td><td>Uploaded credit-note PDF → Delivery Challan (pdf-lib).</td><td><span class="tag live">live</span></td></tr>
+          <tr><td>automation-packing</td><td>SO list → per-warehouse Gmail drafts with invoices.</td><td><span class="tag live">live</span></td></tr>
+          <tr><td>automation-sheet</td><td>Waypoint → date tab → UC enrich → Master.</td><td><span class="tag live">live</span></td></tr>
+          <tr><td>automation-return / -ewaybill / -inventory</td><td>Return re-dispatch, e-way bill, inward/outward/full-cycle.</td><td><span class="tag live">live</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- AUTOMATION FLOWS -->
+    <section id="asn">
+      <h2><span class="n">A</span> ASN Compile</h2>
+      <p class="sec-lead">One sale order, one channel, one file. The order is found across facilities, then mapped to that channel's exact template.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800'}}}%%
+flowchart LR
+  I[SO + channel]:::in --> HOP{hop facilities}
+  HOP -->|RSG first, then rest| F["/data/oms/saleorder/fetch"]:::int
+  F --> MAP["map saleOrderItems to rows<br/>qty, PO, HSN, MRP, tax"]:::step
+  MAP --> W{channel}
+  W -->|Flipkart / Myntra| X[XLSX · exceljs]:::out
+  W -->|Zepto| CSV[CSV]:::out
+  X --> DL[Download]:::in
+  CSV --> DL
+  classDef in fill:#131A48,stroke:#131A48,color:#fff;
+  classDef int fill:#e8f0fb,stroke:#2b5f9e,color:#2b5f9e;
+  classDef step fill:#eef1f8,stroke:#131A48,color:#131A48;
+  classDef out fill:#ffe9df,stroke:#FF5800,color:#8a2f00;
+</pre>
+      </div>
+    </section>
+
+    <section id="reversedc">
+      <h2><span class="n">B</span> Reverse DC</h2>
+      <p class="sec-lead">The user uploads the original credit-note PDF. We edit that same document — no new template, no Unicommerce session needed.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800'}}}%%
+flowchart LR
+  U[Upload credit-note PDF]:::in --> API[API · multipart]:::step
+  API --> E[pdf-lib edit in place]:::step
+  E --> E1[white out barcode]:::sub
+  E --> E2[Credit Note → Delivery Challan]:::sub
+  E --> E3[swap From / To]:::sub
+  E1 & E2 & E3 --> O[Delivery Challan PDF]:::out --> DL[Download]:::in
+  classDef in fill:#131A48,stroke:#131A48,color:#fff;
+  classDef step fill:#eef1f8,stroke:#131A48,color:#131A48;
+  classDef sub fill:#f6f5f1,stroke:#c9cddb,color:#333;
+  classDef out fill:#ffe9df,stroke:#FF5800,color:#8a2f00;
+</pre>
+      </div>
+      <div class="note"><b>Pure transform.</b> Because it works on the uploaded file, Reverse DC runs even when Unicommerce is down — no session, no facility hop.</div>
+    </section>
+
+    <section id="packing">
+      <h2><span class="n">C</span> Packing Mail</h2>
+      <p class="sec-lead">Paste SO numbers. The platform gathers each invoice, groups by warehouse, and drafts one email per warehouse from our supply-chain account.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800'}}}%%
+flowchart LR
+  I[SO list]:::in --> R[resolve invoice + facility]:::int
+  R --> P[download invoice PDF]:::int
+  P --> GRP[group by warehouse]:::step
+  GRP --> D[Gmail draft per warehouse<br/>invoices attached]:::out
+  D --> REV[Operator reviews → sends]:::in
+  classDef in fill:#131A48,stroke:#131A48,color:#fff;
+  classDef int fill:#e8f0fb,stroke:#2b5f9e,color:#2b5f9e;
+  classDef step fill:#eef1f8,stroke:#131A48,color:#131A48;
+  classDef out fill:#e7f4ec,stroke:#2f855a,color:#1e5636;
+</pre>
+      </div>
+      <div class="note"><b>Sends from our account,</b> not the user's — a Google service account with delegation. Nobody connects their personal Gmail.</div>
+    </section>
+
+    <section id="sheet">
+      <h2><span class="n">D</span> Sheet Update</h2>
+      <p class="sec-lead">Keeps the Master sheet current: pull the latest Waypoint orders, enrich from Unicommerce, then fold today's tab into Master.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800'}}}%%
+flowchart LR
+  WP[Waypoint · CREATED orders]:::ext --> DIFF[diff vs Master]:::step
+  DIFF --> T[write missing → today's date tab]:::out
+  T --> ENR[second fill · UC invoice + tracking]:::int
+  ENR --> PUSH[push date tab → Master]:::out
+  classDef ext fill:#ffe9df,stroke:#FF5800,color:#8a2f00;
+  classDef int fill:#e8f0fb,stroke:#2b5f9e,color:#2b5f9e;
+  classDef step fill:#eef1f8,stroke:#131A48,color:#131A48;
+  classDef out fill:#e7f4ec,stroke:#2f855a,color:#1e5636;
+</pre>
+      </div>
+    </section>
+
+    <!-- 6 · DEPLOY -->
+    <section id="deploy">
+      <h2><span class="n">06</span> Deployment</h2>
+      <p class="sec-lead">One always-on Google Cloud VM. One command brings up the whole stack; a reserved static IP is what Unicommerce whitelists.</p>
+      <div class="canvas">
+<pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800','clusterBkg':'#f6f5f1','clusterBorder':'#c9cddb'}}}%%
+flowchart TB
+  DNS[scm.opptra.com]:::ext --> CAD
+  subgraph VM["Compute Engine · asia-south1 · static IP"]
+    CAD[Caddy · auto-HTTPS :443]:::infra --> API[api]:::app
+    API --- WK[worker]:::app
+    API --> PGc[(postgres)]:::store
+    API --> RDc[(redis)]:::store
+    WK --> PGc
+    WK --> RDc
+  end
+  WK ==>|whitelisted static IP| UC[Unicommerce]:::ext
+  classDef app fill:#131A48,stroke:#131A48,color:#fff;
+  classDef store fill:#fff,stroke:#2b5f9e,color:#2b5f9e;
+  classDef ext fill:#ffe9df,stroke:#FF5800,color:#8a2f00;
+  classDef infra fill:#f2f2ee,stroke:#9aa0b0,color:#333;
+</pre>
+      </div>
+      <div class="cols">
+        <div class="note"><b>One-click deploy.</b> <span class="k">./deploy/one-click-gcp.sh</span> reserves the IP, opens the firewall, creates the VM, installs Docker, and runs <span class="k">docker compose up</span> — idempotent, safe to re-run.</div>
+        <div class="note"><b>Sizing.</b> e2-medium (2 vCPU / 4 GB) handles ~10 users and the scheduled jobs. No GPU. ~₹2.5–3.5k / month all-in.</div>
+      </div>
+    </section>
+
+    <!-- 7 · RELIABILITY -->
+    <section id="reliability">
+      <h2><span class="n">07</span> Reliability by design</h2>
+      <p class="sec-lead">The properties that keep it steady in production, not just working in a demo.</p>
+      <div class="legend">
+        <div class="lg"><h4><span class="dot org"></span>Global rate limiting</h4><p>One token bucket paces every Unicommerce call across all automations; HTTP 429 is honored with back-off. It can't trip the throttle.</p></div>
+        <div class="lg"><h4><span class="dot org"></span>Durable idempotency</h4><p>Multi-step flows memoize each step per request in Postgres — a retry resumes and never double-creates a PO, invoice, or allocation.</p></div>
+        <div class="lg"><h4><span class="dot nav"></span>Single session owner</h4><p>Only the worker (concurrency 1) touches Unicommerce, so facility context and the cookie are never raced.</p></div>
+        <div class="lg"><h4><span class="dot nav"></span>Fail loud</h4><p>Dead session, stuck job, or generation failure raises a deduped alert; the Dashboard shows session and run health.</p></div>
+        <div class="lg"><h4><span class="dot int"></span>Full attribution</h4><p>Every action is a run row; security events are an append-only audit log.</p></div>
+        <div class="lg"><h4><span class="dot int"></span>Tested</h4><p>Unit tests cover session semantics, rate limiting, idempotency, and each pipeline — green on every change.</p></div>
+      </div>
+    </section>
+
+    <footer>
+      Opptra SCM Platform · system design reference. Live automations: ASN Compile, Reverse DC, Packing Mail, Sheet Update, Return, E-way Bill, Inward/Outward. Planned: Reports Digest, Home Centre Sync.
+    </footer>
+  </main>
+</div>
+
+<script>
+  // Scroll-spy for the rail.
+  const links = [...document.querySelectorAll('.rail a')];
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const obs = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) { links.forEach(l => l.classList.remove('on')); map.get(e.target.id)?.classList.add('on'); } });
+  }, { rootMargin: '-15% 0px -75% 0px' });
+  document.querySelectorAll('section, header.top').forEach(s => obs.observe(s));
+</script>
