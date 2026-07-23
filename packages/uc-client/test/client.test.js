@@ -147,3 +147,15 @@ test('session paste: worker adopts a cookie written to the store after boot', as
   // next ping reloads the store, adopts the cookie, and goes alive
   assert.deepEqual(await client.ping(), { alive: true, currentFacility: 'F1' });
 });
+
+test('hard-coded UC_JSESSIONID_OVERRIDE seeds the session on boot (ping goes alive)', async () => {
+  const store = new MemorySessionStore({ jsessionid: '', source: 'none' });
+  const client = new UcClient({
+    baseUrl: 'https://uc.example.com', user: 'u', pass: 'p',
+    overrideCookie: 'HARDCODED_TOKEN', sessionStore: store, alertFn: async () => {},
+    fetchImpl: async (url, opts) => opts.headers.Cookie === 'JSESSIONID=HARDCODED_TOKEN'
+      ? jsonRes({ currentFacilityCode: 'F1' }) : jsonRes({}, 401),
+  });
+  // First ping (keepalive) must apply the override and go alive - no admin paste needed.
+  assert.deepEqual(await client.ping(), { alive: true, currentFacility: 'F1' });
+});

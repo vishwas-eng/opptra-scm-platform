@@ -54,11 +54,13 @@ export class SessionManager {
   }
 
   /** Re-read the cookie from the store. The admin paste happens in the API process, so
-   *  the worker's SessionManager must reload to see it. Returns true if it changed. */
+   *  the worker's SessionManager must reload to see it. Returns true if it changed.
+   *  On the very first call it runs load(), which applies the env override (a hard-coded
+   *  UC_JSESSIONID_OVERRIDE) - otherwise reload would mark loaded and skip it. */
   async reload() {
+    if (!this.#loaded) { await this.load(); return true; }
     const row = await this.#store.get();
     const cookie = row.jsessionid || '';
-    this.#loaded = true;
     if (cookie === this.#cookie) return false;
     this.#cookie = cookie;
     logger.info({ source: row.source, hasCookie: !!cookie }, 'uc session cookie reloaded from store');

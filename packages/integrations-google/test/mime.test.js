@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRawMessage, gmailApi, driveApi, sheetsApi } from '../src/index.js';
+import { buildRawMessage, gmailApi, driveApi, sheetsApi, withGoogleRetry } from '../src/index.js';
 
 const decode = (raw) => Buffer.from(raw.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
 
@@ -44,4 +44,30 @@ test('wrappers call the injected client with the right shape', async () => {
   const drive = { files: { list: async () => ({ data: { files: [{ id: 'f1', name: 'label.pdf' }] } }) } };
   const files = await driveApi.listFolder(drive, 'folder1');
   assert.equal(files[0].name, 'label.pdf');
+});
+
+test('withGoogleRetry retries on 429 quota then succeeds', async () => {
+  let n = 0;
+  const r = await withGoogleRetry(async () => {
+    n++;
+    if (n < 3) { const e = new Error('rateLimitExceeded'); e.code = 429; throw e; }
+    return 'ok';
+  }, { tries: 5 });
+  assert.equal(r, 'ok');
+  assert.equal(n, 3);
+});
+
+test('withGoogleRetry does NOT retry a non-quota error (fails fast)', async () => {
+  let n = 0;
+  await assert.rejects(() => withGoogleRetry(async () => { n++; const e = new Error('bad range'); e.code = 400; throw e; }, { tries: 5 }));
+  assert.equal(n, 1);
+});
+
+test('withGoogleRetry retries 403 userRateLimitExceeded but not plain 403', async () => {
+  let n = 0;
+  await assert.rejects(() => withGoogleRetry(async () => { n++; const e = new Error('forbidden'); e.code = 403; e.errors = [{ reason: 'insufficientPermissions' }]; throw e; }, { tries: 3 }));
+  assert.equal(n, 1, 'permission 403 is not retried');
+  let m = 0;
+  await assert.rejects(() => withGoogleRetry(async () => { m++; const e = new Error('quota'); e.code = 403; e.errors = [{ reason: 'userRateLimitExceeded' }]; throw e; }, { tries: 3 }));
+  assert.equal(m, 3, 'quota 403 IS retried');
 });
