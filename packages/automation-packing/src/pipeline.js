@@ -1,4 +1,4 @@
-// Packing mail — ported from b2b Mailer.gs (A2).
+// Packing mail - ported from b2b Mailer.gs (A2).
 //   input: SO list → resolve each SO's invoice + facility (UC), download the invoice PDF
 //   (uc.dataBinary), group by warehouse (WAREHOUSE_MAP: facility → email), and create ONE
 //   Gmail draft per warehouse with the invoices attached, for the operator to review + send.
@@ -33,7 +33,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null) {
   /** Build a per-warehouse Gmail draft for the given SOs. */
   async function createDrafts(soList) {
     if (!google) {
-      return { ok: false, error: 'Google Workspace not connected — set GOOGLE_SA_KEY_JSON + delegation to enable packing mail.' };
+      return { ok: false, error: 'Google Workspace is not connected on the server yet. Set the service account to enable packing mail.' };
     }
     const perWarehouse = new Map(); // email -> { warehouse, sos:[], attachments:[] }
     const unresolved = [];
@@ -52,11 +52,11 @@ export function makePackingPipeline(uc, cfg = {}, google = null) {
 
     const drafts = [];
     for (const g of perWarehouse.values()) {
-      const subject = `Packing — ${g.sos.length} order(s): ${g.sos.slice(0, 6).join(', ')}${g.sos.length > 6 ? '…' : ''}`;
+      const subject = `Packing - ${g.sos.length} order(s): ${g.sos.slice(0, 6).join(', ')}${g.sos.length > 6 ? '…' : ''}`;
       const htmlBody = `<p>Hi ${escapeHtml(g.warehouse)} team,</p>
         <p>Please pack the following ${g.sos.length} order(s). Invoices attached.</p>
         <ul>${g.sos.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
-        <p>— Opptra Supply Chain</p>`;
+        <p>- Opptra Supply Chain</p>`;
       const res = await gmailApi.createDraft(google.gmail, {
         to: g.to, from: sender ? `Opptra Supply Chain <${sender}>` : undefined,
         subject, htmlBody, attachments: g.attachments,

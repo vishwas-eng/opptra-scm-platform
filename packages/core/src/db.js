@@ -45,7 +45,7 @@ export async function migrate(migrationsDir, fsMod, pathMod) {
       logger.info({ migration: f }, 'migration applied');
     } catch (err) {
       await client.query('ROLLBACK');
-      logger.error({ err, migration: f }, 'migration FAILED — aborting boot');
+      logger.error({ err, migration: f }, 'migration FAILED - aborting boot');
       throw err;
     } finally {
       client.release();

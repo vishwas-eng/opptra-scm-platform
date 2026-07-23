@@ -1,4 +1,4 @@
-// Inward / Outward / Full-cycle — ported from appscript/{Inward,Outward,FullCycle}.gs.
+// Inward / Outward / Full-cycle - ported from appscript/{Inward,Outward,FullCycle}.gs.
 //
 // Layers: uc.public = OAuth bearer (/services/rest/v1); uc.data = JSESSIONID (/data).
 // Idempotent per reqId via the injected memoStep(): a retry resumes and never
@@ -26,7 +26,7 @@ export function makeInventoryPipeline(uc, cfg, memoStep) {
   };
   const fac = CFG.facility ? { facility: CFG.facility } : {};
 
-  // PO create is identical for both inward modes — one memoized helper.
+  // PO create is identical for both inward modes - one memoized helper.
   const createApprovedPO = (reqId, items) => memoStep(reqId, 'PO', async () =>
     (await uc.public('/services/rest/v1/purchase/purchaseOrder/createApproved', {
       vendorCode: CFG.vendorCode, currencyCode: CFG.currency,
@@ -170,7 +170,7 @@ export function makeInventoryPipeline(uc, cfg, memoStep) {
       const r = await uc.data('/data/oms/saleorder/allocate/inventory', { saleOrderCode: soCode, saleOrderItemCodeToInventoryAllocation: alloc }, fac);
       const warn = (r.warnings || []).map((w) => w.message).filter(Boolean);
       if (warn.length && !(r.shippingPackageCodes || []).length) {
-        throw new Error(`allocate: ${warn.join('; ')} — check shipping serviceability / provider for ${CFG.outwardShipMethod}`);
+        throw new Error(`allocate: ${warn.join('; ')}. Check shipping serviceability / provider for ${CFG.outwardShipMethod}`);
       }
       return r.shippingPackageCodes || [];
     });
@@ -198,7 +198,7 @@ export function makeInventoryPipeline(uc, cfg, memoStep) {
     };
     let inward;
     try { inward = await runInward(inForm); }
-    catch (e) { throw new Error(`Inward failed — outward NOT attempted: ${e.message || e}`); }
+    catch (e) { throw new Error(`Inward failed, outward NOT attempted: ${e.message || e}`); }
 
     const outForm = {
       reqId: `${baseReq}:out`, orderCode: form.orderCode, customerCode: form.customerCode, customerName: form.customerName,

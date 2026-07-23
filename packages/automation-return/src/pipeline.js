@@ -1,4 +1,4 @@
-// Return + re-dispatch pipeline — direct port of return-automation/src/pipeline.js
+// Return + re-dispatch pipeline - direct port of return-automation/src/pipeline.js
 // (every endpoint + payload proven live). Differences from the original:
 //   - all UC calls go through the injected UcClient (session/facility owned centrally)
 //   - config comes in as an argument, not process.env reads scattered through the file
@@ -9,7 +9,7 @@
 import { SessionError, ConfigError } from '@opptra/uc-client';
 
 // safe() tolerates per-step business failures (the pipeline reads state and moves on),
-// but a dead session or bad config must FAIL THE RUN FAST — otherwise the worker
+// but a dead session or bad config must FAIL THE RUN FAST - otherwise the worker
 // re-enqueues a doomed job for an hour while the session is dead.
 const safe = async (fn) => {
   try { return await fn(); } catch (e) {
@@ -20,7 +20,7 @@ const safe = async (fn) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // `cfg` is the validated config object from @opptra/core (same source every automation
-// uses). No raw process.env reads here — settings are validated at boot, not at 2am.
+// uses). No raw process.env reads here - settings are validated at boot, not at 2am.
 export function makeReturnPipeline(uc, cfg = {}) {
   const CFG = {
     channel: cfg.UC_RETURN_CHANNEL || 'CUSTOM_B2B',
@@ -174,7 +174,7 @@ export function makeReturnPipeline(uc, cfg = {}) {
   async function processSO(so, options = {}) {
     const out = { saleOrder: so, steps: {}, ok: false };
     try {
-      // DRY RUN: read-only preview. NO writes — reports state and the planned steps only.
+      // DRY RUN: read-only preview. NO writes - reports state and the planned steps only.
       if (options.dryRun) {
         const st = await state(so);
         const items = await detectItems(so);
@@ -203,12 +203,12 @@ export function makeReturnPipeline(uc, cfg = {}) {
 
       if (!st.pkg) { // 1) allocate
         // Fire allocate AT MOST ONCE across re-enqueues. On staging B2B allocation is
-        // async (minutes) and the SO can sit in CREATED while it processes — without this
+        // async (minutes) and the SO can sit in CREATED while it processes - without this
         // guard a retry in that window would re-POST allocate (not idempotent → could
         // double-commit inventory). options.allocated is threaded by the worker.
         if (options.allocated) {
           out.allocated = true;
-          out.steps.detect = 'allocate already fired — waiting for package';
+          out.steps.detect = 'allocate already fired, waiting for package';
         } else if (!st.status || st.status === 'CREATED') {
           const items = await detectItems(so);
           if (!items.length) { out.pending = true; out.steps.detect = 'order not processed yet, retrying'; return out; }

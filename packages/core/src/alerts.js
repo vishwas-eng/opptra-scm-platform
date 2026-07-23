@@ -1,5 +1,5 @@
 // Fail-loud alerting. Slack webhook if configured; always logged. Alerts must never
-// themselves throw into business code — they swallow their own errors after logging.
+// themselves throw into business code - they swallow their own errors after logging.
 import { config } from './config.js';
 import { logger } from './logger.js';
 

@@ -76,5 +76,5 @@ test('full-cycle: outward is gated on inward success', async () => {
   };
   const memo = makeMemoStep(new Map());
   const { runFullCycle } = makeInventoryPipeline(uc, { ...CFG, UC_INWARD_MODE: 'ADJUST', UC_GRN_TRAIL: false }, memo);
-  await assert.rejects(() => runFullCycle({ reqId: 'R4', items: [{ sku: 'S1', quantity: 1, unitPrice: 10 }] }), /Inward failed — outward NOT attempted/);
+  await assert.rejects(() => runFullCycle({ reqId: 'R4', items: [{ sku: 'S1', quantity: 1, unitPrice: 10 }] }), /Inward failed, outward NOT attempted/);
 });

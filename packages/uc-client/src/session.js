@@ -1,4 +1,4 @@
-// SessionManager — the single owner of the Unicommerce JSESSIONID.
+// SessionManager - the single owner of the Unicommerce JSESSIONID.
 //
 // Design contract (do not weaken):
 //  1. ONE process talks to UC with this session (the worker). The cookie lives in
@@ -7,9 +7,9 @@
 //  2. Session death = HTTP 401 / login redirect / USER_NOT_LOGGED_IN only.
 //     `successful:false` bodies are business responses, not death.
 //  3. On death: refresh behind a mutex. Strategies, in order:
-//        a. 'scripted-login'  — whitelisted-account login (enabled once the login
+//        a. 'scripted-login'  - whitelisted-account login (enabled once the login
 //                               HAR is captured; see loginScripted()).
-//        b. give up loudly    — mark dead + alert; Admin tab shows a red banner and
+//        b. give up loudly    - mark dead + alert; Admin tab shows a red banner and
 //                               accepts a pasted cookie as the manual bridge.
 //  4. Keep-alive (worker cron) pings a cheap endpoint every UC_KEEPALIVE_MINUTES.
 import { logger, alert as defaultAlert } from '@opptra/core';
@@ -48,7 +48,7 @@ export class SessionManager {
     // the API process). Re-read before giving up so a first paste works immediately.
     if (!this.#cookie) await this.reload();
     if (!this.#cookie) {
-      throw new SessionError('no UC session available — paste one in Admin or configure scripted login');
+      throw new SessionError('no UC session available. Paste one in Admin or configure scripted login.');
     }
     return this.#cookie;
   }
@@ -80,7 +80,7 @@ export class SessionManager {
 
   async markDead(reason) {
     await this.#store.markDead();
-    await this.#alert('uc-session-dead', 'Unicommerce session is DEAD — automations are blocked', { reason });
+    await this.#alert('uc-session-dead', 'Unicommerce session is DEAD - automations are blocked', { reason });
   }
 
   async status() { return this.#store.status(); }
@@ -98,7 +98,7 @@ export class SessionManager {
   }
 
   async #doRefresh(reason) {
-    logger.warn({ reason }, 'uc session death detected — attempting refresh');
+    logger.warn({ reason }, 'uc session death detected - attempting refresh');
     // FIRST: did an admin paste a fresh cookie into the store since we last read it?
     // Adopt it and retry before falling back to scripted login / giving up. This is
     // what makes "paste in Admin → goes ALIVE" work across the API/worker split.

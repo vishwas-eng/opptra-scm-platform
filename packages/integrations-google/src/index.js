@@ -1,4 +1,4 @@
-// Google Workspace integration — Gmail / Drive / Sheets via a service account with
+// Google Workspace integration - Gmail / Drive / Sheets via a service account with
 // domain-wide delegation. The clients are INJECTED (googleClients()), so automation
 // code and tests depend on small, mockable wrappers rather than googleapis directly.
 //
@@ -19,7 +19,7 @@ const SCOPES = [
 /** Build authorized googleapis clients from config. Lazy-imports googleapis so the
  *  package can be loaded (and unit-tested via wrappers) without credentials present. */
 export async function googleClients({ saKeyJson, delegatedUser }) {
-  if (!saKeyJson) throw new Error('GOOGLE_SA_KEY_JSON not set — Google integration unavailable');
+  if (!saKeyJson) throw new Error('GOOGLE_SA_KEY_JSON not set. Google integration unavailable.');
   const { google } = await import('googleapis');
   const key = JSON.parse(Buffer.from(saKeyJson, 'base64').toString('utf8'));
   const auth = new google.auth.JWT({ email: key.client_email, key: key.private_key, scopes: SCOPES, subject: delegatedUser });

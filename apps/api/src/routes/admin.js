@@ -6,7 +6,7 @@ import { enqueue } from '../queue.js';
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
 // Verify a freshly-pasted cookie right away: enqueue a keepalive so the worker reloads
-// the cookie and pings UC within ~1s — the dashboard flips ALIVE without waiting for the
+// the cookie and pings UC within ~1s - the dashboard flips ALIVE without waiting for the
 // 4-min cron. (Immediate, but the poll below also lets the UI report the outcome.)
 async function verifySessionNow() {
   await enqueue('system.keepalive', {}, { removeOnComplete: true, removeOnFail: true });
@@ -41,7 +41,7 @@ export default async function adminRoutes(app) {
   // ── Session-helper ingest ────────────────────────────────────────────────
   // The "Opptra Session Helper" browser extension POSTs a freshly-captured
   // JSESSIONID here after the admin logs into Unicommerce by hand. Auth is a
-  // per-admin bearer ingest token (NOT the web cookie — the extension is a
+  // per-admin bearer ingest token (NOT the web cookie - the extension is a
   // different origin). No login automation server-side; the human did the login.
   app.post('/api/ingest/uc-session', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
@@ -72,7 +72,7 @@ export default async function adminRoutes(app) {
     await query('UPDATE ingest_tokens SET last_used = now() WHERE id = $1', [rows[0].id]);
     await audit(`helper:${owner}`, 'uc-session-ingest', {});
     await verifySessionNow();
-    return { ok: true, message: 'session captured — thank you' };
+    return { ok: true, message: 'session captured, thank you' };
   });
 
   // Where the admin should log in (drives the "Re-login" button in the UI).
@@ -89,7 +89,7 @@ export default async function adminRoutes(app) {
     await query('INSERT INTO ingest_tokens (token_hash, label, owner_email) VALUES ($1, $2, $3)',
       [sha256(raw), req.body?.label || 'helper', req.user.email]);
     await audit(req.user.email, 'ingest-token-create', { label: req.body?.label || 'helper' });
-    return { token: raw, note: 'copy this into the Session Helper extension now — it will not be shown again' };
+    return { token: raw, note: 'copy this into the Session Helper extension now, it will not be shown again' };
   });
 
   app.get('/api/admin/ingest-tokens', adminOnly, async () => {
@@ -131,7 +131,7 @@ export default async function adminRoutes(app) {
     if (email === req.user.email && (req.body.is_active === false || (req.body.role && req.body.role !== 'admin'))) {
       return reply.code(400).send({ error: 'cannot deactivate or demote yourself' });
     }
-    // Never allow removing the last active admin — that locks everyone out.
+    // Never allow removing the last active admin - that locks everyone out.
     if (req.body.is_active === false || (req.body.role && req.body.role !== 'admin')) {
       const { rows } = await query(
         `SELECT count(*)::int AS n FROM users WHERE role = 'admin' AND is_active AND email <> $1`, [email]);

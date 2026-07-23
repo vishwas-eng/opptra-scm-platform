@@ -1,4 +1,4 @@
-// Run lifecycle helpers — every automation action, human or scheduled, goes through these.
+// Run lifecycle helpers - every automation action, human or scheduled, goes through these.
 import { randomUUID } from 'node:crypto';
 import { query } from './db.js';
 

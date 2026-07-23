@@ -2,7 +2,7 @@
 import { config, query, listRuns } from '@opptra/core';
 
 export default async function coreRoutes(app) {
-  // Liveness/readiness — used by Docker healthcheck and monitoring. No auth, so it
+  // Liveness/readiness - used by Docker healthcheck and monitoring. No auth, so it
   // exposes NOTHING internal (UC session detail lives behind /api/uc-session).
   app.get('/healthz', async () => {
     let db = false;
@@ -10,12 +10,12 @@ export default async function coreRoutes(app) {
     return { ok: db, db, time: new Date().toISOString() };
   });
 
-  // Public client config (the Google client id is not a secret — it's in every page).
+  // Public client config (the Google client id is not a secret - it's in every page).
   app.get('/api/config', async () => ({ googleClientId: config().GOOGLE_CLIENT_ID, devLogin: !config().isProd }));
 
   app.get('/api/me', { preValidation: app.requireUser }, async (req) => ({ user: req.user }));
 
-  // Which integrations are configured — drives the "setup required" state on the
+  // Which integrations are configured - drives the "setup required" state on the
   // Google/Vinculum-dependent automation tabs so nothing looks missing, just gated.
   app.get('/api/integrations', { preValidation: app.requireUser }, async () => {
     const c = config();

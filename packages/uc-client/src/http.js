@@ -1,7 +1,7 @@
 // Low-level HTTP with timeouts and *conservative* retries.
 //
 // Retry policy: GETs and explicitly-marked-idempotent calls retry on network errors
-// and 502/503/504. POSTs do NOT retry by default — UC mutations (allocate, invoice,
+// and 502/503/504. POSTs do NOT retry by default - UC mutations (allocate, invoice,
 // dispatch) are not idempotent and a blind retry can double-execute. Callers that
 // know a call is safe pass { idempotent: true }.
 import { logger } from '@opptra/core';
@@ -64,7 +64,7 @@ export function makeHttp({ fetchImpl = fetch, limiter = null } = {}) {
       if (res.status === 429 && throttled < MAX_429_RETRIES) {
         throttled += 1;
         const wait = retryAfterMs(res.headers.get('retry-after')) ?? (1000 * 2 ** throttled + Math.floor(Math.random() * 400));
-        logger.warn({ url: safeUrl(url), throttled, waitMs: wait }, 'uc http 429 — backing off');
+        logger.warn({ url: safeUrl(url), throttled, waitMs: wait }, 'uc http 429 - backing off');
         await sleep(wait);
         attempt -= 1; // a throttle is not one of the network-error attempts
         continue;
@@ -82,7 +82,7 @@ export function makeHttp({ fetchImpl = fetch, limiter = null } = {}) {
   return { request };
 }
 
-/** Simple async mutex — serializes facility-scoped internal calls. */
+/** Simple async mutex - serializes facility-scoped internal calls. */
 export class Mutex {
   #tail = Promise.resolve();
   run(fn) {

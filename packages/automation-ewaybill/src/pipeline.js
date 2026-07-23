@@ -1,9 +1,9 @@
-// E-way bill generation — ported from ewaybill-app/Ewb.gs.
+// E-way bill generation - ported from ewaybill-app/Ewb.gs.
 //
 // Per SO: resolve the invoice (fetchShippingPackageDetails is facility-scoped, so hop
 // facilities until found) → generate the EWB via the PROVEN endpoint
 // /data/oms/invoice/generateEWayBill (regenerateEWayBill is only for an invoice that
-// ALREADY has an EWB — do not switch). transporterId MUST be a 15-char GSTIN.
+// ALREADY has an EWB - do not switch). transporterId MUST be a 15-char GSTIN.
 
 const v = (x) => (x == null ? '' : String(x).trim());
 
@@ -50,7 +50,7 @@ export function makeEwaybillPipeline(uc) {
   function buildTransporterDetail(row) {
     const gstin = v(row.gstin);
     if (gstin && gstin.length !== 15) {
-      throw new Error(`transporterId (GSTIN) must be exactly 15 characters — got ${gstin.length}`);
+      throw new Error(`transporterId (GSTIN) must be exactly 15 characters, got ${gstin.length}`);
     }
     const td = {};
     if (gstin) td.transporterId = gstin;

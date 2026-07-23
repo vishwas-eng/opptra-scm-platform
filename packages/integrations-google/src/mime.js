@@ -1,4 +1,4 @@
-// RFC 2822 MIME builder for Gmail (draft/send). Pure + testable — no googleapis here.
+// RFC 2822 MIME builder for Gmail (draft/send). Pure + testable - no googleapis here.
 // Produces a base64url raw message with optional file attachments.
 
 function b64url(buf) {

@@ -1,4 +1,4 @@
-// BullMQ wiring (API side): the API only ENQUEUES — all Unicommerce traffic runs in
+// BullMQ wiring (API side): the API only ENQUEUES - all Unicommerce traffic runs in
 // the worker so exactly one process owns the session. waitForResult lets synchronous
 // UI actions (e.g. "process this SO") block briefly for the outcome.
 import { Queue } from 'bullmq';

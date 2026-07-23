@@ -21,7 +21,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) 
       return r;
     },
 
-    // E-way bill: generate for a batch of SO rows. Rows are independent — one bad row
+    // E-way bill: generate for a batch of SO rows. Rows are independent - one bad row
     // (bad GSTIN, not invoiced) fails only itself. Session death stops the batch.
     'ewaybill.generate': async ({ data: { runUid, input } }) => {
       await markRunning(runUid);
@@ -110,7 +110,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) 
 
       if (out.pending) {
         if (retryCount >= RETURN_MAX_PENDING_RETRIES) {
-          await finishRun(runUid, { ok: false, result: out, error: `still pending after ${retryCount} retries — needs a human look` });
+          await finishRun(runUid, { ok: false, result: out, error: `still pending after ${retryCount} retries, needs a human look` });
           await alert('return-stuck', `Return pipeline stuck on ${input.saleOrder}`, { runUid, steps: JSON.stringify(out.steps) });
           return out;
         }
@@ -119,7 +119,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) 
         await reenqueue('return.process',
           { runUid, input, retryCount: retryCount + 1, allocated: allocated || !!out.allocated },
           { delay: RETURN_PENDING_RETRY_MS });
-        logger.info({ so: input.saleOrder, retryCount }, 'return pipeline pending — re-enqueued');
+        logger.info({ so: input.saleOrder, retryCount }, 'return pipeline pending - re-enqueued');
         return out;
       }
 

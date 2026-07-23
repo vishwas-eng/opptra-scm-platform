@@ -1,4 +1,4 @@
-// ASN file writers — produce a downloadable file per channel. Flipkart/Myntra are
+// ASN file writers - produce a downloadable file per channel. Flipkart/Myntra are
 // XLSX (exceljs, incl. Myntra's total-cost formulas); Zepto is CSV. Each returns
 // { filename, contentType, buffer }.
 import ExcelJS from 'exceljs';

@@ -1,5 +1,5 @@
-// ASN compile — ported from b2b AsnFill.gs (SO-only path, the reliable one).
-//   1. hop facilities → POST /data/oms/saleorder/fetch { code }  (RSG first — many Myntra B2B SOs live there)
+// ASN compile - ported from b2b AsnFill.gs (SO-only path, the reliable one).
+//   1. hop facilities → POST /data/oms/saleorder/fetch { code }  (RSG first - many Myntra B2B SOs live there)
 //   2. map saleOrderItems → rows (this SO only)
 //   3. write the channel file (Flipkart/Myntra XLSX · Zepto CSV)
 import { rowsFromSaleOrderDto, poFromDto } from './rows.js';

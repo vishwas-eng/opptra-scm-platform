@@ -1,6 +1,6 @@
 // memoStep(reqId, name, fn): run fn once per (reqId, name); on any later call return
 // the stored result instead of re-running. This is the durable idempotency guarantee
-// for multi-step automations — a retried run resumes and never repeats a side effect.
+// for multi-step automations - a retried run resumes and never repeats a side effect.
 import { query } from './db.js';
 
 export async function memoStep(reqId, name, fn) {

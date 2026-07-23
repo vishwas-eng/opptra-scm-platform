@@ -57,7 +57,7 @@ export default fp(async function authPlugin(app) {
     await audit(email, 'login', {});
     return reply
       .setCookie('opptra_session', token, {
-        // secure follows the actual serving scheme — a Secure cookie over plain HTTP
+        // secure follows the actual serving scheme - a Secure cookie over plain HTTP
         // is silently dropped by browsers, which bricks login entirely.
         path: '/', httpOnly: true, sameSite: 'lax', secure: cfg.PUBLIC_URL.startsWith('https'),
         maxAge: cfg.SESSION_TTL_HOURS * 3600,
@@ -69,7 +69,7 @@ export default fp(async function authPlugin(app) {
     return reply.clearCookie('opptra_session', { path: '/' }).send({ ok: true });
   });
 
-  // LOCAL DEV ONLY — sign in without Google, as the first admin. Hard-disabled in
+  // LOCAL DEV ONLY - sign in without Google, as the first admin. Hard-disabled in
   // production (returns 404) so it can never be a backdoor on the deployed platform.
   app.post('/auth/dev-login', async (req, reply) => {
     if (cfg.isProd) return reply.code(404).send({ error: 'not found' });

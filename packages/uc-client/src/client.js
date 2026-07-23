@@ -1,4 +1,4 @@
-// UcClient — the ONLY way platform code talks to Unicommerce.
+// UcClient - the ONLY way platform code talks to Unicommerce.
 //
 //  - public(path, body, {facility})   → bearer + Facility header (stateless, concurrent-safe)
 //  - data(path, body, {facility})     → JSESSIONID cookie; facility-scoped, so ALL internal
@@ -111,7 +111,7 @@ export class UcClient {
     if (errs.some((e) => /USER_NOT_LOGGED_IN/i.test(String(e?.code || e?.message || '')))) {
       throw new SessionError('USER_NOT_LOGGED_IN');
     }
-    return data; // envelopes vary; callers inspect .successful — soft-false is NOT death
+    return data; // envelopes vary; callers inspect .successful - soft-false is NOT death
   }
 
   async #rawRequest(method, path, body, { idempotent = false, timeoutMs } = {}) {
@@ -131,7 +131,7 @@ export class UcClient {
 
   #throwIfDead(res, path) {
     if (DEATH_STATUS.has(res.status)) throw new SessionError(`session expired (HTTP ${res.status} on ${path})`);
-    // NOTE: 403 is deliberately NOT death — wrong-facility responses can 403 (the @53 lesson).
+    // NOTE: 403 is deliberately NOT death - wrong-facility responses can 403 (the @53 lesson).
   }
 
   async #switchFacility(code) {
@@ -156,7 +156,7 @@ export class UcClient {
     } catch (err) {
       await this.session.markChecked();
       if (err instanceof SessionError) return { alive: false, reason: err.message };
-      throw err; // network/other errors bubble — they are not "session dead"
+      throw err; // network/other errors bubble - they are not "session dead"
     }
   }
 }

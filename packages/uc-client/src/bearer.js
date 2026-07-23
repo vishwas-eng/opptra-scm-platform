@@ -30,7 +30,7 @@ export class BearerManager {
 
   async #login() {
     if (!this.#user || !this.#pass) {
-      throw new ConfigError('UC_USER / UC_PASS not set — public-API calls unavailable');
+      throw new ConfigError('UC_USER / UC_PASS not set. Public-API calls unavailable.');
     }
     const q = new URLSearchParams({
       grant_type: 'password',

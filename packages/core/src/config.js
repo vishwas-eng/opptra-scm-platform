@@ -1,4 +1,4 @@
-// Central, validated configuration. The process refuses to boot on invalid config —
+// Central, validated configuration. The process refuses to boot on invalid config -
 // misconfiguration fails loud at startup, never silently at 2am inside a job.
 import { z } from 'zod';
 
@@ -39,7 +39,7 @@ const Env = z.object({
   // --- Return + re-dispatch config (was raw process.env; now validated at boot) ---
   UC_RETURN_CHANNEL: z.string().default('CUSTOM_B2B'),
   UC_RETURN_B2B_CUSTOMER: z.string().default('OPPB2B01'),
-  UC_RETURN_FILL_POOL: z.coerce.boolean().default(false), // top up AWB pool — staging only; off in prod
+  UC_RETURN_FILL_POOL: z.coerce.boolean().default(false), // top up AWB pool - staging only; off in prod
   UC_RETURN_POOL_PROVIDER: z.string().default('CUSTOM'),
   UC_RETURN_POOL_METHOD: z.string().default('Standard-Prepaid'),
   UC_RETURN_ALLOC_POLL: z.coerce.number().int().min(1).max(20).default(4),
@@ -77,7 +77,7 @@ const Env = z.object({
   VINCULUM_USER: z.string().default(''),
   VINCULUM_PASS: z.string().default(''),
 
-  // Alerting. LOG_LEVEL is intentionally NOT here — the logger reads it straight from
+  // Alerting. LOG_LEVEL is intentionally NOT here - the logger reads it straight from
   // the environment to stay dependency-free (see logger.js).
   SLACK_WEBHOOK_URL: z.string().default(''),
 });

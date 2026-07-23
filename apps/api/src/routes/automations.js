@@ -55,7 +55,7 @@ export default async function automationRoutes(app) {
     const run = await createRun({
       userEmail: req.user.email, automation: 'return', action: 'process-so', input,
     });
-    // No jobId dedupe: the pipeline is state-based and idempotent — re-running an SO
+    // No jobId dedupe: the pipeline is state-based and idempotent - re-running an SO
     // reads its current UC state and only advances what's missing.
     await enqueue('return.process', { runUid: run.run_uid, input });
     return { runUid: run.run_uid, queued: true };

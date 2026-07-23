@@ -9,7 +9,7 @@ export class PgSessionStore {
   }
 
   async set(cookie, source, actor) {
-    // A fresh cookie clears the re-login flag — the outage is over.
+    // A fresh cookie clears the re-login flag - the outage is over.
     await query(
       `UPDATE uc_session SET jsessionid = $1, source = $2, status = 'unknown',
         updated_by = $3, updated_at = now(), fail_count = 0,

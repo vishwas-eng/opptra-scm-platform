@@ -21,7 +21,7 @@ test('not connected: returns a clear error, does not throw', async () => {
   const { createDrafts } = makePackingPipeline(mockUc({ byFacility: {} }), CFG, null);
   const r = await createDrafts(['SO1']);
   assert.equal(r.ok, false);
-  assert.match(r.error, /Google Workspace not connected/);
+  assert.match(r.error, /not connected on the server/);
 });
 
 test('groups SOs by warehouse and creates one draft per warehouse with invoices attached', async () => {

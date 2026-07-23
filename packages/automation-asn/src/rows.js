@@ -1,4 +1,4 @@
-// ASN row mapping — pure functions, ported from b2b AsnFill.gs (asnRowsFromSaleOrderDto_).
+// ASN row mapping - pure functions, ported from b2b AsnFill.gs (asnRowsFromSaleOrderDto_).
 // No I/O here so it's fully unit-testable; the pipeline handles fetch + file generation.
 
 const str = (v) => (v == null ? '' : String(v).trim());

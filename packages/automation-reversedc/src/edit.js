@@ -1,5 +1,5 @@
 // Edit the ORIGINAL Uniware credit-note PDF into a Delivery Challan (pdf-lib, server-side).
-// Same coordinates as the proven browser edit / reverse_dc_from_cn.py — NOT a new template:
+// Same coordinates as the proven browser edit / reverse_dc_from_cn.py - NOT a new template:
 // white-out the barcode + "Credit Note" labels + address boxes, then draw
 // "Delivery Challan" + From(customer) + To(Opptra). The product table / IRN / amounts
 // stay from the original underneath.

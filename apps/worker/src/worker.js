@@ -1,4 +1,4 @@
-// Worker — THE only process that talks to Unicommerce. Concurrency 1: internal /data
+// Worker - THE only process that talks to Unicommerce. Concurrency 1: internal /data
 // calls are facility-scoped session state, so serial execution is a correctness
 // guarantee, not a performance compromise (uc-client's mutex is the second seatbelt).
 process.env.SERVICE_NAME = 'worker';
@@ -35,7 +35,7 @@ if (cfg.GOOGLE_SA_KEY_JSON && cfg.GOOGLE_DELEGATED_USER) {
     google = await googleClients({ saKeyJson: cfg.GOOGLE_SA_KEY_JSON, delegatedUser: cfg.GOOGLE_DELEGATED_USER });
     logger.info({ user: cfg.GOOGLE_DELEGATED_USER }, 'google workspace connected');
   } catch (err) {
-    logger.error({ err: String(err) }, 'google workspace configured but auth FAILED — packing/sheet stay disabled');
+    logger.error({ err: String(err) }, 'google workspace configured but auth FAILED - packing/sheet stay disabled');
   }
 }
 
@@ -60,7 +60,7 @@ const handlers = makeHandlers({
 const worker = new Worker('automations', async (job) => {
   const handler = handlers[job.name];
   if (!handler) {
-    logger.error({ job: job.name }, 'no handler for job — dropping');
+    logger.error({ job: job.name }, 'no handler for job - dropping');
     return { dropped: true };
   }
   try {
@@ -80,7 +80,7 @@ worker.on('failed', (job, err) => logger.error({ job: job?.name, err: String(err
 worker.on('error', (err) => logger.error({ err: String(err) }, 'worker error'));
 process.on('unhandledRejection', (err) => logger.error({ err }, 'UNHANDLED REJECTION'));
 
-// Repeatable keep-alive (BullMQ job scheduler — replaces Apps Script time triggers).
+// Repeatable keep-alive (BullMQ job scheduler - replaces Apps Script time triggers).
 await queue.upsertJobScheduler('keepalive', { every: cfg.UC_KEEPALIVE_MINUTES * 60_000 }, {
   name: 'system.keepalive', data: {}, opts: { removeOnComplete: { count: 10 }, removeOnFail: { count: 10 } },
 });
