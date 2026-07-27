@@ -1,0 +1,297 @@
+<title>Opptra SCM - How Every Automation Works</title>
+<style>
+  :root {
+    --navy: #131A48; --orange: #FF5800;
+    --bg: #F7F6F3; --surface: #ffffff; --ink: #1b2030; --muted: #5A6273; --line: #dce0e8;
+    --read: #2f855a; --read-bg: #e7f4ec; --write: #2b5f9e; --write-bg: #e8f0fb;
+    --why: #b7791f; --why-bg: #fff6e0; --danger: #b03a1e; --danger-bg: #ffe9df;
+    --code-bg: #eef0f6; --head: var(--navy);
+    --serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1120; --surface: #161b2e; --ink: #e9ecf5; --muted: #9aa2ba; --line: #2a3150;
+      --head: #cdd4f0; --orange: #ff7a45; --why-bg: #2a2210; --read-bg: #12281c; --write-bg: #131f33;
+      --danger-bg: #2d1710; --code-bg: #1b2138; }
+  }
+  :root[data-theme="light"] { --bg: #F7F6F3; --surface: #ffffff; --ink: #1b2030; --muted: #5A6273; --line: #dce0e8;
+    --head: #131A48; --orange: #FF5800; --why-bg: #fff6e0; --read-bg: #e7f4ec; --write-bg: #e8f0fb;
+    --danger-bg: #ffe9df; --code-bg: #eef0f6; }
+  :root[data-theme="dark"] { --bg: #0e1120; --surface: #161b2e; --ink: #e9ecf5; --muted: #9aa2ba; --line: #2a3150;
+    --head: #cdd4f0; --orange: #ff7a45; --why-bg: #2a2210; --read-bg: #12281c; --write-bg: #131f33;
+    --danger-bg: #2d1710; --code-bg: #1b2138; }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 780px; margin: 0 auto; padding: 48px 22px 100px; }
+
+  .eyebrow { font-size: 11.5px; text-transform: uppercase; letter-spacing: .16em; color: var(--orange); font-weight: 700; }
+  h1 { font-family: var(--serif); font-size: 34px; line-height: 1.12; margin: 10px 0 12px; color: var(--head); letter-spacing: -.01em; text-wrap: balance; }
+  .lead { font-size: 15.5px; color: var(--muted); max-width: 62ch; }
+
+  h2 { font-family: var(--serif); font-size: 24px; margin: 56px 0 6px; color: var(--head); text-wrap: balance; }
+  h2 .tag { font-family: var(--sans); font-size: 11px; vertical-align: 4px; margin-left: 8px; padding: 3px 10px; border-radius: 999px; background: var(--code-bg); color: var(--muted); font-weight: 700; letter-spacing: .05em; }
+  h3 { font-family: var(--sans); font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 28px 0 10px; }
+  p { max-width: 68ch; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); padding: 1px 6px; border-radius: 5px; }
+
+  /* table of contents */
+  .toc { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin-top: 28px; }
+  .toc ol { margin: 6px 0 0; padding-left: 20px; font-size: 14px; column-count: 2; column-gap: 32px; }
+  .toc li { margin-bottom: 5px; }
+  .toc a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .toc a:hover { color: var(--orange); border-color: var(--orange); }
+  @media (max-width: 560px) { .toc ol { column-count: 1; } }
+
+  /* step sequences - numbering IS the information */
+  .steps { list-style: none; margin: 14px 0 0; padding: 0; counter-reset: step; }
+  .steps > li { position: relative; padding: 0 0 18px 46px; counter-increment: step; }
+  .steps > li::before { content: counter(step); position: absolute; left: 0; top: 0;
+    width: 28px; height: 28px; border-radius: 50%; background: var(--navy); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; font-family: var(--sans); }
+  :root[data-theme="dark"] .steps > li::before { background: #33407a; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .steps > li::before { background: #33407a; } }
+  .steps > li:not(:last-child)::after { content: ''; position: absolute; left: 13.5px; top: 32px; bottom: 2px; width: 1px; background: var(--line); }
+  .steps b.t { display: block; font-size: 14.5px; margin-bottom: 2px; }
+  .steps .d { font-size: 13.5px; color: var(--muted); max-width: 62ch; }
+
+  /* the why asides - this doc's signature */
+  .why { display: block; margin: 8px 0 0; padding: 9px 13px; background: var(--why-bg); border-left: 3px solid var(--why);
+    border-radius: 0 8px 8px 0; font-size: 13px; color: var(--ink); max-width: 60ch; }
+  .why b { color: var(--why); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-right: 6px; }
+
+  /* storage tables */
+  .store { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .store-wrap { overflow-x: auto; }
+  .store th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--code-bg); }
+  .store td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .store tr:last-child td { border-bottom: 0; }
+  .store td:first-child { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; }
+
+  .chip { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; padding: 2px 9px; border-radius: 999px; margin-right: 4px; }
+  .chip.r { background: var(--read-bg); color: var(--read); }
+  .chip.w { background: var(--write-bg); color: var(--write); }
+
+  .fail { background: var(--danger-bg); border-left: 3px solid var(--danger); border-radius: 0 8px 8px 0; padding: 10px 14px; font-size: 13.5px; max-width: 62ch; }
+  .fail b { color: var(--danger); }
+
+  .mermaid-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; overflow-x: auto; margin-top: 14px; }
+
+  footer { margin-top: 70px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  a { color: var(--orange); }
+</style>
+
+<div class="page">
+  <div class="eyebrow">Opptra SCM Platform · Design Reference</div>
+  <h1>How every automation works, step by step</h1>
+  <p class="lead">The complete internal design: what each automation does, every call it makes, where every piece of data lives, and the reasoning behind each choice. Written for whoever owns or extends this system.</p>
+
+  <div class="toc">
+    <b style="font-family: var(--serif)">Contents</b>
+    <ol>
+      <li><a href="#foundation">The foundation every automation shares</a></li>
+      <li><a href="#asn">ASN Compile</a></li>
+      <li><a href="#reversedc">Reverse DC</a></li>
+      <li><a href="#packing">Packing Mail</a></li>
+      <li><a href="#sheet">Sheet Update</a></li>
+      <li><a href="#storage">Everything stored, and why</a></li>
+    </ol>
+  </div>
+
+  <!-- ════════════════════ FOUNDATION ════════════════════ -->
+  <h2 id="foundation">1 · The foundation every automation shares</h2>
+  <p>Every button press follows the same path. Understanding it once explains all four automations.</p>
+
+  <ol class="steps">
+    <li><b class="t">The browser calls the API</b>
+      <span class="d">The user is signed in with Google (only @opptra.com accounts). The API checks their role in Postgres on every request, so removing someone takes effect in seconds, not when their login expires.</span></li>
+    <li><b class="t">The API writes a run row and queues a job</b>
+      <span class="d">A row in the <code>runs</code> table records who asked for what, when. The job goes into a Redis queue and the API answers immediately with a run id the browser polls.</span>
+      <span class="why"><b>why</b> If the server restarts mid-job, the queue survives (Redis persists it) and the run row means nothing is ever lost silently. The browser never waits on a long request that could time out.</span></li>
+    <li><b class="t">The worker picks the job up, one at a time</b>
+      <span class="d">A single worker process executes jobs serially and is the only thing that ever talks to Unicommerce, Google, or Neon.</span>
+      <span class="why"><b>why</b> Unicommerce gives us exactly one bot session, and its internal API is facility-scoped: switching facility is a stateful act on the session. Two parallel jobs would silently corrupt each other's facility context. Serial execution is a correctness guarantee, not a performance compromise. All UC calls are also throttled to 4 per second so we never trip their limits.</span></li>
+    <li><b class="t">The result lands back in the run row</b>
+      <span class="d">Success or failure, summary, counts, and any generated file (as base64) are stored on the run. The browser polls, renders it in plain words, and offers previews and downloads.</span></li>
+  </ol>
+
+  <h3>The two Unicommerce doors</h3>
+  <p style="font-size:13.5px; color:var(--muted); max-width:66ch">Unicommerce has a public API (bearer token from the bot account's password, self-renewing, reliable) and an internal API (the one the browser UI uses, needing a <code>JSESSIONID</code> cookie captured after a human login). Most of what these automations need only exists on the internal API. The session is kept alive by a ping every 4 minutes; only HTTP 401, a redirect, or an explicit <code>USER_NOT_LOGGED_IN</code> body counts as session death. A 403 or a <code>successful: false</code> answer is a business response, never death.</p>
+  <span class="why" style="margin-top:8px"><b>why</b> Early versions treated 403 as "session dead" and forced pointless re-logins. A wrong-facility query can 403 while the session is perfectly healthy. This distinction is enforced in one place (the UC client) so no automation can get it wrong.</span>
+
+  <!-- ════════════════════ ASN ════════════════════ -->
+  <h2 id="asn">2 · ASN Compile <span class="tag">Unicommerce only</span></h2>
+  <p>Input: one SO number. Output: that marketplace's ASN file, ready to upload to the marketplace portal.</p>
+
+  <pre class="mermaid">
+flowchart LR
+  A[SO number] --> B{Hop facilities<br/>until found}
+  B --> C[Read the SO's<br/>own channel]
+  C --> D{Flipkart /<br/>Myntra / Zepto?}
+  D -- yes --> E[Build rows<br/>per SKU]
+  E --> F[Write the file<br/>XLSX or CSV]
+  D -- no --> G[Clear refusal<br/>naming the channel]
+  </pre>
+
+  <ol class="steps">
+    <li><b class="t">Find the order, facility by facility</b>
+      <span class="d">POST <code>/data/oms/saleorder/fetch</code> with the SO code against each facility, <code>Opp_RSG_MH</code> first, until one returns the order.</span>
+      <span class="why"><b>why</b> An SO is only visible inside its home facility on the internal API; there is no global lookup. RSG goes first because most B2B orders live there, so the common case is one call, not five.</span></li>
+    <li><b class="t">Detect the marketplace from the order itself</b>
+      <span class="d">The order's own <code>channel</code> field (for example <code>MYNTRA_B2B</code>) picks the output format. Nobody chooses it manually.</span>
+      <span class="why"><b>why</b> The earlier manual picker let a Zepto order be compiled into a Flipkart-format file, which looks plausible and is completely wrong. Auto-detection makes that mistake impossible. Orders on channels with no ASN format (Amazon and others) get a clear refusal naming the channel.</span></li>
+    <li><b class="t">Turn line items into rows</b>
+      <span class="d">Items are aggregated by SKU, fully cancelled lines are dropped, and each row carries SKU, EAN, quantity, MRP, unit price excluding tax (derived from the selling price when Unicommerce omits it), HSN, tax split (CGST and SGST as half the rate each), invoice number, and PO.</span></li>
+    <li><b class="t">Write the marketplace's exact file</b>
+      <span class="d">Flipkart: two-header-row packaging XLSX. Myntra: ASN XLSX including its total-cost formulas. Zepto: seven-column CSV. All three layouts are byte-compatible ports of the proven Apps Script writers.</span></li>
+    <li><b class="t">Return it to the user</b>
+      <span class="d">The file goes back inside the run result as base64; the browser shows an inline preview and a real download link.</span>
+      <span class="why"><b>why</b> The legacy version saved files into a Drive folder, which meant hunting for them and sharing-permission problems. Handing the file straight back removes a whole class of "where did it go" confusion. The run row keeps it re-downloadable from history.</span></li>
+  </ol>
+
+  <h3>Where it stores, and why</h3>
+  <div class="store-wrap"><table class="store">
+    <tr><th>Place</th><th>What</th><th>Why there</th></tr>
+    <tr><td>Postgres · runs</td><td><span class="chip w">write</span>who, when, status, counts, the file</td><td>Audit trail and re-download without re-running</td></tr>
+    <tr><td>Unicommerce</td><td><span class="chip r">read</span>order + line items</td><td>Read-only by design; ASN never mutates orders</td></tr>
+  </table></div>
+
+  <p class="fail" style="margin-top:14px"><b>When it fails:</b> "not found in any facility" means exactly that, because a dead session is detected separately and reported as a session problem, never disguised as a missing order.</p>
+
+  <!-- ════════════════════ REVERSE DC ════════════════════ -->
+  <h2 id="reversedc">3 · Reverse DC <span class="tag">No external systems</span></h2>
+  <p>Input: the original credit note PDF. Output: the same document turned into a Delivery Challan.</p>
+
+  <ol class="steps">
+    <li><b class="t">Upload the credit note</b>
+      <span class="d">A direct file upload (15 MB cap, PDF only, validated by content not just filename).</span>
+      <span class="why"><b>why</b> The first version asked for a credit note <i>number</i> and tried to fetch the document. The correction from the field: users hold the PDF, so the PDF is the input.</span></li>
+    <li><b class="t">Edit the document in place</b>
+      <span class="d">Using a PDF library on the server: the barcode block is masked, the From and To parties are swapped (goods now flow back to Opptra), the title becomes Delivery Challan, and optional address lines the user typed replace the printed ones.</span></li>
+    <li><b class="t">Return it instantly</b>
+      <span class="d">This is the one automation that skips the queue and answers synchronously.</span>
+      <span class="why"><b>why</b> It touches no external system and takes under a second, so queueing would only add waiting. The queue exists to serialize Unicommerce access; no Unicommerce, no queue.</span></li>
+  </ol>
+
+  <h3>Where it stores, and why</h3>
+  <div class="store-wrap"><table class="store">
+    <tr><th>Place</th><th>What</th><th>Why there</th></tr>
+    <tr><td>Postgres · runs</td><td><span class="chip w">write</span>metadata only, not the PDFs</td><td>Usage history without turning the database into a document archive; the documents belong to the user</td></tr>
+  </table></div>
+
+  <!-- ════════════════════ PACKING MAIL ════════════════════ -->
+  <h2 id="packing">4 · Packing Mail <span class="tag">Unicommerce + Gmail</span></h2>
+  <p>Input: a list of SO numbers. Output: one reviewed email per warehouse with the invoice PDFs attached.</p>
+
+  <pre class="mermaid">
+flowchart LR
+  A[SO list] --> B[Find each SO's<br/>invoice + facility]
+  B --> C[Download each<br/>invoice PDF]
+  C --> D[Group SOs<br/>by warehouse]
+  D --> E[One Gmail draft<br/>per warehouse]
+  E --> F{Human reviews<br/>in Gmail}
+  F --> G[Send that<br/>exact draft]
+  </pre>
+
+  <ol class="steps">
+    <li><b class="t">Resolve every SO's invoice</b>
+      <span class="d">For each SO, hop facilities calling <code>fetchShippingPackageDetails</code> until a package with an invoice number appears. SOs without one are reported back by name, not dropped.</span></li>
+    <li><b class="t">Download the invoice PDFs</b>
+      <span class="d">Each invoice comes down over the internal session via <code>/oms/invoice/show</code>, the same proven route the legacy tools used.</span></li>
+    <li><b class="t">Group by warehouse and draft</b>
+      <span class="d">The facility-to-email mapping decides recipients. One draft per warehouse: greeting, order list, invoices attached, sent from the connected Opptra account.</span></li>
+    <li><b class="t">Draft first, always; then one-click send</b>
+      <span class="d">The result screen shows each draft with a "view in Gmail" deep link and a "send now" button. Send dispatches the exact draft that was reviewed, via Gmail's draft-send call.</span>
+      <span class="why"><b>why</b> These emails go to external warehouse partners. A blind auto-send that grouped the wrong orders would be a real-world incident. The draft is the safety gate, and sending the reviewed draft (rather than composing again at send time) means what was checked is exactly what goes out.</span></li>
+  </ol>
+
+  <h3>Where it stores, and why</h3>
+  <div class="store-wrap"><table class="store">
+    <tr><th>Place</th><th>What</th><th>Why there</th></tr>
+    <tr><td>Gmail (drafts)</td><td><span class="chip w">write</span>the composed emails + attachments</td><td>Reviewable in a real mailbox the sender owns; the sent copy lands in Sent like any human email</td></tr>
+    <tr><td>Postgres · runs</td><td><span class="chip w">write</span>which warehouses, how many orders, draft ids</td><td>History and the send-now step need the draft id</td></tr>
+    <tr><td>Unicommerce</td><td><span class="chip r">read</span>packages, invoice PDFs</td><td>Read-only; mailing never mutates orders</td></tr>
+  </table></div>
+
+  <!-- ════════════════════ SHEET UPDATE ════════════════════ -->
+  <h2 id="sheet">5 · Sheet Update <span class="tag">Neon + Sheets + Unicommerce</span></h2>
+  <p>Keeps the team's B2B tracking sheet current without anyone copying rows by hand. Four actions share one data model.</p>
+
+  <h3>The data model first</h3>
+  <p style="font-size:13.5px; color:var(--muted); max-width:66ch">Two spreadsheets exist. The ops team's original ("B2B-VIEW-INDIA") is <b>read-only to us, always</b>. Our working copy is where automation writes: a <code>Master</code> tab holding everything, plus one dated tab per day (like <code>24-Jul-2026</code>) holding only that day's new orders. Row 1 is a colour banner, row 2 holds the column headers, data starts at row 3. Columns are always found <b>by header name, never by position</b>.</p>
+  <span class="why" style="margin-top:8px"><b>why</b> The ops team owns that sheet's layout and reorders columns when they need to. Position-based writing breaks the day someone drags a column; name-based writing survives it. And the original stays read-only so no automation bug can ever damage the ops team's source of truth.</span>
+
+  <pre class="mermaid">
+flowchart LR
+  N[(Neon DB<br/>Waypoint's data)] -- first fill --> T[Today's tab]
+  T -- auto push --> M[Master tab]
+  U[(Unicommerce)] -- second fill:<br/>invoice, tracking, status --> M
+  S[(Source sheet<br/>read-only)] -- hourly sync:<br/>missing orders --> M
+  </pre>
+
+  <h3>First fill · new orders in</h3>
+  <ol class="steps">
+    <li><b class="t">Read today's orders straight from Waypoint's database</b>
+      <span class="d">A read-only SQL query joins orders, line items (brands, units) and appointments in Neon, already filtered to CREATED and not suppressed.</span>
+      <span class="why"><b>why</b> The old path scraped Waypoint's CSV export with a login cookie that kept expiring. The database is the same truth with no session to babysit, structured joins instead of CSV parsing, and it can never silently serve yesterday's file.</span></li>
+    <li><b class="t">Translate to the sheet's vocabulary</b>
+      <span class="d">Marketplace codes become the sheet's dropdown labels (<code>AMAZON_B2B</code> → "AZ Etrade", <code>ZEPTO_B2B</code> → "Zepto"), statuses become ops language (CREATED → "Pickup Pending"), dates become clean date strings.</span>
+      <span class="why"><b>why</b> The Master's columns are dropdown-validated. Writing raw system codes would break the ops team's filters and make the sheet reject edits.</span></li>
+    <li><b class="t">Write only what's genuinely new, then push to Master in the same run</b>
+      <span class="d">Anything already on Master is skipped; the rest lands on today's tab and is immediately appended to Master too. Both writes dedupe by SO number, so re-running is always safe.</span></li>
+  </ol>
+
+  <h3>Where new rows land: the hard-earned rule</h3>
+  <p style="font-size:13.5px; max-width:66ch">New rows are written at <b>the row right after the last row that has an SO number</b>. This exact rule exists because both obvious alternatives corrupted the real sheet: Google's own append API treated the empty banner cell as an empty table and overwrote the headers and the oldest rows, and the legacy "first empty cell" scan landed in a mid-data gap and overwrote live rows. Below the data also sit about 25,000 invisible leftover formula cells that make "last non-empty row" lie. The last-SO-row rule can only ever overwrite rows that hold no orders. It is enforced by regression tests, and the append API is banned from the codebase outright.</p>
+
+  <h3>Second fill · enrichment from Unicommerce</h3>
+  <ol class="steps">
+    <li><b class="t">Collect rows still missing an invoice</b>
+      <span class="d">Today's tab plus Master are scanned for rows with a blank invoice column (capped per run to stay within quotas).</span></li>
+    <li><b class="t">Ask Unicommerce about each one</b>
+      <span class="d">Packages give invoice number, tracking, transporter, dispatch type, e-way bill and quantity (trying the row's own warehouse first); the order summary gives overall status and destination; a final invoice-details lookup catches invoices the packages missed, skipping credit notes.</span></li>
+    <li><b class="t">Patch cells by header name, in one batch</b>
+      <span class="d">Only non-empty values are written, only into rows matched by SO number, all in a single batched Sheets call.</span>
+      <span class="why"><b>why</b> Patch-only means the automation can never blank out something ops typed by hand. One batched call instead of hundreds keeps us far from Google's per-minute write quota.</span></li>
+  </ol>
+
+  <h3>Hourly source sync · drift protection</h3>
+  <ol class="steps">
+    <li><b class="t">Compare the read-only source against our Master</b>
+      <span class="d">Every hour (and on a button), any order present in the ops source sheet but absent from our Master is copied over, header-mapped across the two different layouts.</span></li>
+    <li><b class="t">Add missing only, never update existing</b>
+      <span class="d">Rows already on our Master are never touched by the sync.</span>
+      <span class="why"><b>why</b> Our Master's rows carry enrichments (invoices, tracking) that the source doesn't have. A sync that "updated" existing rows would erase our own work. Add-missing-only makes the sync idempotent: the button and the hourly cron can even overlap harmlessly.</span></li>
+  </ol>
+
+  <h3>Where it stores, and why</h3>
+  <div class="store-wrap"><table class="store">
+    <tr><th>Place</th><th>What</th><th>Why there</th></tr>
+    <tr><td>Working-copy Sheet</td><td><span class="chip w">write</span>all business rows</td><td>Ops lives in Sheets: sharing, filters, dropdowns, and Google's own version history as the undo button</td></tr>
+    <tr><td>Source Sheet</td><td><span class="chip r">read</span>orders we might be missing</td><td>Read-only forever; the ops team's copy can't be harmed from here</td></tr>
+    <tr><td>Neon (Waypoint)</td><td><span class="chip r">read</span>created orders, brands, appointments</td><td>Waypoint's own truth, read at the source</td></tr>
+    <tr><td>Postgres · runs</td><td><span class="chip w">write</span>counts and summaries per run</td><td>History; the sheet itself is never cached server-side, so there is exactly one truth</td></tr>
+  </table></div>
+
+  <!-- ════════════════════ STORAGE ════════════════════ -->
+  <h2 id="storage">6 · Everything the platform stores, and why</h2>
+  <p>The platform deliberately stores <b>coordination data, not business data</b>. Orders live in Unicommerce, rows live in the Sheet, mail lives in Gmail. What the server keeps is the minimum needed to be reliable and auditable:</p>
+
+  <div class="store-wrap"><table class="store">
+    <tr><th>Store</th><th>Holds</th><th>Why it exists</th></tr>
+    <tr><td>users</td><td>email, role, active flag</td><td>Google proves identity; this table decides authority. Deactivation is instant because every request re-checks it.</td></tr>
+    <tr><td>runs</td><td>every automation run: who, what, when, result</td><td>The audit trail, the dashboard, re-downloadable files, and honest failure reporting. Users see only their own; admins see all, enforced server-side.</td></tr>
+    <tr><td>audit_log</td><td>append-only security events</td><td>Logins, role changes, session updates. Append-only so history can't be rewritten.</td></tr>
+    <tr><td>uc_session</td><td>one row: the Unicommerce cookie + liveness</td><td>Exactly one bot session exists, so exactly one row (the schema enforces id = 1). Liveness fields drive the status pill everyone sees.</td></tr>
+    <tr><td>google_oauth_token</td><td>one row: the Gmail/Sheets refresh token</td><td>Granted once by an admin through Google's own consent screen. Server-side only; the browser never sees it. Chosen over a service account because org policy blocks key export, and this path needs no IT approvals.</td></tr>
+    <tr><td>step_ledger</td><td>memo of completed side-effect steps</td><td>Idempotency: a retried job replays its finished steps from the ledger instead of re-creating a PO or invoice twice.</td></tr>
+    <tr><td>ingest_tokens</td><td>hashed helper-extension tokens</td><td>Lets the session-capture extension post a fresh cookie. Stored hashed, so a database leak leaks nothing usable.</td></tr>
+    <tr><td>Redis</td><td>the job queue and the two schedulers</td><td>Queue survival across restarts, plus the 4-minute session ping and the hourly sheet sync. No business data lives here.</td></tr>
+    <tr><td>Server disk</td><td>nightly database backups, 14-day rotation</td><td>2:30 AM IST, automatic. The sheet has Google version history; Unicommerce is its own system of record.</td></tr>
+  </table></div>
+
+  <footer>
+    Opptra SCM Platform · scm.opptra.com · This document describes the deployed system as of 24 Jul 2026. The companion owner's guide (capacity, costs, upkeep) lives in docs/PLATFORM-GUIDE.md.
+  </footer>
+</div>
