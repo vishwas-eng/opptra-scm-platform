@@ -1,6 +1,8 @@
 node_modules/
+# Every real env file stays local - only .env.example is tracked.
 .env
-.env.production
+.env.*
+!.env.example
 *.log
 .DS_Store
 
