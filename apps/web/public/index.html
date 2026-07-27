@@ -41,20 +41,24 @@
         <div class="side-group">Tools</div>
         <button data-tab="extensions"><i>⤓</i> Extensions</button>
         <button data-tab="admin" id="admin-nav-btn" class="hidden"><i>⚙</i> Admin</button>
+        <button id="request-automation-btn" class="request-btn"><i>✦</i> Request an automation</button>
       </nav>
       <div class="side-foot">
-        <div class="side-session" id="side-session">session …</div>
+        <div class="side-session" id="side-session">…</div>
       </div>
     </aside>
 
     <div id="content">
       <header id="topbar">
         <div id="page-title">Dashboard</div>
-        <div class="user-chip">
-          <img id="user-pic" alt="" />
-          <span id="user-name"></span>
-          <span id="user-role" class="role-badge"></span>
-          <button id="logout-btn" title="Sign out">Sign out</button>
+        <div class="topbar-right">
+          <div id="health-pill" class="health-pill" title="Overall system status"><span class="dot"></span><span id="health-pill-text">Checking…</span></div>
+          <div class="user-chip">
+            <img id="user-pic" alt="" />
+            <span id="user-name"></span>
+            <span id="user-role" class="role-badge"></span>
+            <button id="logout-btn" title="Sign out">Sign out</button>
+          </div>
         </div>
       </header>
 
@@ -64,16 +68,16 @@
         <!-- Dashboard -->
         <section id="tab-dashboard" class="tab">
           <div class="cards">
-            <div class="card">
-              <h3>Unicommerce Session</h3>
+            <div class="card admin-only" id="session-card">
+              <h3>Unicommerce Connection</h3>
               <div class="big" id="session-status">…</div>
               <div class="meta" id="session-meta"></div>
               <button id="dash-relogin-btn" class="primary hidden">Re-login to Unicommerce</button>
             </div>
             <div class="card">
-              <h3>In flight</h3>
+              <h3>Running now</h3>
               <div class="big" id="inflight-count">0</div>
-              <div class="meta">queued + running + retrying jobs</div>
+              <div class="meta">jobs currently in progress</div>
             </div>
             <div class="card">
               <h3>Last 7 days</h3>
@@ -82,9 +86,9 @@
             </div>
           </div>
           <h2>Recent Activity</h2>
-          <p class="lead">Latest runs across all users · refreshes every 10s.</p>
+          <p class="lead" id="runs-lead">Your latest runs · refreshes automatically.</p>
           <table id="runs-table">
-            <thead><tr><th>When</th><th>User</th><th>Automation</th><th>Action</th><th>Input</th><th>Status</th></tr></thead>
+            <thead><tr><th>When</th><th>User</th><th>Automation</th><th>Action</th><th>Order</th><th>Status</th></tr></thead>
             <tbody></tbody>
           </table>
         </section>
@@ -179,15 +183,9 @@
         <!-- ASN Compile -->
         <section id="tab-asn" class="tab hidden">
           <h2>ASN / Packaging Compile</h2>
-          <p class="lead">Enter one SO and its channel. The platform finds the order across facilities and generates the channel's ASN file for that SO only.</p>
+          <p class="lead">Enter one SO. The platform finds the order across facilities, detects its marketplace automatically, and generates that marketplace's ASN file for this SO only.</p>
           <div class="panel">
             <label>Sale Order<input id="asn-so" placeholder="e.g. SO02696" autocomplete="off" /></label>
-            <label>Marketplace</label>
-            <div class="radio-group">
-              <label class="check"><input type="radio" name="asn-ch" value="flipkart" checked> Flipkart</label>
-              <label class="check"><input type="radio" name="asn-ch" value="myntra"> Myntra</label>
-              <label class="check"><input type="radio" name="asn-ch" value="zepto"> Zepto</label>
-            </div>
             <div class="row"><button id="asn-run-btn" class="primary">Compile ASN</button></div>
             <div id="asn-output" class="result hidden"></div>
           </div>
@@ -196,35 +194,57 @@
         <!-- Reverse DC -->
         <section id="tab-reversedc" class="tab hidden">
           <h2>Reverse Delivery Challan</h2>
-          <p class="lead">Upload the original credit note PDF. We edit that same document into a Delivery Challan: the barcode is removed, "Credit Note" becomes "Delivery Challan", and the From / To addresses are swapped. It is not a new template.</p>
+          <p class="lead">Select the warehouse, enter the Bulk Return ID. We download the credit note, read every line item from it, and build a Delivery Challan — works even when each CN layout differs.</p>
           <div class="panel">
+            <label>Warehouse / facility
+              <select id="rdc-facility" class="textarea" style="height:auto;padding:8px 10px">
+                <option value="">Loading facilities…</option>
+              </select>
+            </label>
+            <label>Bulk Return ID
+              <input id="rdc-bulk-id" type="text" placeholder="e.g. BR12345" autocomplete="off" />
+            </label>
+            <div class="row">
+              <button id="rdc-run-btn" class="primary">Build Delivery Challan</button>
+              <button id="rdc-refresh-facilities" class="secondary" type="button">Refresh warehouses</button>
+            </div>
+            <div id="rdc-output" class="result hidden"></div>
+          </div>
+          <div class="panel">
+            <h3>Fallback: upload credit note PDF</h3>
+            <p class="meta">Only if UC download fails. Same editor on the uploaded CN PDF.</p>
             <label>Credit note PDF
               <input id="rdc-file" type="file" accept="application/pdf,.pdf" />
             </label>
-            <label>From (customer), one line each, optional
-              <textarea id="rdc-from" rows="3" class="textarea" placeholder="Customer Name&#10;Address line&#10;GSTIN: 29ABCDE1234F1Z5"></textarea>
-            </label>
-            <label>To (Opptra), one line each, optional
-              <textarea id="rdc-to" rows="2" class="textarea" placeholder="Opptra Retail Private Limited&#10;GSTIN: ..."></textarea>
-            </label>
             <div class="row">
-              <label class="check"><input type="checkbox" id="rdc-barcode" checked> Remove barcode</label>
-              <button id="rdc-run-btn" class="primary">Build Delivery Challan</button>
+              <button id="rdc-upload-btn" class="secondary">Build from upload</button>
             </div>
-            <div id="rdc-output" class="result hidden"></div>
+            <div id="rdc-upload-output" class="result hidden"></div>
           </div>
         </section>
 
         <!-- Sheet Update (A1) -->
         <section id="tab-sheet" class="tab hidden">
           <h2>Sheet Update</h2>
-          <p class="lead">Pulls the latest Waypoint CREATED sale orders, writes the ones missing from the Master into today's date tab, enriches them with UC invoice and tracking, then pushes the date tab into Master.</p>
+          <p class="lead">First fill: every Waypoint order — any status, whatever view the export came from — checked against Master, and only the new ones go to today's date tab. Second fill takes SO numbers and adds their Unicommerce invoice data to those first-fill rows. Sync rewrites Master as an exact copy of the main B2B View sheet.</p>
+          <div id="sheet-link" class="panel hidden">
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <span>Master working-copy sheet</span>
+              <a id="sheet-open-link" href="#" target="_blank" rel="noopener" class="dl-btn">↗ Open in Google Sheets</a>
+            </div>
+            <iframe id="sheet-preview-frame" class="sheet-preview" loading="lazy" referrerpolicy="no-referrer"></iframe>
+          </div>
           <div class="panel">
+            <label for="sheet-second-sos">SO numbers for the second fill</label>
+            <textarea id="sheet-second-sos" rows="4" placeholder="SO12345&#10;SO12346"></textarea>
+            <p class="meta">One SO per line (commas work too). Each SO is found in the first-fill rows and topped up with its invoice, invoice qty, tracking, e-way bill and status from Unicommerce. Leave this empty to sweep every date-tab row that still has no invoice.</p>
             <div class="row">
-              <button id="sheet-first-btn" class="primary">First fill (Waypoint to date tab)</button>
+              <button id="sheet-first-btn" class="primary">First fill (Waypoint → date tab)</button>
               <button id="sheet-second-btn" class="secondary">Second fill (UC invoice enrich)</button>
               <button id="sheet-push-btn" class="secondary">Push date tab to Master</button>
+              <button id="sheet-sync-btn" class="secondary">Sync Master from source</button>
             </div>
+            <p class="meta">First fill looks at Master, finds Waypoint orders of any status that are not on it yet, and writes those to the date tab. Use Sync when you want Master to match the main B2B View sheet row-for-row.</p>
             <div id="sheet-output" class="result hidden"></div>
           </div>
         </section>
@@ -232,10 +252,27 @@
         <!-- Packing Mail (A2) -->
         <section id="tab-packing" class="tab hidden">
           <h2>Packing Mail</h2>
-          <p class="lead">Paste SO numbers. The platform composes a per-warehouse email with the invoice PDFs attached and saves it as a draft from our supply-chain account for you to review and send.</p>
+          <p class="lead">Paste SO numbers. Drafts are created in <b>your</b> Gmail — connect once below, then pick warehouses and recipients.</p>
+          <div class="panel" id="packing-gmail-panel">
+            <h3>Your Gmail</h3>
+            <div class="meta" id="packing-gmail-meta">Checking connection…</div>
+            <div class="row">
+              <a id="packing-gmail-connect" href="/auth/google/connect" class="dl-btn">Connect my Gmail</a>
+              <button id="packing-gmail-disconnect" class="secondary hidden" type="button">Disconnect</button>
+            </div>
+            <p class="meta">Packing drafts and the invoice / e-way follow-up both land in your Drafts. Nothing is sent until you press send now (or Send in Gmail).</p>
+          </div>
           <div class="panel">
             <label>Sale Orders (one per line)<textarea id="packing-sos" rows="4" class="textarea" placeholder="SO02741"></textarea></label>
-            <div class="row"><button id="packing-btn" class="primary">Create drafts</button></div>
+            <div class="row">
+              <button id="packing-preview-btn" class="primary">1 · Resolve warehouses &amp; pick recipients</button>
+            </div>
+            <div id="packing-recipients" class="hidden"></div>
+            <div class="row mt-sm">
+              <button id="packing-btn" class="primary" disabled>2 · Create packing drafts (label + appointment)</button>
+              <button id="packing-inveway-btn" class="secondary" disabled>3 · Create invoice &amp; e-way drafts (same thread)</button>
+            </div>
+            <p class="meta">Recipients come from the warehouse-email Google Sheet (To / CC / Finance). Tick who should receive each warehouse's mail, then create the draft. Step 3 also creates a draft — it does not send.</p>
             <div id="packing-output" class="result hidden"></div>
           </div>
         </section>
@@ -293,6 +330,13 @@
             </details>
           </div>
 
+          <div class="panel" id="admin-google-panel">
+            <h3>Shared Google Workspace (Sheets / Drive)</h3>
+            <p class="meta">Powers Sheet Update writes and shared warehouse-sheet reads. Separate from each user's Gmail connect on the Packing Mail tab.</p>
+            <div class="meta" id="admin-google-meta">…</div>
+            <div class="row"><a id="admin-google-connect" href="/auth/google/connect-shared" class="dl-btn">Connect shared Workspace</a></div>
+          </div>
+
           <div class="panel">
             <h3>Session Helper token</h3>
             <p class="meta">Create a token for the Session Helper extension (one per person/machine). Shown once, copy it immediately.</p>
@@ -333,6 +377,22 @@
           </div>
         </section>
       </main>
+    </div>
+  </div>
+
+  <!-- Request an automation -->
+  <div id="request-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3>Want a new automation?</h3>
+      <p>Tell us what you'd like to automate and the team will build it. The more detail the better:</p>
+      <ul>
+        <li>What do you do manually today, step by step?</li>
+        <li>How often, and roughly how long does it take?</li>
+        <li>Links to any sheets, portals, or examples.</li>
+      </ul>
+      <a id="request-mailto" class="primary dl-btn" href="mailto:sc.automations@opptra.com?subject=Automation%20request&body=Hi%20team%2C%0A%0AWhat%20I%20want%20to%20automate%3A%0A%0ASteps%20I%20do%20manually%20today%3A%0A1.%0A2.%0A3.%0A%0AHow%20often%20I%20do%20this%3A%0A%0ALinks%20%2F%20examples%3A%0A">✉ Write to sc.automations@opptra.com</a>
+      <p class="meta">This opens your email app with a template ready to fill in.</p>
+      <button id="request-close" class="secondary">Close</button>
     </div>
   </div>
 

@@ -34,13 +34,27 @@
         catch (err) { const el = $('login-error'); el.textContent = err.message; el.classList.remove('hidden'); }
       }, { once: true });
     }
+    const showGsiError = (msg) => { const el = $('login-error'); el.textContent = msg; el.classList.remove('hidden'); };
     const mount = () => {
-      if (!googleClientId || !window.google?.accounts?.id) return;
-      window.google.accounts.id.initialize({ client_id: googleClientId, callback: onCredential });
-      window.google.accounts.id.renderButton($('gsi-button'), { theme: 'filled_black', size: 'large', width: 300 });
+      if (!googleClientId) return;
+      if (!window.google?.accounts?.id) { showGsiError('Google Sign-In failed to load (blocked by an ad blocker, extension, or network policy?). Try disabling blockers for this site, or use a different browser.'); return; }
+      try {
+        // use_fedcm_for_prompt: current Chrome increasingly requires FedCM for GIS: without
+        // it the button can silently fail (a blank popup, or nothing happening at all) once
+        // third-party cookies are blocked - which is now Chrome's default.
+        window.google.accounts.id.initialize({ client_id: googleClientId, callback: onCredential, use_fedcm_for_prompt: true, itp_support: true });
+        window.google.accounts.id.renderButton($('gsi-button'), { theme: 'filled_black', size: 'large', width: 300 });
+      } catch (err) {
+        showGsiError('Google Sign-In failed to initialize: ' + err.message);
+      }
     };
     if (window.google?.accounts?.id) mount();
-    else window.addEventListener('load', mount, { once: true });
+    else {
+      window.addEventListener('load', mount, { once: true });
+      // The gsi/client <script> can fail outright (network block) with no 'load' event ever
+      // firing for our listener above - don't leave the button silently non-functional.
+      setTimeout(() => { if (!window.google?.accounts?.id) showGsiError('Google Sign-In is taking too long to load. Check your connection, or try a different network/browser.'); }, 6000);
+    }
   }
 
   async function onCredential(resp) {
@@ -61,6 +75,16 @@
       me = user;
       showApp();
     } catch { /* 401 already routed to login */ }
+    // Landing back from /auth/google/callback (Connect Gmail / shared Workspace).
+    const params = new URLSearchParams(location.search);
+    const googleConnect = params.get('googleConnect');
+    const landTab = params.get('tab');
+    if (googleConnect !== null) {
+      history.replaceState(null, '', location.pathname);
+      if (googleConnect === 'ok') toast(landTab === 'packing' ? 'Your Gmail is connected for Packing Mail.' : 'Google Workspace connected.', 'ok');
+      else toast('Google Workspace connection failed: ' + (googleConnect || 'unknown error'), 'bad', 8000);
+      if (landTab) setTimeout(() => go(landTab), 0);
+    }
   }
 
   function showApp() {
@@ -70,6 +94,11 @@
     $('user-role').textContent = me.role;
     $('user-pic').src = me.picture || '';
     if (me.role === 'admin') $('admin-nav-btn').classList.remove('hidden');
+    // Role-aware chrome: admin-only surfaces (technical cards, raw details, the everyone
+    // feed) show only for admins; users get their own activity in plain words.
+    document.body.classList.toggle('is-admin', me.role === 'admin');
+    $('runs-table').classList.toggle('mine', me.role !== 'admin');
+    $('runs-lead').textContent = me.role === 'admin' ? 'Latest runs across all users · refreshes automatically.' : 'Your latest runs · refreshes automatically.';
     go('dashboard');
     refreshDashboard();
     if (pollTimer) clearInterval(pollTimer);
@@ -88,6 +117,22 @@
     $('tab-' + tab).classList.remove('hidden');
     $('page-title').textContent = PAGE_TITLES[tab] || tab;
     if (tab === 'admin') loadAdmin();
+    if (tab === 'sheet') loadSheetLink();
+    if (tab === 'packing') loadPackingGmail();
+    if (tab === 'reversedc') loadRdcFacilities();
+  }
+
+  let sheetLinkLoaded = false;
+  async function loadSheetLink() {
+    if (sheetLinkLoaded) return;
+    try {
+      const { masterSheetUrl, masterSheetPreviewUrl } = await api('/api/integrations');
+      if (!masterSheetUrl) return;
+      sheetLinkLoaded = true;
+      $('sheet-open-link').href = masterSheetUrl;
+      $('sheet-preview-frame').src = masterSheetPreviewUrl;
+      $('sheet-link').classList.remove('hidden');
+    } catch { /* not configured yet - leave the panel hidden */ }
   }
 
   document.querySelectorAll('#side-nav button').forEach((btn) => {
@@ -120,20 +165,28 @@
   }
 
   function renderSession(s) {
-    const cls = s.status === 'alive' ? 'ok' : s.status === 'dead' ? 'bad' : 'warn';
+    const alive = s.status === 'alive';
+    const needs = s.needs_relogin || s.status === 'dead' || !s.has_cookie;
+
+    // Topbar pill - the ONE status surface everyone sees. Plain words, no jargon.
+    const pill = $('health-pill');
+    pill.className = 'health-pill ' + (alive ? 'ok' : needs ? 'bad' : 'warn');
+    $('health-pill-text').textContent = alive ? 'All systems working' : needs ? 'Needs attention' : 'Checking…';
+    $('side-session').innerHTML = alive ? 'All systems working' : needs ? 'Needs attention' : '…';
+
+    // Technical connection card - admins only (hidden by CSS for everyone else).
     const el = $('session-status');
-    el.className = 'big ' + cls;
-    el.textContent = (s.status || 'unknown').toUpperCase();
+    el.className = 'big ' + (alive ? 'ok' : needs ? 'bad' : 'warn');
+    el.textContent = alive ? 'CONNECTED' : needs ? 'DISCONNECTED' : 'CHECKING';
     $('session-meta').textContent =
       `source: ${s.source} · last OK: ${fmt(s.last_ok_at)}` + (s.fail_count ? ` · fails: ${s.fail_count}` : '');
-    $('side-session').innerHTML = `session <b>${(s.status || '?').toUpperCase()}</b>`;
-
-    const needs = s.needs_relogin || s.status === 'dead' || !s.has_cookie;
     $('dash-relogin-btn').classList.toggle('hidden', !needs);
+
     const banner = $('relogin-banner');
     if (needs) {
-      banner.innerHTML = `⚠ Unicommerce session needs a re-login, automations are paused.
-        ${me.role === 'admin' ? '<button id="banner-relogin">Re-login now</button>' : 'Ask an admin to re-login.'}`;
+      banner.innerHTML = me.role === 'admin'
+        ? `⚠ The Unicommerce connection is down - automations are paused. <button id="banner-relogin">Re-login now</button>`
+        : `⚠ Automations are paused for a moment while we reconnect. The admin team is on it - no action needed from you.`;
       banner.classList.remove('hidden');
       $('banner-relogin')?.addEventListener('click', openUcLogin);
     } else {
@@ -141,14 +194,18 @@
     }
   }
 
+  // Human words for run states - users are not engineers.
+  const STATUS_LABEL = { queued: 'Waiting', running: 'Working…', pending_retry: 'Retrying…', succeeded: 'Done', failed: 'Failed' };
+  const AUTOMATION_LABEL = { asn: 'ASN Compile', reversedc: 'Reverse DC', packing: 'Packing Mail', sheet: 'Sheet Update', ewaybill: 'E-way Bill', return: 'Return Flow', inventory: 'Inward/Outward', inward: 'Inward', outward: 'Outward', uc: 'Order Lookup' };
+
   const runRow = (r) => `
     <tr>
       <td>${fmt(r.created_at)}</td>
       <td>${esc(r.user_email)}</td>
-      <td>${esc(r.automation)}</td>
+      <td>${esc(AUTOMATION_LABEL[r.automation] || r.automation)}</td>
       <td>${esc(r.action)}</td>
-      <td><code>${esc(shortInput(r.input))}</code></td>
-      <td><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td>
+      <td>${esc(shortInput(r.input))}</td>
+      <td><span class="pill ${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
     </tr>`;
 
   /* ----------------------------------------------------------------------
@@ -184,8 +241,8 @@
       const run = await api('/api/runs/' + runUid);
       if (['succeeded', 'failed'].includes(run.status)) return run;
       if (run.status === 'pending_retry') {
-        out.innerHTML = `<div class="result-head"><span class="badge warn">retrying</span>
-          <span class="title">Unicommerce async step, auto-retrying…</span></div>
+        out.innerHTML = `<div class="result-head"><span class="badge warn">still working</span>
+          <span class="title">Taking a little longer than usual - retrying automatically, no action needed.</span></div>
           ${run.result ? stepChips(run.result.steps) : ''}`;
       }
       if (Date.now() - t0 > timeoutMs) return run;
@@ -283,35 +340,102 @@
   /* ---------------- ASN tab ---------------- */
   $('asn-run-btn')?.addEventListener('click', () => {
     const so = $('asn-so').value.trim();
-    const channel = document.querySelector('input[name="asn-ch"]:checked').value;
     return runJob({
-      btn: $('asn-run-btn'), out: $('asn-output'), working: `Compiling ${channel} ASN for ${so}`,
+      btn: $('asn-run-btn'), out: $('asn-output'), working: `Compiling ASN for ${so} (detecting marketplace)`,
       validate: () => (!so ? 'Enter a Sale Order code.' : null),
-      submit: () => api('/api/automations/asn/compile', { body: { saleOrder: so, channel } }),
+      submit: () => api('/api/automations/asn/compile', { body: { saleOrder: so } }),
       render: (r) => renderFileResult(r, r.ok ? `ASN ready, ${r.lineCount} line(s)` : (r.error || 'Failed'),
-        [['SO', r.so], ['Channel', r.channel], ['Facility', r.facility], ['PO', r.po], ['Invoice', r.invoice]]),
+        [['SO', r.so], ['Channel', r.channel], ['Facility', r.facility], ['PO', r.po], ['Invoice', r.invoice]], 'asn'),
     });
   });
 
-  /* ---------------- Reverse DC tab (upload the CN PDF, edit it, download) ---------------- */
-  $('rdc-run-btn')?.addEventListener('click', async () => {
-    const file = $('rdc-file').files[0];
-    const out = $('rdc-output');
+  /* ---------------- Reverse DC: facility + Bulk Return ID → clean DC PDF ---------------- */
+  // Hybrid modes: "rebuild" = parsed data reconciled against CN totals and a fresh DC
+  // was rendered; "edit-fallback" = numbers didn't reconcile, so the ORIGINAL PDF was
+  // edited in place (zero data loss, guaranteed).
+  function rdcModeLabel(r) {
+    if (r.mode === 'rebuild') return 'Rebuilt (verified against CN totals)';
+    if (r.mode === 'edit-fallback') return 'Original preserved (layout not fully parseable)';
+    return '—';
+  }
+  let rdcFacilitiesLoaded = false;
+
+  async function loadRdcFacilities({ force = false } = {}) {
+    const sel = $('rdc-facility');
+    if (!sel) return;
+    if (rdcFacilitiesLoaded && !force) return;
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">Loading facilities…</option>';
+    sel.disabled = true;
+    try {
+      const { runUid } = await api('/api/automations/uc/facilities', { body: {} });
+      // Don't poll into the result panel — facilities load is a quiet dropdown fill.
+      const run = await pollRun(runUid, document.createElement('div'));
+      const r = run.result || {};
+      const all = r.all || [];
+      if (run.status === 'failed' || !all.length) {
+        sel.innerHTML = `<option value="">${esc(r.error || run.error || 'Could not load warehouses')}</option>`;
+        toast(r.error || run.error || 'Could not load warehouses from Unicommerce.', 'bad');
+        return;
+      }
+      const current = r.current || '';
+      sel.innerHTML = '<option value="">Select warehouse…</option>'
+        + all.map((code) => `<option value="${esc(code)}">${esc(code)}</option>`).join('');
+      sel.value = (prev && all.includes(prev)) ? prev : (all.includes(current) ? current : '');
+      rdcFacilitiesLoaded = true;
+    } catch (err) {
+      sel.innerHTML = `<option value="">${esc(err.message || 'Failed to load')}</option>`;
+      toast(err.message || 'Failed to load warehouses', 'bad');
+    } finally {
+      sel.disabled = false;
+    }
+  }
+
+  $('rdc-refresh-facilities')?.addEventListener('click', () => loadRdcFacilities({ force: true }));
+
+  $('rdc-run-btn')?.addEventListener('click', () => {
+    const facility = $('rdc-facility')?.value?.trim() || '';
+    const bulkReturnId = $('rdc-bulk-id')?.value?.trim() || '';
+    return runJob({
+      btn: $('rdc-run-btn'),
+      out: $('rdc-output'),
+      working: 'Downloading credit note and building Delivery Challan…',
+      validate: () => {
+        if (!facility) return 'Select a warehouse / facility first.';
+        if (!bulkReturnId) return 'Enter the Bulk Return ID.';
+        return null;
+      },
+      submit: () => api('/api/automations/reversedc/from-bulk-return', { body: { facility, bulkReturnId } }),
+      render: (r) => renderFileResult(
+        r,
+        r.ok === false ? (r.error || 'Failed') : 'Delivery Challan ready',
+        [
+          ['Bulk Return', r.bulkReturnId || bulkReturnId],
+          ['Warehouse', r.facility || facility],
+          ['Credit Note', r.creditNoteNo || '—'],
+          ['Line items', r.lineCount ?? '—'],
+          ['Method', rdcModeLabel(r)],
+        ],
+        'reversedc',
+      ),
+    });
+  });
+
+  $('rdc-upload-btn')?.addEventListener('click', async () => {
+    const file = $('rdc-file')?.files?.[0];
+    const out = $('rdc-upload-output');
     out.classList.remove('hidden');
     if (!file) { out.innerHTML = errHead('Choose a credit note PDF to upload.'); toast('Choose a credit note PDF first.', 'bad'); return; }
-    const btn = $('rdc-run-btn');
+    const btn = $('rdc-upload-btn');
     setLoading(btn, true);
-    out.innerHTML = `<div class="result-head"><span class="badge info">working</span><span class="title">Editing the credit note into a Delivery Challan</span></div>`;
+    out.innerHTML = `<div class="result-head"><span class="badge info">working</span><span class="title">Parsing credit note into a Delivery Challan</span></div>`;
     try {
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('from', $('rdc-from').value);
-      fd.append('to', $('rdc-to').value);
-      fd.append('removeBarcode', $('rdc-barcode').checked ? 'true' : 'false');
       const res = await fetch('/api/automations/reversedc/build', { method: 'POST', body: fd, credentials: 'same-origin' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      out.innerHTML = renderFileResult(data, 'Delivery Challan ready', [['Source', file.name]]);
+      out.innerHTML = renderFileResult(data, 'Delivery Challan ready', [['Source', file.name], ['Credit Note', data.creditNoteNo || '—'], ['Line items', data.lineCount ?? '—'], ['Method', rdcModeLabel(data)]], 'reversedc');
       wireRaw(out);
       toast('Delivery Challan ready to download.', 'ok');
     } catch (err) {
@@ -323,32 +447,220 @@
   });
 
   /* ---------------- Packing Mail tab ---------------- */
-  $('packing-btn')?.addEventListener('click', () => {
-    const saleOrders = $('packing-sos').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  let packingPreview = null; // last previewGroups result - drives recipient checkboxes
+
+  async function loadPackingGmail() {
+    const meta = $('packing-gmail-meta');
+    const disconnect = $('packing-gmail-disconnect');
+    const connect = $('packing-gmail-connect');
+    if (!meta) return;
+    try {
+      const g = await api('/api/me/google/status');
+      if (g.connected) {
+        meta.innerHTML = `<span class="ok">Connected</span> as <b>${esc(g.grantedBy || me.email)}</b> — drafts will be created in this mailbox.`;
+        disconnect?.classList.remove('hidden');
+        if (connect) connect.textContent = 'Reconnect my Gmail';
+      } else {
+        meta.innerHTML = `<span class="error">Not connected</span> — connect your Gmail before creating drafts.`;
+        disconnect?.classList.add('hidden');
+        if (connect) connect.textContent = 'Connect my Gmail';
+      }
+    } catch (err) {
+      meta.textContent = 'Could not check Gmail connection: ' + (err.message || err);
+    }
+  }
+
+  $('packing-gmail-disconnect')?.addEventListener('click', async () => {
+    try {
+      await api('/api/me/google/disconnect', { method: 'POST', body: {} });
+      toast('Gmail disconnected for Packing Mail.', 'ok');
+      loadPackingGmail();
+    } catch (err) {
+      toast(err.message, 'bad');
+    }
+  });
+
+  function packingSaleOrders() {
+    return $('packing-sos').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  }
+
+  function packingRecipientsFromUi() {
+    const box = $('packing-recipients');
+    if (!box || !packingPreview?.groups?.length) return {};
+    const out = {};
+    for (const g of packingPreview.groups) {
+      const root = box.querySelector(`[data-wh="${CSS.escape(g.warehouse)}"]`);
+      if (!root) continue;
+      const checked = (sel) => [...root.querySelectorAll(sel)].filter((el) => el.checked).map((el) => el.value);
+      out[g.warehouse] = {
+        to: checked('input[data-role="to"]'),
+        // Finance ticks are just more CC recipients the operator opted into.
+        cc: [...checked('input[data-role="cc"]'), ...checked('input[data-role="finance"]')],
+      };
+    }
+    return out;
+  }
+
+  function renderPackingRecipients(preview) {
+    const box = $('packing-recipients');
+    packingPreview = preview;
+    if (!box) return;
+    if (!preview?.groups?.length) {
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      $('packing-btn').disabled = true;
+      $('packing-inveway-btn').disabled = true;
+      return;
+    }
+    const cards = preview.groups.map((g) => {
+      const opt = g.options || { to: [], cc: [], finance: [] };
+      const selTo = new Set(g.selectedTo || opt.to || []);
+      const selCc = new Set(g.selectedCc || opt.cc || []);
+      const tick = (email, role, on) => `<label class="check"><input type="checkbox" data-role="${role}" value="${esc(email)}" ${on ? 'checked' : ''}> ${esc(email)}</label>`;
+      const toBox = (opt.to || []).map((e) => tick(e, 'to', selTo.has(e))).join('') || '<span class="meta">No To addresses on the sheet</span>';
+      const ccBox = (opt.cc || []).map((e) => tick(e, 'cc', selCc.has(e))).join('') || '<span class="meta">No CC on the sheet</span>';
+      const finBox = (opt.finance || []).map((e) => tick(e, 'finance', false)).join('');
+      return `<div class="wh-card" data-wh="${esc(g.warehouse)}">
+        <div class="wh-card-head"><b>${esc(g.warehouse)}</b> <span class="meta">${g.sos.length} SO(s): ${esc(g.sos.join(', '))}</span></div>
+        <div class="wh-card-sec"><span class="wh-label">To</span><div class="wh-emails">${toBox}</div></div>
+        <div class="wh-card-sec"><span class="wh-label">CC</span><div class="wh-emails">${ccBox}</div></div>
+        ${finBox ? `<div class="wh-card-sec"><span class="wh-label">Finance</span><div class="wh-emails">${finBox}</div></div>` : ''}
+      </div>`;
+    }).join('');
+    const un = (preview.unresolved || []).map((u) => `<li class="bad"><span class="so">${esc(u.so)}</span><span>${esc(u.reason)}</span></li>`).join('');
+    box.innerHTML = `<h3 class="wh-title">Recipients (from warehouse-email sheet)</h3>${cards}`
+      + (un ? `<p class="result-note">Skipped:</p><ul class="result-list">${un}</ul>` : '');
+    box.classList.remove('hidden');
+    $('packing-btn').disabled = false;
+    $('packing-inveway-btn').disabled = false;
+  }
+
+  $('packing-preview-btn')?.addEventListener('click', () => {
+    const saleOrders = packingSaleOrders();
     return runJob({
-      btn: $('packing-btn'), out: $('packing-output'), working: 'Composing per-warehouse drafts',
+      btn: $('packing-preview-btn'), out: $('packing-output'), working: 'Looking up warehouses and email recipients',
       validate: () => (!saleOrders.length ? 'Enter at least one SO number.' : null),
-      submit: () => api('/api/automations/packing/drafts', { body: { saleOrders } }),
+      submit: () => api('/api/automations/packing/preview', { body: { saleOrders } }),
       render: (r) => {
-        if (!r.ok && r.error) return errHead(r.error);
-        const head = resultHead(r.ok, `${r.draftCount || 0} draft(s) created`);
-        const list = (r.drafts || []).map((d) => `<li class="ok"><span class="so">${esc(d.warehouse)}</span><span>${esc(d.to)} · ${d.sos.length} order(s) · ${d.attachmentCount} attachment(s)</span></li>`).join('');
-        const un = (r.unresolved || []).map((u) => `<li class="bad"><span class="so">${esc(u.so)}</span><span>${esc(u.reason)}</span></li>`).join('');
-        return head + (list ? `<ul class="result-list">${list}</ul>` : '') + (un ? `<p class="result-note">Skipped:</p><ul class="result-list">${un}</ul>` : '');
+        if (r.error) { renderPackingRecipients(null); return errHead(r.error); }
+        renderPackingRecipients(r);
+        return resultHead(!!r.groups?.length, `${r.groups?.length || 0} warehouse group(s) ready - tick recipients, then create drafts`)
+          + (r.directoryCount != null ? kv([['Warehouses on email sheet', r.directoryCount]]) : '');
       },
     });
   });
 
+  $('packing-btn')?.addEventListener('click', () => {
+    const saleOrders = packingSaleOrders();
+    const recipients = packingRecipientsFromUi();
+    return runJob({
+      btn: $('packing-btn'), out: $('packing-output'), working: 'Composing per-warehouse drafts',
+      validate: () => {
+        if (!saleOrders.length) return 'Enter at least one SO number.';
+        if (!packingPreview?.groups?.length) return 'Resolve warehouses first so you can pick recipients.';
+        const missing = Object.values(recipients).some((x) => !(x.to || []).length);
+        if (missing) return 'Each warehouse needs at least one To recipient ticked.';
+        return null;
+      },
+      submit: () => api('/api/automations/packing/drafts', { body: { saleOrders, recipients } }),
+      render: (r) => {
+        if (!r.ok && r.error) return errHead(r.error);
+        const head = resultHead(r.ok, `${r.draftCount || 0} draft(s) created - nothing has been SENT yet`);
+        const list = (r.drafts || []).map((d) => `<li class="ok">
+          <span class="so">${esc(d.warehouse)}</span>
+          <span>${esc(d.to)}${d.cc ? ` · cc ${esc(d.cc)}` : ''} · ${d.sos.length} order(s) · ${d.attachmentCount} attachment(s)</span>
+          <span class="draft-actions">
+            ${d.viewUrl ? `<a href="${esc(d.viewUrl)}" target="_blank" rel="noopener" class="link-btn">view in Gmail</a>` : ''}
+            ${d.draftId ? `<button class="link-btn" data-send-draft="${esc(d.draftId)}">send now</button>` : ''}
+          </span>
+        </li>`).join('');
+        const un = (r.unresolved || []).map((u) => `<li class="bad"><span class="so">${esc(u.so)}</span><span>${esc(u.reason)}</span></li>`).join('');
+        return head + (list ? `<ul class="result-list">${list}</ul>` : '')
+          + `<p class="result-note">The email goes out only when you press <b>send now</b> here, or open the draft in Gmail and press Send there.</p>`
+          + (un ? `<p class="result-note">Skipped:</p><ul class="result-list">${un}</ul>` : '');
+      },
+    });
+  });
+
+  /* ---------------- Packing follow-up: invoice + e-way bill ---------------- */
+  $('packing-inveway-btn')?.addEventListener('click', () => {
+    const saleOrders = packingSaleOrders();
+    const recipients = packingRecipientsFromUi();
+    return runJob({
+      btn: $('packing-inveway-btn'), out: $('packing-output'), working: 'Downloading invoices and e-way bills from Unicommerce',
+      validate: () => (!saleOrders.length ? 'Enter at least one SO number.' : null),
+      submit: () => api('/api/automations/packing/invoice-eway', { body: { saleOrders, recipients } }),
+      render: (r) => {
+        if (!r.ok && r.error) return errHead(r.error);
+        const head = resultHead(r.ok, `${r.draftCount || 0} follow-up draft(s) created`);
+        const list = (r.drafts || []).map((d) => `<li class="ok">
+          <span class="so">${esc(d.warehouse)}</span>
+          <span>${esc(d.to)}${d.cc ? ` · cc ${esc(d.cc)}` : ''} · ${d.sos.length} order(s) · ${d.attachmentCount} file(s)${d.threaded ? ' · same thread' : ' · new thread'}</span>
+          <span class="draft-actions">
+            ${d.viewUrl ? `<a href="${esc(d.viewUrl)}" target="_blank" rel="noopener" class="link-btn">view in Gmail</a>` : ''}
+            ${d.draftId ? `<button class="link-btn" data-send-draft="${esc(d.draftId)}">send now</button>` : ''}
+          </span>
+        </li>`).join('');
+        const un = (r.unresolved || []).map((u) => `<li class="bad"><span class="so">${esc(u.so)}</span><span>${esc(u.reason)}</span></li>`).join('');
+        return head + (list ? `<ul class="result-list">${list}</ul>` : '') + (un ? `<p class="result-note">Not ready yet:</p><ul class="result-list">${un}</ul>` : '');
+      },
+    });
+  });
+
+  // Wire "send now" on any packing draft rendered into #packing-output (event delegation,
+  // since the list is re-rendered on every run).
+  $('packing-output')?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-send-draft]');
+    if (!btn) return;
+    const draftId = btn.dataset.sendDraft;
+    btn.disabled = true;
+    btn.textContent = 'sending…';
+    try {
+      const { runUid } = await api('/api/automations/packing/send-draft', { body: { draftId } });
+      const run = await pollRun(runUid, $('packing-output'));
+      if (run.status === 'succeeded' && run.result?.ok !== false) {
+        btn.textContent = 'sent';
+        toast('Draft sent.', 'ok');
+      } else {
+        throw new Error(run.result?.error || 'send failed');
+      }
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'send now';
+      toast(err.message, 'bad');
+    }
+  });
+
   /* ---------------- Sheet Update tab ---------------- */
-  const sheetRun = (action, btn, working) => () => runJob({
+  // Second fill result: one line per SO showing what came off the first fill and what
+  // Unicommerce added, so ops can see the join without opening the sheet.
+  function sheetDetailTable(details) {
+    if (!details?.length) return '';
+    const head = ['SO', 'Tab', 'Brand', 'PO', 'Invoice', 'Inv Qty', 'Tracking', 'Status']
+      .map((h) => `<th>${h}</th>`).join('');
+    const rows = details.map((d) => '<tr>'
+      + [d.so, d.tab, d.brand, d.po, d.invoice || '—', d.invoiceQty, d.tracking, d.status]
+        .map((v) => `<td>${esc(v ?? '')}</td>`).join('')
+      + '</tr>').join('');
+    return `<div style="margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  const sheetRun = (action, btn, working, body = () => ({})) => () => runJob({
     btn: $(btn), out: $('sheet-output'), working,
-    submit: () => api('/api/automations/sheet/' + action, { body: {} }),
+    submit: () => api('/api/automations/sheet/' + action, { body: body() }),
     render: (r) => (!r.ok && r.error) ? errHead(r.error)
-      : resultHead(r.ok, r.summary || 'Done') + kv(Object.entries(r.counts || {})),
+      : resultHead(r.ok, r.summary || 'Done') + kv(Object.entries(r.counts || {})) + sheetDetailTable(r.details),
   });
   $('sheet-first-btn')?.addEventListener('click', sheetRun('first-fill', 'sheet-first-btn', 'Pulling Waypoint orders into the date tab'));
-  $('sheet-second-btn')?.addEventListener('click', sheetRun('second-fill', 'sheet-second-btn', 'Enriching rows with UC invoice and tracking'));
+  $('sheet-second-btn')?.addEventListener('click', sheetRun(
+    'second-fill', 'sheet-second-btn', 'Enriching rows with UC invoice and tracking',
+    () => {
+      const sos = ($('sheet-second-sos')?.value || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+      return sos.length ? { saleOrders: sos } : {};
+    },
+  ));
   $('sheet-push-btn')?.addEventListener('click', sheetRun('push', 'sheet-push-btn', 'Pushing the date tab into Master'));
+  $('sheet-sync-btn')?.addEventListener('click', sheetRun('sync-source', 'sheet-sync-btn', 'Pulling missing orders from the source sheet'));
 
   /* ---------------- admin ---------------- */
   $('admin-cookie-btn')?.addEventListener('click', async () => {
@@ -423,6 +735,14 @@
       $('admin-session-meta').innerHTML = `Status: <b>${(s.status || '?').toUpperCase()}</b> · source: ${esc(s.source)} · last OK: ${fmt(s.last_ok_at)}` +
         (s.needs_relogin ? ` · <span class="error">re-login needed since ${fmt(s.relogin_since)}</span>` : '');
     } catch {}
+    // google workspace connection
+    try {
+      const g = await api('/api/admin/google/status');
+      $('admin-google-meta').innerHTML = g.connected
+        ? `<span class="ok">Connected</span> as <b>${esc(g.grantedBy)}</b> · since ${fmt(g.updatedAt)}`
+        : `<span class="error">Not connected</span> - Sheet Update writes stay disabled until this is done.`;
+      $('admin-google-connect').textContent = g.connected ? 'Reconnect shared Workspace' : 'Connect shared Workspace';
+    } catch {}
     // analytics
     try {
       const a = await api('/api/admin/analytics');
@@ -483,7 +803,10 @@
       `<span class="step-chip done"><b>${esc(k)}</b>${v && v !== 'ok' ? ' · ' + esc(String(v).slice(0, 28)) : ''}</span>`).join('');
     return chips ? `<div class="steps-flow">${chips}</div>` : '';
   }
-  const raw = (obj) => `<details class="raw"><summary>Raw response</summary><pre class="output">${esc(JSON.stringify(obj, null, 2))}</pre></details>`;
+  // Technical response details are for admins debugging - regular users never see JSON.
+  const raw = (obj) => (me?.role === 'admin'
+    ? `<details class="raw"><summary>Technical details (admin)</summary><pre class="output">${esc(JSON.stringify(obj, null, 2))}</pre></details>`
+    : '');
 
   function renderReturn(r, kind) {
     if (kind === 'status') {
@@ -530,27 +853,34 @@
       + kv(pairs) + (inv ? `<p class="result-note">Inventory now:</p>${inv}` : '') + raw(r);
   }
 
-  // Result with a generated file (ASN / Reverse DC): show fields + a Download button.
-  function renderFileResult(r, title, pairs) {
+  // Result with a generated file (ASN / Reverse DC): a real download link (not just a
+  // JS-click button, so right-click "save as" / open-in-new-tab work) plus an inline
+  // preview for anything a browser can render natively (PDFs, images).
+  function renderFileResult(r, title, pairs, slot) {
     const head = resultHead(r.ok, title);
     if (!r.ok) return head + raw(r);
-    const btnId = 'dl-' + (++toastSeq);
-    setTimeout(() => {
-      const b = document.getElementById(btnId);
-      if (b) b.addEventListener('click', () => downloadFile(r.file));
-    }, 0);
-    return head + kv(pairs)
-      + `<button id="${btnId}" class="primary mt-sm">⤓ Download ${esc(r.file.filename)}</button>`
-      + raw({ ...r, file: { filename: r.file.filename, contentType: r.file.contentType, base64: '…' } });
+    const { filename, contentType, base64 } = r.file;
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: contentType }));
+    trackBlobUrl(slot, url);
+    const previewable = /^application\/pdf$/i.test(contentType) || /^image\//i.test(contentType);
+    const preview = previewable
+      ? (contentType === 'application/pdf'
+        ? `<iframe class="file-preview" src="${url}" title="${esc(filename)} preview"></iframe>`
+        : `<img class="file-preview" src="${url}" alt="${esc(filename)} preview" style="object-fit:contain">`)
+      : '';
+    return head + kv(pairs) + preview
+      + `<a href="${url}" download="${esc(filename)}" class="dl-btn mt-sm">⤓ Download ${esc(filename)}</a>`
+      + raw({ ...r, file: { filename, contentType, base64: '…' } });
   }
 
-  function downloadFile(file) {
-    const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([bytes], { type: file.contentType }));
-    const a = document.createElement('a');
-    a.href = url; a.download = file.filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  // One live blob URL per output slot (asn / reversedc) - a fresh result replaces the
+  // previous preview in the same panel, so the old blob is safe to revoke right then
+  // rather than leaking for the rest of the session.
+  const liveBlobUrls = {};
+  function trackBlobUrl(slot, url) {
+    if (liveBlobUrls[slot]) URL.revokeObjectURL(liveBlobUrls[slot]);
+    liveBlobUrls[slot] = url;
   }
 
   /* ---------------- UI primitives ---------------- */
@@ -574,11 +904,28 @@
   const emptyRow = (cols) => `<tr><td colspan="${cols}" class="empty">No data yet.</td></tr>`;
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = (t) => t ? new Date(t).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+  // Plain-words summary of a run's input - users never see raw JSON.
   const shortInput = (input) => {
     if (!input) return '';
-    try { const o = typeof input === 'string' ? JSON.parse(input) : input; return o.saleOrder || o.code || JSON.stringify(o).slice(0, 40); }
-    catch { return ''; }
+    try {
+      const o = typeof input === 'string' ? JSON.parse(input) : input;
+      if (typeof o !== 'object' || o === null) return String(o);
+      if (o.saleOrder || o.code || o.so) return o.saleOrder || o.code || o.so;
+      if (o.saleOrders?.length) return `${o.saleOrders.length} order(s)`;
+      if (o.rows?.length) return `${o.rows.length} order(s)`;
+      if (o.items?.length) return `${o.items.length} item(s)`;
+      if (o.count) return `${o.count} order(s)`;
+      if (o.file) return 'uploaded file';
+      if (o.action) return String(o.action);
+      const firstString = Object.values(o).find((v) => typeof v === 'string' && v);
+      return firstString ? String(firstString).slice(0, 30) : '';
+    } catch { return ''; }
   };
+
+  /* ---------------- request an automation ---------------- */
+  $('request-automation-btn')?.addEventListener('click', () => $('request-modal').classList.remove('hidden'));
+  $('request-close')?.addEventListener('click', () => $('request-modal').classList.add('hidden'));
+  $('request-modal')?.addEventListener('click', (e) => { if (e.target === $('request-modal')) $('request-modal').classList.add('hidden'); });
 
   boot();
 })();

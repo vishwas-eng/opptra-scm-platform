@@ -9,9 +9,20 @@ import { SessionError } from '@opptra/uc-client';
 export const RETURN_MAX_PENDING_RETRIES = 40;   // resumable pipeline: ~40 × 90s ≈ 1h of patience
 export const RETURN_PENDING_RETRY_MS = 90_000;
 
-export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) {
+export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, packingGoogleFor, runUserEmail, packingPipelineFor }) {
   const { markRunning, markPendingRetry, finishRun } = runs;
-  const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, packingPipeline, sheetPipeline } = pipelines;
+  const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, packingPipeline, sheetPipeline, reverseDcPipeline } = pipelines;
+
+  async function packingPipe(runUid, userEmailHint) {
+    const userEmail = runUserEmail
+      ? await runUserEmail(runUid, userEmailHint)
+      : String(userEmailHint || '').trim().toLowerCase();
+    if (packingGoogleFor && packingPipelineFor) {
+      const g = await packingGoogleFor(userEmail);
+      return packingPipelineFor(userEmail, g);
+    }
+    return packingPipeline;
+  }
 
   return {
     // Keep-alive: ping UC, record liveness. Death triggers refresh/alert inside uc-client.
@@ -71,21 +82,77 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue }) 
       return result;
     },
 
-    // Packing mail: SO list → per-warehouse Gmail drafts with invoices attached.
-    'packing.createDrafts': async ({ data: { runUid, input } }) => {
+    // Reverse DC: Bulk Return ID + facility → CN download → clean Delivery Challan PDF.
+    'reversedc.build': async ({ data: { runUid, input } }) => {
       await markRunning(runUid);
-      const result = await packingPipeline.createDrafts(input.saleOrders || []);
+      if (!reverseDcPipeline) throw new Error('reverse DC pipeline not configured');
+      const result = await reverseDcPipeline.buildFromBulkReturn({
+        bulkReturnId: input.bulkReturnId,
+        facility: input.facility,
+      });
+      await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
+      return result;
+    },
+
+    // Live facility list for the Reverse DC warehouse dropdown.
+    'uc.facilities': async ({ data: { runUid } }) => {
+      await markRunning(runUid);
+      if (!reverseDcPipeline) throw new Error('reverse DC pipeline not configured');
+      const result = await reverseDcPipeline.listFacilities();
+      await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
+      return result;
+    },
+
+    // Packing mail: SO list → warehouse groups + To/CC options from the email sheet.
+    'packing.preview': async ({ data: { runUid, input, userEmail } }) => {
+      await markRunning(runUid);
+      const pipe = await packingPipe(runUid, userEmail);
+      const result = await pipe.previewGroups(input.saleOrders || []);
+      await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
+      return result;
+    },
+
+    // Packing mail: SO list → per-warehouse Gmail drafts in the operator's mailbox.
+    'packing.createDrafts': async ({ data: { runUid, input, userEmail } }) => {
+      await markRunning(runUid);
+      const pipe = await packingPipe(runUid, userEmail);
+      const result = await pipe.createDrafts(input.saleOrders || [], { recipients: input.recipients || {} });
       await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
       return result;
     },
 
-    // Sheet update (A1): first-fill / second-fill / push.
+    // Packing mail follow-up: invoice + e-way bill DRAFT into the same thread (not sent).
+    'packing.sendInvoiceEway': async ({ data: { runUid, input, userEmail } }) => {
+      await markRunning(runUid);
+      const pipe = await packingPipe(runUid, userEmail);
+      const result = await pipe.sendInvoiceEway(input.saleOrders || [], { recipients: input.recipients || {} });
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      return result;
+    },
+
+    // Packing mail: dispatch a draft the operator has already reviewed in Gmail.
+    'packing.sendDraft': async ({ data: { runUid, input, userEmail } }) => {
+      await markRunning(runUid);
+      const pipe = await packingPipe(runUid, userEmail);
+      const result = await pipe.sendDraft(input.draftId);
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      return result;
+    },
+
+    // Sheet update (A1): first-fill / second-fill / push / sync-source.
     'sheet.run': async ({ data: { runUid, input } }) => {
       await markRunning(runUid);
-      const fn = { 'first-fill': sheetPipeline.firstFill, 'second-fill': sheetPipeline.secondFill, push: sheetPipeline.push }[input.action];
+      const fn = { 'first-fill': sheetPipeline.firstFill, 'second-fill': sheetPipeline.secondFill, push: sheetPipeline.push, 'sync-source': sheetPipeline.syncFromSource }[input.action];
       if (!fn) throw new Error(`unknown sheet action: ${input.action}`);
-      const result = await fn();
+      const result = await fn(input); // second-fill reads input.saleOrders; the others ignore it
       await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      return result;
+    },
+
+    // Scheduled source sync (no run row - a background cron, logged only).
+    'sheet.syncSource': async () => {
+      const result = await sheetPipeline.syncFromSource();
+      logger.info({ ok: result.ok, summary: result.summary || result.error }, 'scheduled source sync');
       return result;
     },
 

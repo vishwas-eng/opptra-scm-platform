@@ -107,8 +107,12 @@ ok "Docker ready"
 
 say "6/7 Uploading code + .env…"
 TARBALL=$(mktemp /tmp/opptra-scm-XXXX.tar.gz)
-tar -czf "$TARBALL" -C "$REPO_DIR" \
+# COPYFILE_DISABLE stops macOS tar from embedding "._foo" AppleDouble metadata files -
+# one of those next to a migration (still ends in .sql, sorts before it) crashes the
+# migration runner with a binary-garbage SQL statement on first boot.
+COPYFILE_DISABLE=1 tar -czf "$TARBALL" -C "$REPO_DIR" \
   --exclude node_modules --exclude .git --exclude '.env.*' \
+  --exclude '._*' \
   .
 gcloud compute scp "$TARBALL" "$VM_NAME:/tmp/opptra-scm.tar.gz" --zone "$ZONE" --quiet
 rm -f "$TARBALL"

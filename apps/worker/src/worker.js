@@ -7,12 +7,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker, Queue } from 'bullmq';
 import IORedis from 'ioredis';
-import { config, logger, migrate, closeDb, markRunning, markPendingRetry, finishRun, alert, memoStep } from '@opptra/core';
+import { config, logger, migrate, closeDb, markRunning, markPendingRetry, finishRun, alert, memoStep, getGoogleOAuthToken, getUserGoogleOAuthToken, savePackingThread, latestPackingThread, query } from '@opptra/core';
 import { ucClient, SessionError, ConfigError } from '@opptra/uc-client';
 import { makeReturnPipeline } from '@opptra/automation-return';
 import { makeEwaybillPipeline } from '@opptra/automation-ewaybill';
 import { makeInventoryPipeline } from '@opptra/automation-inventory';
 import { makeAsnPipeline } from '@opptra/automation-asn';
+import { makeReverseDcPipeline } from '@opptra/automation-reversedc';
 import { makePackingPipeline } from '@opptra/automation-packing';
 import { makeSheetPipeline } from '@opptra/automation-sheet';
 import { googleClients } from '@opptra/integrations-google';
@@ -27,16 +28,76 @@ const connection = new IORedis(cfg.REDIS_URL, { maxRetriesPerRequest: null });
 const queue = new Queue('automations', { connection });
 const uc = ucClient();
 
-// Build Google clients once at boot if the service account is configured; else null
-// (the Google-dependent automations return a clean "not connected" result).
+// Build shared Google clients once at boot for Sheet Update + packing Sheets/Drive reads.
+// Packing Mail Gmail uses each operator's own refresh token (resolved per job).
+// Priority for shared:
+//   1. stored OAuth refresh token (admin /auth/google/connect-shared)
+//   2. GOOGLE_SA_KEY_JSON
+//   3. GOOGLE_SA_EMAIL + GOOGLE_DELEGATED_USER
 let google = null;
-if (cfg.GOOGLE_SA_KEY_JSON && cfg.GOOGLE_DELEGATED_USER) {
+const oauthToken = await getGoogleOAuthToken().catch(() => null);
+if (oauthToken?.refresh_token) {
   try {
-    google = await googleClients({ saKeyJson: cfg.GOOGLE_SA_KEY_JSON, delegatedUser: cfg.GOOGLE_DELEGATED_USER });
-    logger.info({ user: cfg.GOOGLE_DELEGATED_USER }, 'google workspace connected');
+    google = await googleClients({
+      refreshToken: oauthToken.refresh_token, clientId: cfg.GOOGLE_CLIENT_ID, clientSecret: cfg.GOOGLE_OAUTH_CLIENT_SECRET,
+      delegatedUser: oauthToken.granted_by,
+    });
+    logger.info({ user: oauthToken.granted_by, mode: 'oauth-refresh-token' }, 'shared google workspace connected');
   } catch (err) {
-    logger.error({ err: String(err) }, 'google workspace configured but auth FAILED - packing/sheet stay disabled');
+    logger.error({ err: String(err) }, 'shared google oauth token stored but auth FAILED - sheet stay disabled');
   }
+} else if ((cfg.GOOGLE_SA_KEY_JSON || cfg.GOOGLE_SA_EMAIL) && cfg.GOOGLE_DELEGATED_USER) {
+  try {
+    google = await googleClients({ saKeyJson: cfg.GOOGLE_SA_KEY_JSON, saEmail: cfg.GOOGLE_SA_EMAIL, delegatedUser: cfg.GOOGLE_DELEGATED_USER });
+    logger.info({ user: cfg.GOOGLE_DELEGATED_USER, mode: cfg.GOOGLE_SA_KEY_JSON ? 'key' : 'keyless' }, 'shared google workspace connected');
+  } catch (err) {
+    logger.error({ err: String(err) }, 'shared google workspace configured but auth FAILED - sheet stay disabled');
+  }
+}
+
+/** Per-job Google client for packing: user's Gmail + shared Sheets/Drive when available. */
+async function packingGoogleFor(userEmail) {
+  const email = String(userEmail || '').trim().toLowerCase();
+  const tok = email ? await getUserGoogleOAuthToken(email).catch(() => null) : null;
+  let userClients = null;
+  if (tok?.refresh_token) {
+    try {
+      userClients = await googleClients({
+        refreshToken: tok.refresh_token,
+        clientId: cfg.GOOGLE_CLIENT_ID,
+        clientSecret: cfg.GOOGLE_OAUTH_CLIENT_SECRET,
+        delegatedUser: tok.granted_by || email,
+      });
+    } catch (err) {
+      logger.error({ err: String(err), user: email }, 'user google oauth failed');
+    }
+  }
+  if (!userClients && !google) return null;
+  if (!userClients) {
+    // Preview / sheet lookup can still work from shared; Gmail actions will refuse.
+    return google;
+  }
+  return {
+    gmail: userClients.gmail,
+    drive: google?.drive || userClients.drive,
+    sheets: google?.sheets || userClients.sheets,
+    delegatedUser: tok.granted_by || email,
+  };
+}
+
+async function runUserEmail(runUid, fallback = '') {
+  if (!runUid) return String(fallback || '').trim().toLowerCase();
+  const { rows } = await query('SELECT user_email FROM runs WHERE run_uid = $1', [runUid]).catch(() => ({ rows: [] }));
+  return String(rows[0]?.user_email || fallback || '').trim().toLowerCase();
+}
+
+function packingPipelineFor(userEmail, googleForUser) {
+  const email = String(userEmail || '').trim().toLowerCase();
+  return makePackingPipeline(uc, cfg, googleForUser, {
+    saveThread: (args) => savePackingThread({ ...args, userEmail: email }),
+    latestThreadFor: (wh) => latestPackingThread(wh, email),
+    fromName: email ? email.split('@')[0] : (cfg.MAIL_FROM_NAME || 'SupplyChain'),
+  });
 }
 
 const handlers = makeHandlers({
@@ -44,12 +105,17 @@ const handlers = makeHandlers({
   logger,
   alert,
   runs: { markRunning, markPendingRetry, finishRun },
+  packingGoogleFor,
+  runUserEmail,
+  packingPipelineFor,
   pipelines: {
     returnPipeline: makeReturnPipeline(uc, cfg),
     ewaybillPipeline: makeEwaybillPipeline(uc),
     inventoryPipeline: makeInventoryPipeline(uc, cfg, memoStep),
     asnPipeline: makeAsnPipeline(uc, cfg),
-    packingPipeline: makePackingPipeline(uc, cfg, google),
+    reverseDcPipeline: makeReverseDcPipeline(uc),
+    // Legacy shared pipeline kept for tests; packing handlers rebuild per user.
+    packingPipeline: makePackingPipeline(uc, cfg, google, { saveThread: savePackingThread, latestThreadFor: latestPackingThread }),
     sheetPipeline: makeSheetPipeline(uc, cfg, google),
   },
   reenqueue: (name, data, opts) => queue.add(name, data, opts),
@@ -84,6 +150,16 @@ process.on('unhandledRejection', (err) => logger.error({ err }, 'UNHANDLED REJEC
 await queue.upsertJobScheduler('keepalive', { every: cfg.UC_KEEPALIVE_MINUTES * 60_000 }, {
   name: 'system.keepalive', data: {}, opts: { removeOnComplete: { count: 10 }, removeOnFail: { count: 10 } },
 });
+
+// Scheduled source-sheet sync: pull orders from the read-only ops source into our Master
+// so it stays current without anyone clicking anything. 0 minutes disables it.
+if (cfg.SHEET_SYNC_MINUTES > 0) {
+  await queue.upsertJobScheduler('sheet-sync-source', { every: cfg.SHEET_SYNC_MINUTES * 60_000 }, {
+    name: 'sheet.syncSource', data: {}, opts: { removeOnComplete: { count: 10 }, removeOnFail: { count: 10 } },
+  });
+} else {
+  await queue.removeJobScheduler('sheet-sync-source').catch(() => {});
+}
 
 logger.info({ keepaliveEveryMin: cfg.UC_KEEPALIVE_MINUTES }, 'worker started');
 

@@ -3,7 +3,6 @@
 // wait briefly for the result (sync UI actions).
 import { randomUUID } from 'node:crypto';
 import { createRun, finishRun, query } from '@opptra/core';
-import { editCreditNoteToDeliveryChallan } from '@opptra/automation-reversedc';
 import { enqueue } from '../queue.js';
 
 const SO_CODE = { type: 'string', pattern: '^[A-Za-z0-9/_-]{2,40}$' };
@@ -185,13 +184,14 @@ export default async function automationRoutes(app) {
     return { runUid: run.run_uid, queued: true };
   });
 
-  // --- ASN compile: SO + channel → downloadable file ---
+  // --- ASN compile: SO → downloadable file. The marketplace is auto-detected from the
+  // SO's own UC channel (channel stays accepted as an optional override for API callers).
   app.post('/api/automations/asn/compile', {
     preValidation: opsOnly,
     config: perUser(20, '1 minute'),
     schema: {
       body: {
-        type: 'object', required: ['saleOrder', 'channel'],
+        type: 'object', required: ['saleOrder'],
         properties: { saleOrder: SO_CODE, channel: { type: 'string', enum: ['flipkart', 'myntra', 'zepto'] } },
         additionalProperties: false,
       },
@@ -202,12 +202,46 @@ export default async function automationRoutes(app) {
     return { runUid: run.run_uid, queued: true };
   });
 
-  // --- Reverse DC: the user UPLOADS the credit-note PDF; we edit that same document
-  // into a Delivery Challan (pure PDF transform, no Unicommerce session needed). ---
+  // --- Reverse DC: Bulk Return ID + warehouse → download CN from UC → clean DC PDF ---
+  app.post('/api/automations/reversedc/from-bulk-return', {
+    preValidation: opsOnly,
+    config: perUser(20, '1 minute'),
+    schema: {
+      body: {
+        type: 'object', required: ['bulkReturnId', 'facility'],
+        properties: {
+          bulkReturnId: { type: 'string', minLength: 2, maxLength: 80 },
+          facility: { type: 'string', minLength: 2, maxLength: 80 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (req) => {
+    const run = await createRun({
+      userEmail: req.user.email, automation: 'reversedc', action: 'from-bulk-return',
+      input: { bulkReturnId: req.body.bulkReturnId, facility: req.body.facility },
+    });
+    await enqueue('reversedc.build', { runUid: run.run_uid, input: req.body });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  // Live warehouse / facility list for the Reverse DC dropdown.
+  app.post('/api/automations/uc/facilities', {
+    preValidation: opsOnly,
+    config: perUser(30, '1 minute'),
+    schema: { body: { type: 'object', properties: {}, additionalProperties: false } },
+  }, async (req) => {
+    const run = await createRun({ userEmail: req.user.email, automation: 'uc', action: 'facilities', input: {} });
+    await enqueue('uc.facilities', { runUid: run.run_uid, input: {} });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  // --- Reverse DC fallback: upload a credit-note PDF → clean DC (parse, don't paint) ---
   app.post('/api/automations/reversedc/build', {
     preValidation: opsOnly,
     config: perUser(30, '1 minute'),
   }, async (req, reply) => {
+    const { makeReverseDcPipeline } = await import('@opptra/automation-reversedc');
     const parts = req.parts();
     let pdf = null;
     const fields = {};
@@ -225,23 +259,23 @@ export default async function automationRoutes(app) {
 
     const fromLines = String(fields.from || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).slice(0, 12);
     const toLines = String(fields.to || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).slice(0, 12);
-    const removeBarcode = fields.removeBarcode !== 'false';
 
-    const run = await createRun({ userEmail: req.user.email, automation: 'reversedc', action: 'build', input: { file: 'upload' } });
+    const run = await createRun({ userEmail: req.user.email, automation: 'reversedc', action: 'build-upload', input: { file: 'upload' } });
     try {
-      const edited = await editCreditNoteToDeliveryChallan(pdf, { fromLines, toLines }, { removeBarcode });
-      await finishRun(run.run_uid, { ok: true, result: { ok: true } });
-      return { runUid: run.run_uid, ok: true, file: { filename: 'Delivery_Challan.pdf', contentType: 'application/pdf', base64: edited.toString('base64') } };
+      const pipe = makeReverseDcPipeline(null);
+      const result = await pipe.buildFromUpload(pdf, { fromLines, toLines });
+      await finishRun(run.run_uid, { ok: true, result: { ok: true, creditNoteNo: result.creditNoteNo } });
+      return { runUid: run.run_uid, ok: true, ...result };
     } catch (err) {
       await finishRun(run.run_uid, { ok: false, error: String(err.message || err) });
-      return reply.code(500).send({ error: 'could not edit the PDF: ' + String(err.message || err) });
+      return reply.code(500).send({ error: 'could not build Delivery Challan: ' + String(err.message || err) });
     }
   });
 
-  // --- Packing mail: SO list → per-warehouse Gmail drafts (sent from our account) ---
-  app.post('/api/automations/packing/drafts', {
+  // --- Packing mail: SO list → preview warehouses + recipient options ---
+  app.post('/api/automations/packing/preview', {
     preValidation: opsOnly,
-    config: perUser(20, '1 minute'),
+    config: perUser(30, '1 minute'),
     schema: {
       body: {
         type: 'object', required: ['saleOrders'],
@@ -250,20 +284,111 @@ export default async function automationRoutes(app) {
       },
     },
   }, async (req) => {
-    const run = await createRun({ userEmail: req.user.email, automation: 'packing', action: 'drafts', input: { count: req.body.saleOrders.length } });
-    await enqueue('packing.createDrafts', { runUid: run.run_uid, input: req.body });
+    const run = await createRun({ userEmail: req.user.email, automation: 'packing', action: 'preview', input: { count: req.body.saleOrders.length } });
+    await enqueue('packing.preview', { runUid: run.run_uid, userEmail: req.user.email, input: req.body });
     return { runUid: run.run_uid, queued: true };
   });
 
-  // --- Sheet update (A1): first-fill / second-fill / push ---
-  for (const action of ['first-fill', 'second-fill', 'push']) {
+  // --- Packing mail: SO list → per-warehouse Gmail drafts in the operator's mailbox ---
+  app.post('/api/automations/packing/drafts', {
+    preValidation: opsOnly,
+    config: perUser(20, '1 minute'),
+    schema: {
+      body: {
+        type: 'object', required: ['saleOrders'],
+        properties: {
+          saleOrders: { type: 'array', minItems: 1, maxItems: 200, items: SO_CODE },
+          recipients: {
+            type: 'object',
+            additionalProperties: {
+              type: 'object',
+              properties: {
+                to: { type: 'array', items: { type: 'string', minLength: 3, maxLength: 120 }, maxItems: 20 },
+                cc: { type: 'array', items: { type: 'string', minLength: 3, maxLength: 120 }, maxItems: 20 },
+                includeFinance: { type: 'boolean' },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (req) => {
+    const run = await createRun({ userEmail: req.user.email, automation: 'packing', action: 'drafts', input: { count: req.body.saleOrders.length } });
+    await enqueue('packing.createDrafts', { runUid: run.run_uid, userEmail: req.user.email, input: req.body });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  // --- Packing mail follow-up: invoice + e-way bill DRAFT into the SAME thread ---
+  app.post('/api/automations/packing/invoice-eway', {
+    preValidation: opsOnly,
+    config: perUser(20, '1 minute'),
+    schema: {
+      body: {
+        type: 'object', required: ['saleOrders'],
+        properties: {
+          saleOrders: { type: 'array', minItems: 1, maxItems: 200, items: SO_CODE },
+          recipients: {
+            type: 'object',
+            additionalProperties: {
+              type: 'object',
+              properties: {
+                to: { type: 'array', items: { type: 'string', minLength: 3, maxLength: 120 }, maxItems: 20 },
+                cc: { type: 'array', items: { type: 'string', minLength: 3, maxLength: 120 }, maxItems: 20 },
+                includeFinance: { type: 'boolean' },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (req) => {
+    const run = await createRun({ userEmail: req.user.email, automation: 'packing', action: 'invoice-eway', input: { count: req.body.saleOrders.length } });
+    await enqueue('packing.sendInvoiceEway', { runUid: run.run_uid, userEmail: req.user.email, input: req.body });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  // --- Packing mail: dispatch a draft the operator opened and reviewed in Gmail ---
+  app.post('/api/automations/packing/send-draft', {
+    preValidation: opsOnly,
+    config: perUser(20, '1 minute'),
+    schema: {
+      body: {
+        type: 'object', required: ['draftId'],
+        properties: { draftId: { type: 'string', minLength: 1, maxLength: 200 } },
+        additionalProperties: false,
+      },
+    },
+  }, async (req) => {
+    const run = await createRun({ userEmail: req.user.email, automation: 'packing', action: 'send-draft', input: { draftId: req.body.draftId } });
+    await enqueue('packing.sendDraft', { runUid: run.run_uid, userEmail: req.user.email, input: req.body });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  // --- Sheet update (A1): first-fill / second-fill / push / sync-source ---
+  // Second fill optionally takes the SO numbers to enrich; the rest take no input.
+  const SHEET_BODIES = {
+    'second-fill': {
+      type: 'object',
+      properties: { saleOrders: { type: 'array', maxItems: 200, items: SO_CODE } },
+      additionalProperties: false,
+    },
+  };
+  for (const action of ['first-fill', 'second-fill', 'push', 'sync-source']) {
     app.post(`/api/automations/sheet/${action}`, {
       preValidation: opsOnly,
       config: perUser(10, '1 minute'),
-      schema: { body: { type: 'object', properties: {}, additionalProperties: false } },
+      schema: { body: SHEET_BODIES[action] || { type: 'object', properties: {}, additionalProperties: false } },
     }, async (req) => {
-      const run = await createRun({ userEmail: req.user.email, automation: 'sheet', action, input: {} });
-      await enqueue('sheet.run', { runUid: run.run_uid, input: { action } });
+      const saleOrders = req.body?.saleOrders || [];
+      const run = await createRun({
+        userEmail: req.user.email, automation: 'sheet', action,
+        input: saleOrders.length ? { count: saleOrders.length } : {},
+      });
+      await enqueue('sheet.run', { runUid: run.run_uid, input: { action, saleOrders } });
       return { runUid: run.run_uid, queued: true };
     });
   }

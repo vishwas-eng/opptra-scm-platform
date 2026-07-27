@@ -183,6 +183,27 @@ test('RBAC: a viewer cannot run ops automations or hit admin routes', async () =
   assert.equal((await asViewer('/api/dashboard')).statusCode, 200);
 });
 
+test('runs feed and dashboard are scoped per-user for non-admins (server-side, not UI)', async () => {
+  const admin = agent(app); await admin.devLogin();
+  // admin created at least one run earlier in this suite; a fresh ops user must see NONE of them
+  await core.query(`INSERT INTO users (email, name, role) VALUES ('ops2@opptra.com','O','ops')
+    ON CONFLICT (email) DO UPDATE SET role='ops', is_active=true`);
+  const token = app.jwt.sign({ email: 'ops2@opptra.com', name: 'O', role: 'ops' });
+  const asOps = (url) => app.inject({ method: 'GET', url, headers: { cookie: `opptra_session=${token}` } });
+
+  const feed = (await asOps('/api/runs?limit=100')).json();
+  assert.ok(feed.runs.every((r) => r.user_email === 'ops2@opptra.com'), 'ops user must never see others\' runs');
+  // even asking for another user explicitly must not leak
+  const probed = (await asOps('/api/runs?user=vishwas.pandey@opptra.com')).json();
+  assert.ok(probed.runs.every((r) => r.user_email === 'ops2@opptra.com'), 'user= filter must be ignored for non-admins');
+
+  const dash = (await asOps('/api/dashboard')).json();
+  assert.equal(dash.week.total, 0, 'dashboard counts are the user\'s own, not the org\'s');
+  // admin still sees the full feed
+  const adminFeed = (await admin.get('/api/runs?limit=100')).json();
+  assert.ok(adminFeed.runs.length > 0, 'admin sees the org-wide feed');
+});
+
 test('deactivated user is rejected immediately (DB re-check, not token TTL)', async () => {
   await core.query(`INSERT INTO users (email, name, role, is_active) VALUES ('gone@opptra.com','G','ops',false)
     ON CONFLICT (email) DO UPDATE SET is_active=false`);
@@ -190,6 +211,49 @@ test('deactivated user is rejected immediately (DB re-check, not token TTL)', as
   const res = await app.inject({ method: 'GET', url: '/api/me', headers: { cookie: `opptra_session=${token}` } });
   // 403 (authenticated but not active) + cookie cleared — rejected immediately, not at TTL.
   assert.equal(res.statusCode, 403);
+});
+
+/* --------------------------- per-user scoping ---------------------------- */
+test('runs feed and dashboard are scoped server-side: non-admins see only their own', async () => {
+  const admin = agent(app); await admin.devLogin();
+  // the admin has runs from earlier tests; a fresh ops user has none
+  await core.query(`INSERT INTO users (email, name, role) VALUES ('ops2@opptra.com','O','ops')
+    ON CONFLICT (email) DO UPDATE SET role='ops', is_active=true`);
+  const token = app.jwt.sign({ email: 'ops2@opptra.com', name: 'O', role: 'ops' });
+  const asOps = (url) => app.inject({ method: 'GET', url, headers: { cookie: `opptra_session=${token}` } });
+
+  const opsRuns = (await asOps('/api/runs')).json().runs;
+  assert.ok(opsRuns.every((r) => r.user_email === 'ops2@opptra.com'), 'ops user must never see other users\' runs');
+  // even an explicit ?user= param must not leak someone else's history
+  const probed = (await asOps('/api/runs?user=vishwas.pandey%40opptra.com')).json().runs;
+  assert.ok(probed.every((r) => r.user_email === 'ops2@opptra.com'), 'user param is admin-only');
+  const opsDash = (await asOps('/api/dashboard')).json();
+  assert.equal(opsDash.week.total, 0, 'dashboard counts are personal for non-admins');
+  // admin still sees the global feed
+  const adminRuns = (await admin.get('/api/runs')).json().runs;
+  assert.ok(adminRuns.length > 0);
+});
+
+/* ------------------------ google oauth fallback -------------------------- */
+test('google oauth: status starts disconnected; connect 400s without a client secret; callback rejects a forged state', async () => {
+  const a = agent(app); await a.devLogin();
+  const st = await a.get('/api/admin/google/status');
+  assert.equal(st.statusCode, 200);
+  assert.equal(st.json().connected, false);
+  // no GOOGLE_OAUTH_CLIENT_SECRET in the test env -> connect refuses instead of redirecting
+  assert.equal((await a.get('/auth/google/connect')).statusCode, 400);
+  // a callback with an unknown state must not store anything (login-CSRF guard)
+  const cb = await a.get('/auth/google/callback?code=fake&state=forged');
+  assert.equal(cb.statusCode, 302);
+  assert.match(cb.headers.location, /googleConnect=invalid/);
+  assert.equal((await a.get('/api/admin/google/status')).json().connected, false);
+});
+
+test('google oauth routes are admin-only', async () => {
+  const token = app.jwt.sign({ email: 'viewer@opptra.com', name: 'V', role: 'viewer' });
+  const asViewer = (url) => app.inject({ method: 'GET', url, headers: { cookie: `opptra_session=${token}` } });
+  assert.equal((await asViewer('/api/admin/google/status')).statusCode, 403);
+  assert.equal((await asViewer('/auth/google/connect')).statusCode, 403);
 });
 
 /* --------------------------- admin surfaces ------------------------------ */

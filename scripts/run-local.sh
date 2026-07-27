@@ -19,7 +19,11 @@ stop() {
 
 command -v psql >/dev/null || { echo "Postgres 16 not found — brew install postgresql@16"; exit 1; }
 command -v redis-server >/dev/null || { echo "Redis not found — brew install redis"; exit 1; }
-[ -f .env ] || { echo ".env missing — this script expects the local dev .env"; exit 1; }
+# .env is the PRODUCTION deploy config; local runs use .env.dev.local so the two never mix.
+ENV_FILE=.env
+[ -f .env.dev.local ] && ENV_FILE=.env.dev.local
+[ -f "$ENV_FILE" ] || { echo "$ENV_FILE missing — create it from .env.example"; exit 1; }
+echo "▸ using $ENV_FILE"
 
 echo "▸ ensuring Postgres + Redis are up…"
 brew services start postgresql@16 >/dev/null 2>&1 || true
@@ -30,7 +34,7 @@ echo "▸ ensuring database exists…"
 psql -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='opptra'" | grep -q 1 || psql -d postgres -c "CREATE ROLE opptra LOGIN PASSWORD 'localdev';"
 psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='opptra'" | grep -q 1 || psql -d postgres -c "CREATE DATABASE opptra OWNER opptra;"
 
-set -a; . ./.env; set +a
+set -a; . "./$ENV_FILE"; set +a
 echo "▸ migrating…"; node packages/core/src/migrate.js
 
 stop  # clear any previous run

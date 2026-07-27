@@ -15,14 +15,22 @@ export async function buildApp({ withStatic = true } = {}) {
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", 'https://accounts.google.com'],
-        frameSrc: ['https://accounts.google.com'],
+        // blob: lets the in-page PDF/image previews render (generated files are served
+        // to the iframe/img as blob URLs; without this the preview pane is just blank).
+        frameSrc: ['https://accounts.google.com', 'https://docs.google.com', 'blob:'],
         connectSrc: ["'self'", 'https://accounts.google.com'],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://accounts.google.com'],
         fontSrc: ['https://fonts.gstatic.com'],
-        imgSrc: ["'self'", 'data:', 'https://*.googleusercontent.com'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://*.googleusercontent.com'],
         frameAncestors: ["'none'"],
       },
     },
+    // helmet's default Cross-Origin-Opener-Policy is "same-origin", which isolates the
+    // browsing context group and breaks Google Identity Services' popup sign-in: the
+    // popup opens and navigates fine but can never hand its result back to the opener,
+    // so it just sits blank. "same-origin-allow-popups" keeps the isolation everywhere
+    // except for windows we ourselves open (exactly this sign-in popup).
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   });
 
   await app.register(import('@fastify/rate-limit'), {
@@ -36,6 +44,7 @@ export async function buildApp({ withStatic = true } = {}) {
   await app.register(import('./plugins/auth.js'));
   await app.register(import('./routes/core.js'));
   await app.register(import('./routes/admin.js'));
+  await app.register(import('./routes/googleAuth.js'));
   await app.register(import('./routes/automations.js'));
 
   if (withStatic) {
