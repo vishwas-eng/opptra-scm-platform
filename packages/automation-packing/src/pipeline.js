@@ -1,82 +1,417 @@
-// Packing mail - ported from b2b Mailer.gs (A2).
-//   input: SO list → resolve each SO's invoice + facility (UC), download the invoice PDF
-//   (uc.dataBinary), group by warehouse (WAREHOUSE_MAP: facility → email), and create ONE
-//   Gmail draft per warehouse with the invoices attached, for the operator to review + send.
+// Packing mail - ported from b2b Mailer.gs (A2), the two-stage warehouse flow:
 //
-// Google is INJECTED ({ gmail } client + gmailApi wrapper). When Google isn't configured
-// the pipeline returns a clear, non-throwing "not connected" result so the UI can show it.
-import { gmailApi, buildRawMessage } from '@opptra/integrations-google';
+//   STEP 0  previewGroups  (recipient picker)
+//     SO list → warehouses from the B2B sheet + To/CC/Finance options from the
+//     warehouse-email Google Sheet. The UI lets the operator tick who gets each mail.
+//
+//   STEP 1  createDrafts  (the FIRST email that starts the thread)
+//     one Gmail draft per warehouse with the legacy template (order table + shipping
+//     label + appointment letter from Drive). Recipients come from the sheet (or the
+//     operator's selection) - never a hardcoded WAREHOUSE_MAP.
+//
+//   STEP 2  sendInvoiceEway  (the follow-up, SAME Gmail thread)
+//     invoice + e-way bill from Unicommerce into the warehouse's existing thread.
+//
+//   Every run drafts first (never sends blind); sendDraft() dispatches the exact
+//   reviewed draft.
+import { gmailApi, driveApi, sheetsApi, a1, buildRawMessage } from '@opptra/integrations-google';
+import {
+  loadWarehouseDirectory, resolveWarehouseEntry, shortCodeOf,
+} from './warehouseEmails.js';
 
 const FACILITIES = ['Opp_RSG_MH', 'Opp_WIQ_MH_1', 'Opp_BSB_HR_1P', 'Opp_WIQ_KA', 'Opp_WIQ_HR'];
+const HEADER_ROW = 2;
+const DATE_TAB_RE = /^\d{2}-[A-Za-z]{3}-\d{4}(_\d+)?$/;
+const MAIL_TABLE_HEADERS = ['Marketplace', 'Brand', 'Po No', 'So No', 'Qty', 'Value', 'Pickup Wh Name', 'Destination City', 'Appointment Date', 'Dispatch Date', 'Appointment ID'];
+const AMAZON_FAMILY = /AMAZON|^AZ\b|KKOC|ETRADE|RETAILEZ|FBA|COCOBLU/i;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
-export function makePackingPipeline(uc, cfg = {}, google = null) {
-  const warehouseMap = parseMap(cfg.WAREHOUSE_MAP);
-  const sender = cfg.GOOGLE_DELEGATED_USER || '';
-  const configured = [...new Set(FACILITIES)]; // RSG is already first in FACILITIES
+const soNorm = (s) => String(s || '').trim().toUpperCase().replace(/[\s_-]/g, '');
+const cleanEmails = (list) => [...new Set((list || []).map((e) => String(e || '').trim()).filter((e) => EMAIL_RE.test(e)))];
 
-  // Rethrow a dead session so it fails loudly, instead of masking it as "no invoice found".
+/** Normalize sheet dates to DD-Mon-YYYY (IST-friendly display). Handles Excel serials + common strings. */
+function fmtSheetDate(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    // Sheets serial day count (≈ 2000–2100 AD)
+    if (n > 20_000 && n < 80_000) {
+      const ms = Date.UTC(1899, 11, 30) + Math.round(n) * 86_400_000;
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' }).formatToParts(new Date(ms));
+      return `${parts.find((p) => p.type === 'day').value}-${parts.find((p) => p.type === 'month').value}-${parts.find((p) => p.type === 'year').value}`;
+    }
+  }
+  const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/)
+    || s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+  if (m) {
+    let y; let mo; let d;
+    if (m[1].length === 4) { y = Number(m[1]); mo = Number(m[2]); d = Number(m[3]); }
+    else { d = Number(m[1]); mo = Number(m[2]); y = Number(m[3]); if (y < 100) y += 2000; }
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' })
+        .formatToParts(new Date(Date.UTC(y, mo - 1, d)));
+      return `${parts.find((p) => p.type === 'day').value}-${parts.find((p) => p.type === 'month').value}-${parts.find((p) => p.type === 'year').value}`;
+    }
+  }
+  // Already like 24-Jul-2026 / 24-July-2026 → collapse full month to short when possible
+  const long = s.match(/^(\d{1,2})-([A-Za-z]+)-(\d{4})$/);
+  if (long) {
+    const months = { january: 'Jan', february: 'Feb', march: 'Mar', april: 'Apr', may: 'May', june: 'Jun', july: 'Jul', august: 'Aug', september: 'Sep', october: 'Oct', november: 'Nov', december: 'Dec' };
+    const key = long[2].toLowerCase();
+    const mon = months[key] || (long[2].length > 3 ? long[2].slice(0, 3) : long[2]);
+    return `${long[1].padStart(2, '0')}-${mon[0].toUpperCase()}${mon.slice(1)}-${long[3]}`;
+  }
+  return s;
+}
+
+export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
+  // The mailbox that actually holds the drafts: the Google account whose refresh
+  // token was used (per-user OAuth for packing). Never a hardcoded shared mailbox.
+  const sender = google?.delegatedUser || '';
+  const fromName = deps.fromName || cfg.MAIL_FROM_NAME || (sender ? String(sender).split('@')[0] : 'SupplyChain');
+  const configured = [...new Set(FACILITIES)];
+  const saveThread = deps.saveThread || (async () => {});
+  const latestThreadFor = deps.latestThreadFor || (async () => null);
+  // Optional test seam for the warehouse-email directory (avoids Sheets in unit tests).
+  const directoryOverride = deps.warehouseDirectory || null;
+
   const orNull = (e) => { if (e?.name === 'SessionError') throw e; return null; };
 
-  // Resolve an SO's invoice by hopping facilities (fetchShippingPackageDetails is scoped).
-  async function resolveInvoice(so) {
+  const gmailRequired = () => {
+    if (!google?.gmail) {
+      return { ok: false, error: 'Connect your Gmail on the Packing Mail tab first — drafts are created in your own mailbox.' };
+    }
+    return null;
+  };
+
+  async function warehouseDirectory() {
+    if (directoryOverride) return directoryOverride;
+    return loadWarehouseDirectory(google?.sheets, cfg.WAREHOUSE_EMAIL_SHEET_ID, cfg.WAREHOUSE_EMAIL_TAB || null);
+  }
+
+  /* ---- order details from the B2B sheet (Master + date tabs), like loadOrdersForMail_ ---- */
+  async function loadSheetRows(soList) {
+    const bySo = new Map();
+    if (!cfg.MASTER_SHEET_ID) return bySo;
+    const wanted = new Set(soList.map(soNorm));
+    try {
+      const tabs = await sheetsApi.listTabs(google.sheets, cfg.MASTER_SHEET_ID);
+      const scan = [...tabs.filter((t) => DATE_TAB_RE.test(t)), cfg.MASTER_TAB || 'Master'];
+      for (const tab of scan) {
+        if (bySo.size >= wanted.size) break;
+        let values;
+        try { values = await sheetsApi.read(google.sheets, cfg.MASTER_SHEET_ID, a1(tab, `A${HEADER_ROW}:ZZ`)); } catch { continue; }
+        const map = {};
+        (values[0] || []).forEach((h, i) => { const n = String(h ?? '').trim(); if (n) map[n] = i; });
+        const soCol = map['SO/GP Number'];
+        if (soCol === undefined) continue;
+        const col = (row, name) => (map[name] === undefined ? '' : String(row[map[name]] ?? '').trim());
+        for (const row of values.slice(1)) {
+          const so = String(row[soCol] ?? '').trim();
+          if (!so || !wanted.has(soNorm(so)) || bySo.has(soNorm(so))) continue;
+          bySo.set(soNorm(so), {
+            marketplace: col(row, 'Marketplace'), brand: col(row, 'Brand'),
+            po: col(row, 'PO / RPO / Gatepass Number'), so,
+            qty: col(row, 'PO / RPO Quantity'), value: col(row, 'PO / Invoice Value Total'),
+            warehouse: col(row, 'Pickup Wh Name'), destCity: col(row, 'Destination City'),
+            appointmentDate: fmtSheetDate(col(row, 'Appointment Date / EDD')),
+            dispatchDate: fmtSheetDate(col(row, 'Dispatch Date')),
+            appointmentId: col(row, 'Appointment ID'),
+          });
+        }
+      }
+    } catch { /* sheet unavailable: caller reports the SO as unresolved */ }
+    return bySo;
+  }
+
+  // Group SO rows by warehouse. Recipients are resolved separately (sheet + user picks).
+  function groupByWarehouse(rows) {
+    const groups = new Map();
+    for (const row of rows) {
+      const wh = row.warehouse || 'UNKNOWN';
+      if (!groups.has(wh)) groups.set(wh, { warehouse: wh, orders: [] });
+      groups.get(wh).orders.push(row);
+    }
+    return groups;
+  }
+
+  // Apply operator picks (or sheet defaults) onto a warehouse group.
+  // recipientsByWh: { [warehouse]: { to: string[], cc: string[], includeFinance?: boolean } }
+  function applyRecipients(group, directory, recipientsByWh = {}) {
+    const entry = resolveWarehouseEntry(directory, group.warehouse);
+    const override = recipientsByWh[group.warehouse] || (entry ? recipientsByWh[entry.warehouse] : null) || null;
+    let to = [];
+    let cc = [];
+    if (override) {
+      to = cleanEmails(override.to);
+      cc = cleanEmails(override.cc);
+      if (override.includeFinance && entry?.finance?.length) cc = cleanEmails([...cc, ...entry.finance]);
+    } else if (entry) {
+      // Default: every To + every CC on the sheet. Finance stays optional (UI opt-in).
+      to = cleanEmails(entry.to);
+      cc = cleanEmails(entry.cc);
+    }
+    return {
+      ...group,
+      entry,
+      to,
+      cc,
+      shortCode: entry?.shortCode || shortCodeOf(group.warehouse),
+      contact: entry?.contact || shortCodeOf(group.warehouse) || 'Team',
+      options: entry ? {
+        to: entry.to, cc: entry.cc, finance: entry.finance,
+        shortCode: entry.shortCode, contact: entry.contact,
+      } : null,
+    };
+  }
+
+  /* ---- legacy template pieces ---- */
+  const istToday = () => {
+    // Match sheet date-tab format (e.g. 24-Jul-2026), not month:long (24-July-2026).
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }).formatToParts(new Date());
+    return `${parts.find((p) => p.type === 'day').value}-${parts.find((p) => p.type === 'month').value}-${parts.find((p) => p.type === 'year').value}`;
+  };
+
+  function marketplaceLabel(list) {
+    const mkts = [...new Set(list.map((o) => String(o.marketplace || '').trim()).filter(Boolean))];
+    if (mkts.length && mkts.every((m) => AMAZON_FAMILY.test(m))) return 'Amazon';
+    if (mkts.length === 1) return mkts[0];
+    if (mkts.length > 1) return 'Multi-Marketplace';
+    return 'Packing';
+  }
+  const marketplacePhrase = (list) => {
+    const label = marketplaceLabel(list);
+    return label === 'Amazon' ? 'Amazon UCB' : label === 'Packing' ? 'marketplace' : label === 'Multi-Marketplace' ? 'multi-marketplace' : label;
+  };
+
+  const fmtValue = (v) => {
+    const n = Number(String(v ?? '').replace(/,/g, ''));
+    return Number.isNaN(n) || v === '' || v == null ? String(v ?? '') : n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  };
+  const tdCell = (v) => `<td style="border:1px solid #ccc;padding:6px 8px;font-size:12px;">${escapeHtml(v ?? '')}</td>`;
+
+  // The navy-header order table — shared by BOTH emails in the thread so the
+  // invoice/e-way follow-up keeps the exact same look as the first packing mail.
+  function orderTableHtml(list) {
+    const head = MAIL_TABLE_HEADERS.map((h) => `<th style="border:1px solid #ccc;padding:6px 8px;background:#131A48;color:#fff;font-size:12px;">${h}</th>`).join('');
+    const rows = list.map((o) => '<tr>'
+      + tdCell(o.marketplace) + tdCell(o.brand) + tdCell(o.po) + tdCell(o.so) + tdCell(o.qty) + tdCell(fmtValue(o.value))
+      + tdCell(o.warehouse) + tdCell(o.destCity) + tdCell(o.appointmentDate) + tdCell(o.dispatchDate) + tdCell(o.appointmentId)
+      + '</tr>').join('');
+    return `<table style="border-collapse:collapse;margin-top:12px;"><tr>${head}</tr>${rows}</table>`;
+  }
+
+  function buildOrderTableHtml(contact, list) {
+    return `<div style="font-family:Arial,sans-serif;font-size:13px;color:#222;">`
+      + `<p>Hi ${escapeHtml(contact)},</p>`
+      + `<p>Please find the Sales Order details for the ${escapeHtml(marketplacePhrase(list))} dispatches below and start the packing process.</p>`
+      + `<p><b>No packing slip is required for this shipment. Paste the attached shipping labels only on the master cartons.</b></p>`
+      + orderTableHtml(list)
+      + `<p style="margin-top:16px;">Thanks &amp; Regards,<br/>${escapeHtml(fromName)}.</p>`
+      + `</div>`;
+  }
+
+  /* ---- Drive attachments: shipping label ({PO}.pdf) + appointment letter ({ApptID}.pdf) ---- */
+  async function collectDriveAttachments(orders) {
+    const atts = []; const missing = []; const seen = new Set();
+    for (const o of orders) {
+      const po = String(o.po || '').trim();
+      const appt = String(o.appointmentId || '').trim();
+      if (po && !seen.has(`L:${po.toUpperCase()}`)) {
+        const buf = await driveApi.findPdfByName(google.drive, cfg.LABEL_DRIVE_FOLDER, po);
+        if (buf) { atts.push({ filename: `Label_${po}.pdf`, contentType: 'application/pdf', buffer: buf }); seen.add(`L:${po.toUpperCase()}`); }
+        else missing.push(`shipping label for PO ${po}`);
+      }
+      if (!appt) missing.push(`no appointment ID on the sheet for ${o.so}`);
+      else if (!seen.has(`A:${appt.toUpperCase()}`)) {
+        const buf = await driveApi.findPdfByName(google.drive, cfg.APPOINTMENT_DRIVE_FOLDER, appt);
+        if (buf) { atts.push({ filename: `Appt_${appt}.pdf`, contentType: 'application/pdf', buffer: buf }); seen.add(`A:${appt.toUpperCase()}`); }
+        else missing.push(`appointment letter ${appt}`);
+      }
+    }
+    return { atts, missing };
+  }
+
+  /* ---- UC attachments: invoice PDF + e-way bill PDF ---- */
+  async function resolveInvoiceAndEway(so) {
     for (const facility of configured) {
       const d = await uc.data('/data/oms/saleorder/fetchShippingPackageDetails', { saleOrderCode: so }, { facility }).catch(orNull);
-      const sp = (d?.shippingPackages || []).find((p) => p.invoiceCode);
-      if (sp) return { invoiceCode: sp.invoiceCode, facility, ewbUrl: sp.ewayBillPdfUrl || null };
+      const sp = (d?.shippingPackages || []).find((p) => p.invoiceCode || p.ewayBillPdfUrl || p.eWayBillPdfUrl);
+      if (sp) return { invoiceCode: sp.invoiceCode || sp.invoiceDisplayCode || '', ewayUrl: sp.ewayBillPdfUrl || sp.eWayBillPdfUrl || '', facility };
     }
     return null;
   }
-
   async function downloadInvoicePdf(invoiceCode, facility) {
+    if (!invoiceCode) return null;
     const path = `/oms/invoice/show?invoiceCodes=${encodeURIComponent(invoiceCode)}&legacy=1`;
     const res = await uc.dataBinary(path, { facility }).catch(orNull);
     return res && res.contentType.includes('pdf') && res.buffer.length > 500 ? res.buffer : null;
   }
-
-  /** Build a per-warehouse Gmail draft for the given SOs. */
-  async function createDrafts(soList) {
-    if (!google) {
-      return { ok: false, error: 'Google Workspace is not connected on the server yet. Set the service account to enable packing mail.' };
+  async function downloadEwayPdf(url) {
+    if (!url) return null;
+    try {
+      const res = await fetch(String(url), { headers: { Accept: 'application/pdf,*/*', 'User-Agent': 'OpptraSCM/1.0' } });
+      if (!res.ok) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      return buf.length > 500 && buf.slice(0, 4).toString() === '%PDF' ? buf : null;
+    } catch { return null; }
+  }
+  async function collectUcAttachments(orders) {
+    const atts = []; const missing = [];
+    for (const o of orders) {
+      const inv = await resolveInvoiceAndEway(o.so);
+      if (!inv) { missing.push(`no invoice/e-way yet for ${o.so}`); continue; }
+      const invPdf = await downloadInvoicePdf(inv.invoiceCode, inv.facility);
+      if (invPdf) atts.push({ filename: `Invoice_${String(inv.invoiceCode).replace(/[^\w-]/g, '_')}.pdf`, contentType: 'application/pdf', buffer: invPdf });
+      else if (inv.invoiceCode) missing.push(`invoice PDF for ${o.so}`);
+      else missing.push(`not invoiced yet: ${o.so}`);
+      const ewbPdf = await downloadEwayPdf(inv.ewayUrl);
+      if (ewbPdf) atts.push({ filename: `EWB_${o.so}.pdf`, contentType: 'application/pdf', buffer: ewbPdf });
     }
-    const perWarehouse = new Map(); // email -> { warehouse, sos:[], attachments:[] }
-    const unresolved = [];
-
-    for (const so of soList) {
-      const inv = await resolveInvoice(so);
-      if (!inv) { unresolved.push({ so, reason: 'no invoice found' }); continue; }
-      const to = warehouseMap[inv.facility] || cfg.PACKING_DEFAULT_TO || '';
-      if (!to) { unresolved.push({ so, reason: `no warehouse email for ${inv.facility}` }); continue; }
-      if (!perWarehouse.has(to)) perWarehouse.set(to, { warehouse: inv.facility, to, sos: [], attachments: [] });
-      const group = perWarehouse.get(to);
-      group.sos.push(so);
-      const pdf = await downloadInvoicePdf(inv.invoiceCode, inv.facility);
-      if (pdf) group.attachments.push({ filename: `${inv.invoiceCode.replace(/[^\w-]/g, '_')}.pdf`, contentType: 'application/pdf', buffer: pdf });
-    }
-
-    const drafts = [];
-    for (const g of perWarehouse.values()) {
-      const subject = `Packing - ${g.sos.length} order(s): ${g.sos.slice(0, 6).join(', ')}${g.sos.length > 6 ? '…' : ''}`;
-      const htmlBody = `<p>Hi ${escapeHtml(g.warehouse)} team,</p>
-        <p>Please pack the following ${g.sos.length} order(s). Invoices attached.</p>
-        <ul>${g.sos.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
-        <p>- Opptra Supply Chain</p>`;
-      const res = await gmailApi.createDraft(google.gmail, {
-        to: g.to, from: sender ? `Opptra Supply Chain <${sender}>` : undefined,
-        subject, htmlBody, attachments: g.attachments,
-      });
-      drafts.push({ warehouse: g.warehouse, to: g.to, sos: g.sos, attachmentCount: g.attachments.length, draftId: res?.data?.id || null });
-    }
-
-    return { ok: unresolved.length === 0, draftCount: drafts.length, drafts, unresolved };
+    return { atts, missing };
   }
 
-  return { createDrafts, resolveInvoice, _buildRawMessage: buildRawMessage };
+  async function resolveOrderGroups(soList, recipientsByWh = {}) {
+    const sheetRows = await loadSheetRows(soList);
+    const unresolved = [];
+    const rows = [];
+    for (const so of soList) {
+      const row = sheetRows.get(soNorm(so));
+      if (!row) { unresolved.push({ so, reason: 'not found on the B2B sheet - run Sheet Update first' }); continue; }
+      rows.push(row);
+    }
+    const directory = await warehouseDirectory();
+    const groups = [...groupByWarehouse(rows).values()].map((g) => applyRecipients(g, directory, recipientsByWh));
+    for (const g of groups) {
+      if (!g.to.length) {
+        g.orders.forEach((o) => unresolved.push({
+          so: o.so,
+          reason: `no warehouse email for ${g.warehouse} - add it on the warehouse-email sheet`,
+        }));
+      }
+    }
+    return { groups: groups.filter((g) => g.to.length), unresolved, directory };
+  }
+
+  /* ============================ STEP 0: preview for recipient picker ============================ */
+  async function previewGroups(soList) {
+    if (!google?.sheets) {
+      return { ok: false, error: 'Google Sheets is not available. An admin must connect shared Workspace (Admin → Google), or connect your own Gmail first.' };
+    }
+    if (!cfg.WAREHOUSE_EMAIL_SHEET_ID) {
+      return { ok: false, error: 'WAREHOUSE_EMAIL_SHEET_ID is not set - point it at the warehouse To/CC sheet.' };
+    }
+    const { groups, unresolved, directory } = await resolveOrderGroups(soList);
+    return {
+      ok: unresolved.length === 0 && groups.length > 0,
+      groups: groups.map((g) => ({
+        warehouse: g.warehouse,
+        sos: g.orders.map((o) => o.so),
+        shortCode: g.shortCode,
+        contact: g.contact,
+        // Defaults the UI pre-ticks: all To + all CC. Finance is offered but off by default.
+        selectedTo: g.to,
+        selectedCc: g.cc,
+        options: g.options || { to: g.to, cc: g.cc, finance: [] },
+      })),
+      unresolved,
+      directoryCount: Object.keys(directory).length,
+      sender: sender || null,
+    };
+  }
+
+  /* ============================ STEP 1: packing drafts ============================ */
+  async function createDrafts(soList, { recipients = {} } = {}) {
+    const blocked = gmailRequired();
+    if (blocked) return blocked;
+    if (!google?.sheets) return { ok: false, error: 'Google Sheets is not available for warehouse lookup.' };
+    const { groups, unresolved } = await resolveOrderGroups(soList, recipients);
+
+    const drafts = [];
+    for (const g of groups) {
+      const { atts, missing } = await collectDriveAttachments(g.orders);
+      const subject = `Consignment Packing & Readiness - ${marketplaceLabel(g.orders)} - ${istToday()} ${g.shortCode}`;
+      const res = await gmailApi.createDraft(google.gmail, {
+        to: g.to, cc: g.cc, from: sender ? `${fromName} <${sender}>` : undefined,
+        subject, htmlBody: buildOrderTableHtml(g.contact, g.orders), attachments: atts,
+      });
+      const draftId = res?.data?.id || null;
+      const threadId = res?.data?.message?.threadId || null;
+      await saveThread({ warehouse: g.warehouse, toEmail: g.to.join(', '), subject, threadId }).catch(() => {});
+      drafts.push({
+        warehouse: g.warehouse, to: g.to.join(', '), cc: g.cc.join(', '),
+        sos: g.orders.map((o) => o.so), attachmentCount: atts.length,
+        missing, subject, draftId, from: sender || null,
+        viewUrl: threadId ? `https://mail.google.com/mail/?authuser=${encodeURIComponent(sender)}#drafts/${threadId}` : null,
+      });
+    }
+    return { ok: unresolved.length === 0, draftCount: drafts.length, drafts, unresolved, from: sender || null };
+  }
+
+  /* ==================== STEP 2: invoice + e-way DRAFT into same thread ==================== */
+  async function sendInvoiceEway(soList, { recipients = {} } = {}) {
+    const blocked = gmailRequired();
+    if (blocked) return blocked;
+    const sheetRows = await loadSheetRows(soList);
+    const unresolved = [];
+    const rows = [];
+    for (const so of soList) {
+      const row = sheetRows.get(soNorm(so)) || { so, warehouse: '', po: '', appointmentId: '' };
+      rows.push(row);
+    }
+    const directory = await warehouseDirectory();
+    const groups = [...groupByWarehouse(rows).values()]
+      .map((g) => applyRecipients(g, directory, recipients))
+      .filter((g) => {
+        if (g.to.length) return true;
+        g.orders.forEach((o) => unresolved.push({ so: o.so, reason: `no warehouse email for ${g.warehouse}` }));
+        return false;
+      });
+
+    const drafts = [];
+    for (const g of groups) {
+      const { atts, missing } = await collectUcAttachments(g.orders);
+      if (!atts.length) {
+        g.orders.forEach((o) => unresolved.push({ so: o.so, reason: missing.join('; ') || 'no invoice or e-way bill ready yet' }));
+        continue;
+      }
+      const thread = await latestThreadFor(g.warehouse).catch(() => null);
+      const subject = thread?.subject || `Consignment Packing & Readiness - ${marketplaceLabel(g.orders)} - ${istToday()} ${g.shortCode}`;
+      const htmlBody = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#222;">`
+        + `<p>Hi ${escapeHtml(g.contact)},</p>`
+        + `<p>Please find attached the tax invoice(s) and e-way bill(s) for the dispatches below.</p>`
+        + orderTableHtml(g.orders)
+        + `<p style="margin-top:16px;">Thanks &amp; Regards,<br/>${escapeHtml(fromName)}.</p>`
+        + `</div>`;
+      const res = await gmailApi.createDraft(google.gmail, {
+        to: g.to, cc: g.cc, from: sender ? `${fromName} <${sender}>` : undefined, subject, htmlBody, attachments: atts,
+      }, { threadId: thread?.thread_id });
+      const draftId = res?.data?.id || null;
+      const threadId = res?.data?.message?.threadId || null;
+      drafts.push({
+        warehouse: g.warehouse, to: g.to.join(', '), cc: g.cc.join(', '),
+        sos: g.orders.map((o) => o.so),
+        attachmentCount: atts.length, missing, subject, draftId, threaded: !!thread,
+        from: sender || null,
+        viewUrl: threadId ? `https://mail.google.com/mail/?authuser=${encodeURIComponent(sender)}#drafts/${threadId}` : null,
+      });
+    }
+    return { ok: unresolved.length === 0 && drafts.length > 0, draftCount: drafts.length, drafts, unresolved, from: sender || null };
+  }
+
+  /** Dispatch a draft created by either step, after the operator has viewed it. */
+  async function sendDraft(draftId) {
+    const blocked = gmailRequired();
+    if (blocked) return blocked;
+    if (!draftId) return { ok: false, error: 'draftId is required' };
+    await gmailApi.sendDraft(google.gmail, draftId);
+    return { ok: true, draftId, from: sender || null };
+  }
+
+  return { previewGroups, createDrafts, sendInvoiceEway, sendDraft, _buildRawMessage: buildRawMessage };
 }
 
-function parseMap(v) {
-  if (!v) return {};
-  try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return {}; }
-}
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
