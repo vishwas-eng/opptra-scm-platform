@@ -31,7 +31,9 @@ export async function migrate(migrationsDir, fsMod, pathMod) {
   const path = pathMod || (await import('node:path'));
   await query(`CREATE TABLE IF NOT EXISTS _migrations (
     name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-  const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
+  // Exclude dotfiles - macOS tar embeds AppleDouble metadata as "._001_init.sql" (still
+  // ends in .sql, sorts before the real file since '.' < digits, and is binary garbage).
+  const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql') && !f.startsWith('.')).sort();
   for (const f of files) {
     const done = await query('SELECT 1 FROM _migrations WHERE name = $1', [f]);
     if (done.rowCount) continue;

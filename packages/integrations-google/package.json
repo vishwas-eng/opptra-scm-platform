@@ -6,6 +6,7 @@
   "main": "src/index.js",
   "dependencies": {
     "@opptra/core": "*",
-    "googleapis": "^144.0.0"
+    "googleapis": "^144.0.0",
+    "google-auth-library": "^9.14.0"
   }
 }

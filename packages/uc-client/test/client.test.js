@@ -116,6 +116,16 @@ test('ping(): alive on success, dead-not-thrown on session error', async () => {
   assert.equal(r.alive, false);
 });
 
+test('listFacilities(): returns the real account facility list, never a hardcoded guess', async () => {
+  const client = makeClient(async () => jsonRes({
+    currentFacilityCode: 'AMAZON_FBA_AMD2_GJ',
+    facilityDTOList: [{ code: 'AMAZON_FBA_AMD2_GJ' }, { code: 'Opp_RSG_MH' }, { code: 'Opp_WIQ_MH_1' }],
+  }));
+  const { all, current } = await client.listFacilities();
+  assert.equal(current, 'AMAZON_FBA_AMD2_GJ');
+  assert.deepEqual(all, ['AMAZON_FBA_AMD2_GJ', 'Opp_RSG_MH', 'Opp_WIQ_MH_1']);
+});
+
 test('Mutex: preserves order and survives rejections', async () => {
   const m = new Mutex();
   const order = [];

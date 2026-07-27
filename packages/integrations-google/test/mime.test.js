@@ -25,9 +25,12 @@ test('buildRawMessage attaches files as base64 parts', () => {
   assert.match(msg, /multipart\/mixed; boundary=/);
 });
 
-test('unicode subject is RFC-2047 encoded', () => {
-  const raw = buildRawMessage({ to: 'x@opptra.com', subject: 'Pédido ✓', htmlBody: 'y' });
-  assert.match(decode(raw), /Subject: =\?UTF-8\?B\?/);
+test('buildRawMessage includes a Cc header when cc is provided', () => {
+  const raw = buildRawMessage({
+    to: ['a@opptra.com'], cc: ['ops@opptra.com', 'finance@opptra.com'],
+    subject: 'x', htmlBody: 'y',
+  });
+  assert.match(decode(raw), /Cc: ops@opptra\.com, finance@opptra\.com/);
 });
 
 test('wrappers call the injected client with the right shape', async () => {

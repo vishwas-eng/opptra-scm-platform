@@ -8,17 +8,20 @@ function b64url(buf) {
 /**
  * @param {object} m
  * @param {string|string[]} m.to
+ * @param {string|string[]} [m.cc]
  * @param {string}  [m.from]     display From (delegated sender)
  * @param {string}  m.subject
  * @param {string}  m.htmlBody
  * @param {Array<{filename:string, contentType:string, buffer:Buffer}>} [m.attachments]
  * @returns {string} base64url raw message for gmail.users.messages/drafts
  */
-export function buildRawMessage({ to, from, subject, htmlBody, attachments = [] }) {
+export function buildRawMessage({ to, cc, from, subject, htmlBody, attachments = [] }) {
   const toHeader = Array.isArray(to) ? to.join(', ') : to;
+  const ccHeader = !cc ? '' : (Array.isArray(cc) ? cc.filter(Boolean).join(', ') : String(cc));
   const boundary = 'opptra_' + Buffer.from(subject + toHeader).toString('hex').slice(0, 16);
   const headers = [
     `To: ${toHeader}`,
+    ccHeader ? `Cc: ${ccHeader}` : null,
     from ? `From: ${from}` : null,
     `Subject: ${encodeHeader(subject)}`,
     'MIME-Version: 1.0',

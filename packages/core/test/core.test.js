@@ -86,3 +86,21 @@ test('config booleans: "false"/"0" turn a flag OFF (not coerced to true)', async
   assert.equal(read('true'), 'true', '"true" must be ON');
   assert.equal(read('1'), 'true', '"1" must be ON');
 });
+
+test('migrate: ignores dotfiles (macOS tar AppleDouble "._foo.sql" garbage), applies the real one', async () => {
+  const REAL = '999_regress_dotfile.sql';
+  const GARBAGE = `._${REAL}`; // still ends in .sql, sorts before REAL - the actual bug
+  const fakeFs = {
+    readdirSync: () => [GARBAGE, REAL],
+    readFileSync: (p) => {
+      if (p.endsWith(GARBAGE)) throw new Error('migrate() must never read the dotfile');
+      return 'CREATE TABLE IF NOT EXISTS _regress_dotfile_probe (id int);';
+    },
+  };
+  const fakePath = { join: (dir, f) => `${dir}/${f}` };
+  await core.migrate('/fake/migrations', fakeFs, fakePath);
+  const applied = await core.query('SELECT 1 FROM _migrations WHERE name = $1', [REAL]);
+  assert.equal(applied.rowCount, 1, 'the real migration ran');
+  const skipped = await core.query('SELECT 1 FROM _migrations WHERE name = $1', [GARBAGE]);
+  assert.equal(skipped.rowCount, 0, 'the AppleDouble file was never recorded as applied');
+});

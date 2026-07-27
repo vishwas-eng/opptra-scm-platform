@@ -1,11 +1,22 @@
 // ASN compile - ported from b2b AsnFill.gs (SO-only path, the reliable one).
 //   1. hop facilities → POST /data/oms/saleorder/fetch { code }  (RSG first - many Myntra B2B SOs live there)
-//   2. map saleOrderItems → rows (this SO only)
-//   3. write the channel file (Flipkart/Myntra XLSX · Zepto CSV)
+//   2. detect the marketplace from the SO's own UC channel (asnChannelFamily_) - the
+//      operator never picks it, so a Zepto SO can't be compiled into a Flipkart file
+//   3. map saleOrderItems → rows (this SO only)
+//   4. write the channel file (Flipkart/Myntra XLSX · Zepto CSV)
 import { rowsFromSaleOrderDto, poFromDto } from './rows.js';
 import { writeFlipkart, writeMyntra, writeZepto } from './writers.js';
 
 const DEFAULT_FACILITIES = ['Opp_RSG_MH', 'Opp_WIQ_MH_1', 'Opp_BSB_HR_1P', 'Opp_WIQ_KA', 'Opp_WIQ_HR'];
+
+// Port of asnChannelFamily_: UC channel code (e.g. "MYNTRA_B2B") → output file family.
+export function channelFamily(ch) {
+  const u = String(ch || '').toUpperCase();
+  if (u.includes('MYNTRA')) return 'myntra';
+  if (u.includes('ZEPTO')) return 'zepto';
+  if (u.includes('FLIPKART')) return 'flipkart';
+  return '';
+}
 
 export function makeAsnPipeline(uc, cfg = {}) {
   // RSG first, then the configured/default facilities (deduped).
@@ -23,12 +34,20 @@ export function makeAsnPipeline(uc, cfg = {}) {
     return null;
   }
 
-  async function compile(so, channel) {
-    const ch = String(channel || 'flipkart').toLowerCase().trim();
-    if (!['flipkart', 'myntra', 'zepto'].includes(ch)) throw new Error(`unsupported channel: ${channel}`);
-
+  async function compile(so, channelOverride) {
     const found = await fetchSoDto(so);
     if (!found) return { ok: false, error: `SO ${so} not found (or not invoiced) in any facility` };
+
+    const ucChannel = found.dto.channel || found.dto.channelCode || '';
+    const ch = String(channelOverride || '').toLowerCase().trim() || channelFamily(ucChannel);
+    if (!['flipkart', 'myntra', 'zepto'].includes(ch)) {
+      const isAmazon = /AMAZON|COCOBLU/i.test(ucChannel);
+      return {
+        ok: false,
+        error: `SO ${so} is a ${ucChannel || 'unknown-channel'} order. ASN files exist only for Flipkart, Myntra, and Zepto.`
+          + (isAmazon ? ' Amazon orders use the Packing Mail flow instead (labels + appointment letters).' : ''),
+      };
+    }
 
     const rows = rowsFromSaleOrderDto(found.dto, so);
     if (!rows.length) return { ok: false, error: `SO ${so}: no line items with qty > 0` };

@@ -56,11 +56,29 @@ test('pipeline hops facilities, compiles, returns base64 file', async () => {
   assert.equal(r.channel, 'zepto');
 });
 
-test('pipeline rejects unknown channel and missing SO', async () => {
+test('pipeline auto-detects the marketplace from the SO channel (no manual pick)', async () => {
+  const uc = { async data() { return { saleOrderDTO: dto }; } }; // dto.channel = Myntra_B2B
+  const { compile } = makeAsnPipeline(uc, {});
+  const r = await compile('SO02696'); // no channel passed
+  assert.equal(r.ok, true);
+  assert.equal(r.channel, 'myntra', 'detected from the SO, not chosen by the operator');
+  assert.ok(r.file.filename.startsWith('Myntra_ASN_'));
+});
+
+test('pipeline refuses an SO on a channel with no ASN format, naming the channel', async () => {
+  const amazonDto = { ...dto, channel: 'AMAZON_B2B' };
+  const uc = { async data() { return { saleOrderDTO: amazonDto }; } };
+  const { compile } = makeAsnPipeline(uc, {});
+  const r = await compile('SO02696');
+  assert.equal(r.ok, false);
+  assert.match(r.error, /AMAZON_B2B/);
+  assert.match(r.error, /Flipkart, Myntra, and Zepto/);
+});
+
+test('pipeline reports missing SO clearly', async () => {
   const uc = { async data() { return { shippingPackages: [] }; } };
   const { compile } = makeAsnPipeline(uc, {});
-  await assert.rejects(() => compile('SO1', 'amazon'), /unsupported channel/);
-  const r = await compile('SO_NOPE', 'flipkart');
+  const r = await compile('SO_NOPE');
   assert.equal(r.ok, false);
   assert.match(r.error, /not found/);
 });

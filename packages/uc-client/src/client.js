@@ -143,6 +143,15 @@ export class UcClient {
     this.#currentFacility = code;
   }
 
+  /** The account's real facility list, fetched live - never a hardcoded guess. Facility
+   *  naming conventions vary and change (e.g. new fulfillment centers), so any pipeline
+   *  that hops facilities should call this instead of maintaining its own static array. */
+  async listFacilities() {
+    const d = await this.dataGet('/data/user/facilities');
+    const all = (d?.facilityDTOList || []).map((f) => f.code).filter(Boolean);
+    return { all, current: d?.currentFacilityCode || null };
+  }
+
   /* ---------------- health ---------------- */
   /** Cheap probe used by keep-alive; also verifies + records session liveness. */
   async ping() {

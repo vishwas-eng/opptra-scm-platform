@@ -57,6 +57,9 @@ const Env = z.object({
   // --- Human auth (Google SSO) ---
   // Optional in dev (dev-login is used); the one-click deploy checks it is set for prod.
   GOOGLE_CLIENT_ID: z.string().default(''),
+  // Needed only for the OAuth-consent Gmail/Sheets fallback (an admin authorizes once via
+  // /auth/google/connect) - the Sign-In-with-Google login flow above never needs this.
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().default(''),
   ALLOWED_DOMAIN: z.string().default('opptra.com'),
   ADMIN_EMAILS: z.string().default(''), // comma-separated; bootstrap admins
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 chars'),
@@ -66,17 +69,38 @@ const Env = z.object({
   // --- Google Workspace (packing-mail / sheet-update / reports-digest) ---
   // Base64 of the service-account key JSON + the Workspace user to impersonate.
   // Empty until domain-wide delegation is provisioned; those automations stay disabled.
-  GOOGLE_SA_KEY_JSON: z.string().default(''),
+  GOOGLE_SA_KEY_JSON: z.string().default(''), // classic path - blocked by org policy in opptra-applications
+  GOOGLE_SA_EMAIL: z.string().default(''), // keyless path (default) - see integrations-google/src/index.js
   GOOGLE_DELEGATED_USER: z.string().default(''),
-  MASTER_SHEET_ID: z.string().default(''),
-  // Packing mail: JSON map of facility code → warehouse email, + a fallback recipient.
+  // The working copy the platform owns (b2b-india-automation, already seeded from the
+  // read-only source "B2B-VIEW-INDIA" sheet). Never point this at the source sheet.
+  MASTER_SHEET_ID: z.string().default('1NdvqZ86ZquaSw1umyngeaXE_gVEM763TpuQw1mgngoQ'),
+  // Packing mail: warehouse To/CC/Finance come from this Google Sheet (never hardcoded).
+  // Share the sheet with GOOGLE_DELEGATED_USER. Layout: Warehouse Name | To | To | To | CC | CC | Finance
+  WAREHOUSE_EMAIL_SHEET_ID: z.string().default('18vvm7Qem_f0qOrWQ6GGT6Mon-DxdhQjXOIZDgrGY4hA'),
+  WAREHOUSE_EMAIL_TAB: z.string().default(''), // empty = first tab
+  // Legacy JSON override kept only as a last-resort fallback in older deploys; prefer the sheet.
   WAREHOUSE_MAP: z.string().default('{}'),
   PACKING_DEFAULT_TO: z.string().default(''),
-  // Sheet update (A1): Waypoint export API + Master sheet layout.
-  WAYPOINT_BASE_URL: z.string().default(''),
-  WAYPOINT_COOKIE: z.string().default(''),
+  MAIL_FROM_NAME: z.string().default('SupplyChainAuto'),
+  // Drive folders the ops team drops Amazon shipping labels ({PO}.pdf) and appointment
+  // letters ({AppointmentID}.pdf) into - same folders the legacy Mailer.gs used.
+  LABEL_DRIVE_FOLDER: z.string().default('19AVUm0xi2dYKAQ5ldyFG0q0bT-285o2E'),
+  APPOINTMENT_DRIVE_FOLDER: z.string().default('1Qp-p1pd8YySXQpZkwciXAsAA5oH7c_VH'),
+  // The READ-ONLY ops source sheet ("B2B-VIEW-INDIA") our working copy was seeded from.
+  // syncFromSource pulls orders that exist there but not on our Master (add-missing-only,
+  // never updates existing rows - that would clobber second-fill enrichments).
+  SOURCE_SHEET_ID: z.string().default('1w5oEbhURFs3avukt3BpMHgQTZFQmUE7EDRXc6D2zi7Y'),
+  SOURCE_MASTER_TAB: z.string().default('MasterSheet'),
+  SHEET_SYNC_MINUTES: z.coerce.number().int().min(0).max(1440).default(60), // 0 disables the schedule
+  // Sheet update (A1): Waypoint's own Neon Postgres (read-only) is the primary source for
+  // first-fill - direct SQL, no session/cookie to keep alive. The CSV export below is kept
+  // only as a fallback if the DB isn't reachable.
+  WAYPOINT_DB_URL: z.string().default(''),
+  WAYPOINT_BASE_URL: z.string().default('https://opptra-so-tracker.vercel.app'),
+  WAYPOINT_COOKIE: z.string().default(''), // cookie only - no scripted login for Waypoint yet
   MASTER_TAB: z.string().default('Master'),
-  MASTER_SO_COL: z.string().default('A'),
+  SHEET_ENRICH_MAX_SOS: z.coerce.number().int().min(1).max(2000).default(200),
 
   // --- Vinculum (Home Centre sync) ---
   VINCULUM_BASE_URL: z.string().default(''),
