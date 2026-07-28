@@ -130,11 +130,72 @@ test('step 1: multiple SOs across warehouses -> one draft per warehouse', async 
   assert.deepEqual(r.drafts.map((d) => d.warehouse).sort(), ['Opp_RSG_MH', 'Opp_WIQ_MH_1']);
 });
 
-test('step 1: an SO not on the sheet is reported, not silently dropped', async () => {
+// A UC mock reproducing the asymmetry the warehouse lookup rests on: fetchSummary answers
+// for any SO from any facility, while saleorder/fetch succeeds only at the facility that
+// owns the order.
+function ucOrderMock(orders = {}) {
+  const norm = (s) => String(s || '').toUpperCase().replace(/[\s_-]/g, '');
+  return {
+    listFacilities: async () => ({ all: ['Opp_RSG_MH', 'Opp_WIQ_MH_1'], current: 'Opp_RSG_MH' }),
+    data: async (path, body = {}, opts = {}) => {
+      const o = orders[norm(body.code)];
+      if (path.endsWith('/saleorder/fetchSummary')) {
+        if (!o) return { successful: true };
+        return {
+          saleOrderSummary: {
+            code: o.code, status: o.status || 'CREATED', channel: o.channel,
+            totalPrice: o.value, saleOrderItemCount: o.units,
+            shippingAddress: { city: o.city },
+            customFieldValues: [{ fieldName: 'PO', fieldValue: o.po || null }],
+          },
+        };
+      }
+      if (path.endsWith('/saleorder/fetch')) {
+        if (!o || o.facility !== opts.facility) return { successful: false };
+        return { successful: true, saleOrderDTO: { code: o.code, saleOrderItems: [{ facilityCode: o.facility }] } };
+      }
+      return {};
+    },
+  };
+}
+
+// The sheet lags reality: an order Waypoint has not published is on no tab, so no first
+// fill could have written it. Ops still need to mail its warehouse, and UC knows which one
+// - so the draft gets built instead of dead-ending on "run Sheet Update first".
+test('step 1: an SO missing from the sheet takes its warehouse from Unicommerce', async () => {
+  const { google, capturedDrafts } = googleMock({ rows: [], driveHas: () => true });
+  const uc = ucOrderMock({
+    SO9: { code: 'SO9', facility: 'Opp_WIQ_MH_1', channel: 'RELIANCE_AJIO_SOR_B2B', po: '5179275981', units: 603, value: 80931, city: 'Tumkur' },
+  });
+  const r = await pipeOf(uc, google).createDrafts(['SO9']);
+  assert.equal(r.ok, true);
+  assert.equal(r.draftCount, 1);
+  assert.equal(r.drafts[0].warehouse, 'Opp_WIQ_MH_1');
+  assert.equal(r.drafts[0].to, 'akshay.madhavi@wareiq.com', 'and the directory still supplies the recipients');
+  const body = rawOf(capturedDrafts[0]);
+  assert.match(body, /Reliance Ajio/, 'the channel is readable in the order table');
+  assert.match(body, /5179275981/);
+  assert.match(body, /Tumkur/);
+});
+
+test('step 1: an SO on neither the sheet nor Unicommerce is reported, not silently dropped', async () => {
   const { google } = googleMock({ rows: [], driveHas: () => true });
-  const r = await pipeOf({}, google).createDrafts(['SOX']);
+  const r = await pipeOf(ucOrderMock({}), google).createDrafts(['SOX']);
   assert.equal(r.ok, false);
-  assert.match(r.unresolved[0].reason, /not found on the B2B sheet/);
+  assert.match(r.unresolved[0].reason, /no warehouse for it/);
+});
+
+// A row that exists but has an empty warehouse cell used to group under UNKNOWN, which has
+// no email - visibly on the sheet, yet unmailable.
+test('step 1: a sheet row with a blank warehouse is topped up from Unicommerce', async () => {
+  const { google } = googleMock({
+    rows: [sheetRow({ so: 'SO7', wh: '', po: 'P7', appt: 'A7' })],
+    driveHas: () => true,
+  });
+  const uc = ucOrderMock({ SO7: { code: 'SO7', facility: 'Opp_RSG_MH', channel: 'AMAZON_B2B', po: 'P7' } });
+  const r = await pipeOf(uc, google).createDrafts(['SO7']);
+  assert.equal(r.draftCount, 1);
+  assert.equal(r.drafts[0].warehouse, 'Opp_RSG_MH');
 });
 
 test('step 1: warehouse with no directory entry is reported clearly', async () => {

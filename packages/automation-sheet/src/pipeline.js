@@ -4,11 +4,15 @@
 //   first-fill  : ALL Waypoint orders - every status, no view filter - are looked up
 //                 against our MASTER tab; anything Master does not have yet (and that is
 //                 not already on a date tab) lands on TODAY'S date tab. Date tabs are
-//                 permanent - never cleared.
-//   second-fill : give it SO numbers and each one is found in the first-fill rows and
-//                 topped up with its Unicommerce invoice data (invoice, tracking,
-//                 transporter, status, destination). With no SO numbers it sweeps the
-//                 date tabs for rows still missing an invoice. Master is never patched.
+//                 permanent - never cleared. Typed SO numbers are additive on top of the
+//                 sweep and come straight from Unicommerce, warehouse included, which is
+//                 how an order Waypoint has not published yet still reaches the sheet.
+//   second-fill : give it SO numbers and each one is topped up with its Unicommerce
+//                 invoice data (invoice, tracking, transporter, status, destination). An SO
+//                 on no date tab is FIRST FILLED from Unicommerce onto a fresh date tab and
+//                 then enriched, so it never depends on the first fill having been run by
+//                 hand. With no SO numbers it sweeps the date tabs for rows still missing an
+//                 invoice. Master is never patched.
 //   push        : manual action - copy today's tabs into our Master (dedup by SO).
 //   sync-source : hourly + button - our Master is rewritten as an EXACT replica of the
 //                 source B2B View MasterSheet (banner/headers kept; data block replaced).
@@ -17,6 +21,7 @@
 // Sheet layout facts: row 1 banner, row 2 headers, data from row 3; columns are
 // found by header NAME, never position. Google Sheets client is INJECTED.
 import { sheetsApi, a1 } from '@opptra/integrations-google';
+import { makeUcOrderLookup } from '@opptra/uc-client';
 import {
   HEADER_ROW, DATA_START_ROW, SO_HEADER,
   getHeaderMap, soColumnIndex, colLetter, objectToRow,
@@ -51,6 +56,34 @@ function parseSoInput(input = {}) {
   return out;
 }
 
+// Opp_BSB_HR_1P -> BSB. The warehouse code carries the brand it ships for, and for an
+// operator-typed SO it is the only brand signal Unicommerce offers (UC knows channels and
+// SKUs, not our brand column). Ops can correct the cell; a derived brand beats a blank.
+const brandFromFacility = (facility) => {
+  const parts = String(facility || '').split('_').filter(Boolean);
+  return parts.length > 1 ? parts[1] : '';
+};
+
+// A Unicommerce order rendered in the shape a Waypoint export row has, so an
+// operator-typed SO goes through the SAME phase1Mapper as the Waypoint sweep. One mapper
+// means one set of marketplace/status/date conventions - not a second dialect of
+// first-fill row that drifts from the first.
+export function ucOrderToWaypointRow(o) {
+  return {
+    'SO Code': o.so || '',
+    'PO Code': o.po || '',
+    Marketplace: o.channel || '',
+    'Brand(s)': brandFromFacility(o.facility),
+    Warehouse: o.facility || '',
+    'Ship-to City': o.city || '',
+    'Total Units': o.units || '',
+    'SO Value': o.value || '',
+    'Created Date': o.orderedAt || '',
+    'SO Status': o.status || '',
+    'Appt ID': o.appointmentId || '',
+  };
+}
+
 const DEFAULT_FACILITIES = ['Opp_RSG_MH', 'Opp_WIQ_MH_1', 'Opp_BSB_HR_1P', 'Opp_WIQ_KA', 'Opp_WIQ_HR'];
 const INVOICE_HEADERS = ['Invoice/Consignment Note', 'Invoice'];
 const DATE_TAB_RE = /^\d{2}-[A-Za-z]{3}-\d{4}(_\d+)?$/;
@@ -58,11 +91,15 @@ const DATE_TAB_RE = /^\d{2}-[A-Za-z]{3}-\d{4}(_\d+)?$/;
 export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
   const fetchWaypointSOs = deps.fetchSOsFromNeon || deps.fetchCreatedSOsFromNeon || fetchSOsFromNeon;
   const sheetId = cfg.MASTER_SHEET_ID;
-  const masterTab = cfg.MASTER_TAB || 'Master';
+  let masterTab = cfg.MASTER_TAB || 'Master';
   const sourceId = cfg.SOURCE_SHEET_ID;
   const sourceTab = cfg.SOURCE_MASTER_TAB || 'MasterSheet';
   const facilities = [...new Set([...DEFAULT_FACILITIES, ...String(cfg.UC_ASN_FACILITIES || '').split(',').map((s) => s.trim()).filter(Boolean)])];
   const maxSos = cfg.SHEET_ENRICH_MAX_SOS || 200;
+  // Resolves an SO straight from Unicommerce (fields + pickup warehouse) for orders
+  // Waypoint has not published yet. Shared by both fills so one facility hop per SO is
+  // reused across them.
+  const ucOrders = deps.ucOrders || makeUcOrderLookup(uc, { preferFacilities: facilities });
 
   const notReady = () => {
     if (!google) return 'Google Sheets is not connected on the server yet.';
@@ -71,6 +108,50 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
   };
   const notReadyForFirstFill = () => notReady()
     || (!cfg.WAYPOINT_DB_URL && !cfg.WAYPOINT_BASE_URL ? 'Waypoint is not configured (need WAYPOINT_DB_URL or WAYPOINT_BASE_URL).' : null);
+
+  /* ---------------------- the master tab, as ops keeps it ---------------------- */
+  // Ops renames this tab. It was recently rebuilt as an IMPORTRANGE mirror named Master_IR
+  // and then renamed back to Master, and while the configured name did not exist EVERY fill
+  // died on "Could not read Master". A tab rename should not take the automation down, so
+  // the configured name is a preference and these are the names we accept in its place.
+  const MASTER_TAB_CANDIDATES = ['Master_IR', 'Master', 'MasterSheet'];
+  let masterResolved = false;
+  async function resolveMasterTab() {
+    if (masterResolved) return masterTab;
+    try {
+      const tabs = await sheetsApi.listTabs(google.sheets, sheetId);
+      if (!tabs.includes(masterTab)) {
+        const alt = [cfg.MASTER_TAB, ...MASTER_TAB_CANDIDATES].find((t) => t && tabs.includes(t));
+        if (alt) masterTab = alt;
+      }
+      masterResolved = true;
+    } catch { /* leave the configured name; the caller reports the read failure */ }
+    return masterTab;
+  }
+
+  // Is the master tab a live IMPORTRANGE mirror of the ops source? Ops switched it to one
+  // so that it refreshes itself, and that changes what we may do with it: everything from
+  // A1 down is ONE spilled formula result, so writing any cell inside it replaces the
+  // formula with #REF! and kills the mirror for everybody. The actions that used to write
+  // to Master have to refuse rather than "succeed" by destroying the refresh.
+  let mirrorCache;
+  async function masterIsMirror() {
+    if (mirrorCache !== undefined) return mirrorCache;
+    try {
+      const cells = await sheetsApi.readFormulas(google.sheets, sheetId, a1(masterTab, 'A1:D3'));
+      mirrorCache = cells.flat().some((c) => /IMPORTRANGE\s*\(/i.test(String(c ?? '')));
+    } catch { mirrorCache = false; }
+    return mirrorCache;
+  }
+  const mirrorRefusal = (action) => ({
+    ok: false,
+    mirror: true, // lets the scheduled sync log "nothing to do" instead of an error
+
+    error: `"${masterTab}" is a live IMPORTRANGE mirror of the source sheet, so ${action} is not needed `
+      + 'and would break it: the tab is one spilled formula, and writing into it replaces that formula '
+      + 'with #REF! and stops the auto-refresh. Master keeps itself in sync now. To get date-tab rows '
+      + 'into Master, paste them into the SOURCE sheet - the mirror brings them back on its own.',
+  });
 
   /* ------------------------------ sheet reads ------------------------------ */
   async function readSheet(tab, spreadsheetId = sheetId) {
@@ -84,6 +165,22 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
     const obj = {};
     for (const [header, col] of Object.entries(headerMap)) obj[header] = row[col - 1] ?? '';
     return obj;
+  }
+
+  // Master's SO numbers only. It is a ~29k-row mirror of the whole ops sheet, and the fill
+  // needs exactly one column of it, so read that column rather than dragging ~2M cells over
+  // the wire on every run.
+  async function masterSoKeys() {
+    const header = await sheetsApi.read(google.sheets, sheetId, a1(masterTab, `A${HEADER_ROW}:ZZ${HEADER_ROW}`));
+    const col = soColOf(masterTab, getHeaderMap(header[0] || []));
+    const letter = colLetter(col);
+    const values = await sheetsApi.read(google.sheets, sheetId, a1(masterTab, `${letter}${DATA_START_ROW}:${letter}`));
+    const keys = new Set();
+    for (const row of values) {
+      const so = String(row?.[0] ?? '').trim();
+      if (so) keys.add(soNorm(so));
+    }
+    return keys;
   }
 
   function soColOf(tab, headerMap) {
@@ -263,53 +360,28 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
     return { headerMap, soCol, dataRows: values.slice(1) };
   }
 
-  /* ------------------------------- pipeline steps ------------------------------- */
-  // First fill: EVERY Waypoint order (any status) vs our MASTER (vlookup). Anything
-  // Master does not already have (and that is not already on a date tab) lands on
-  // TODAY'S date tab. Sync-from-source is a separate button - it rewrites Master as a
-  // replica of the main B2B View sheet. First fill does not touch Master.
-  async function firstFill() {
-    const err = notReadyForFirstFill(); if (err) return { ok: false, error: err };
-
-    const waypoint = await waypointRows();
-    const phase1 = waypoint.map((r) => phase1Mapper(r, cfg)).filter((o) => o[SO_HEADER]);
-
-    // Known SOs = everything already on Master + everything already on any date tab.
-    const onMaster = new Set();
-    try {
-      const { headerMap, dataRows } = await readSheet(masterTab);
-      const col = soColOf(masterTab, headerMap);
-      dataRows.forEach((r) => { const so = String(r[col - 1] || '').trim(); if (so) onMaster.add(soNorm(so)); });
-    } catch (e) {
-      return { ok: false, error: `Could not read Master: ${String(e.message || e)}` };
+  /* --------------------- shared first-fill machinery --------------------- */
+  // Typed SOs resolved straight from Unicommerce into first-fill rows. BOTH fills go
+  // through this, so an order added by either one lands identical - same mapper, same
+  // warehouse resolution, no second dialect of first-fill row.
+  async function ucFirstFillRows(soList) {
+    const rows = [];
+    const notInUc = [];
+    for (const so of soList) {
+      const order = await ucOrders.resolveOrder(so);
+      if (!order) { notInUc.push(so); continue; }
+      rows.push(phase1Mapper(normalizeWaypointRow(ucOrderToWaypointRow(order)), cfg));
     }
+    return { rows, notInUc };
+  }
 
-    const { all: tabs, dateTabs } = await listDateTabs();
-    const onDateTabs = new Set();
-    for (const t of dateTabs) {
-      try {
-        const { headerMap, dataRows } = await readSheet(t);
-        const col = soColumnIndex(headerMap);
-        dataRows.forEach((r) => { const so = String(r[col - 1] || '').trim(); if (so) onDateTabs.add(soNorm(so)); });
-      } catch { /* a malformed tab never blocks the fill */ }
-    }
-
-    const missing = phase1.filter((o) => {
-      const key = soNorm(o[SO_HEADER]);
-      return key && !onMaster.has(key) && !onDateTabs.has(key);
-    });
-    if (!missing.length) {
-      return {
-        ok: true,
-        summary: `Everything is up to date - all ${phase1.length} Waypoint order(s) are already on Master or today's tabs.`,
-        counts: { waypoint: waypoint.length, alreadyKnown: phase1.length, written: 0, onMaster: onMaster.size },
-      };
-    }
-
-    // Target tab: today's base tab if it's fresh, else the next free _n suffix.
+  // The tab a new batch belongs on: today's base tab while it is still fresh, else the
+  // next free _n in today's family. Ops reads one tab as one batch, so a run that writes
+  // rows opens its own tab instead of mixing into one that already holds a batch.
+  async function freshDateTab(tabs) {
     const base = istToday();
     let target = base;
-    if (tabs.includes(base)) {
+    if ((tabs || []).includes(base)) {
       const { dataRows } = await readSheet(base);
       if (dataRows.some(hasContent)) {
         let n = 1;
@@ -322,11 +394,124 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
       }
     }
     await ensureDateTab(target);
+    return target;
+  }
+
+  /* ------------------------------- pipeline steps ------------------------------- */
+  // First fill: EVERY Waypoint order (any status) vs our MASTER (vlookup). Anything
+  // Master does not already have (and that is not already on a date tab) lands on
+  // TODAY'S date tab. Sync-from-source is a separate button - it rewrites Master as a
+  // replica of the main B2B View sheet. First fill does not touch Master.
+  //
+  // Typed SO numbers are ADDITIVE: the Waypoint sweep still runs, and each typed SO is
+  // resolved straight from Unicommerce on top of it. That covers the case this whole
+  // entry point exists for - an order Waypoint has not published yet, which therefore
+  // reaches neither the date tab nor (later) the packing mail's warehouse lookup.
+  async function firstFill(input = {}) {
+    const requested = parseSoInput(input);
+    // Waypoint config is only a hard requirement when it is the sole source of rows.
+    const err = requested.length ? notReady() : notReadyForFirstFill();
+    if (err) return { ok: false, error: err };
+    await resolveMasterTab();
+
+    // With typed SOs in hand a Waypoint outage must not sink the run: those SOs are the
+    // part the operator is actually waiting on, and UC serves them without Waypoint.
+    let waypoint = [];
+    let waypointError = '';
+    if (cfg.WAYPOINT_DB_URL || cfg.WAYPOINT_BASE_URL) {
+      try {
+        waypoint = await waypointRows();
+      } catch (e) {
+        if (!requested.length) throw e;
+        waypointError = String(e.message || e);
+      }
+    }
+    const phase1 = waypoint.map((r) => phase1Mapper(r, cfg)).filter((o) => o[SO_HEADER]);
+
+    const { rows: fromUc, notInUc } = await ucFirstFillRows(requested);
+
+    // Known SOs = everything already on Master + everything already on any date tab.
+    let onMaster;
+    try {
+      onMaster = await masterSoKeys();
+    } catch (e) {
+      return { ok: false, error: `Could not read "${masterTab}": ${String(e.message || e)}` };
+    }
+
+    const { all: tabs, dateTabs } = await listDateTabs();
+    const onDateTabs = new Set();
+    for (const t of dateTabs) {
+      try {
+        const { headerMap, dataRows } = await readSheet(t);
+        const col = soColumnIndex(headerMap);
+        dataRows.forEach((r) => { const so = String(r[col - 1] || '').trim(); if (so) onDateTabs.add(soNorm(so)); });
+      } catch { /* a malformed tab never blocks the fill */ }
+    }
+
+    // UC rows first: when a typed SO also appears in the Waypoint sweep, the UC row wins,
+    // because that is the one carrying the pickup warehouse we just resolved.
+    const bySo = new Map();
+    for (const o of [...fromUc, ...phase1]) {
+      const key = soNorm(o[SO_HEADER]);
+      if (key && !bySo.has(key)) bySo.set(key, o);
+    }
+    const already = new Set();
+    const missing = [...bySo.values()].filter((o) => {
+      const key = soNorm(o[SO_HEADER]);
+      if (onMaster.has(key) || onDateTabs.has(key)) { already.add(key); return false; }
+      return true;
+    });
+
+    // Anything the operator asked for by name and did NOT get is reported by name - a
+    // typed SO silently doing nothing is the failure mode that sent them here.
+    const note = () => {
+      const bits = [];
+      const dup = requested.filter((s) => already.has(soNorm(s)));
+      if (dup.length) bits.push(`already on the sheet: ${dup.join(', ')}`);
+      if (notInUc.length) bits.push(`not in Unicommerce: ${notInUc.join(', ')}`);
+      if (waypointError) bits.push(`Waypoint unavailable, typed SOs only (${waypointError})`);
+      return bits.length ? ` (${bits.join('; ')})` : '';
+    };
+    const ucDetails = fromUc.map((o) => ({
+      so: o[SO_HEADER],
+      warehouse: o['Pickup Wh Name'] || '',
+      po: o['PO / RPO / Gatepass Number'] || '',
+      marketplace: o.Marketplace || '',
+      brand: o.Brand || '',
+      qty: o['PO / RPO Quantity'] || '',
+      destCity: o['Destination City'] || '',
+      status: o['Overall Status'] || '',
+    }));
+
+    if (!missing.length) {
+      return {
+        ok: notInUc.length === 0,
+        summary: `Everything is up to date - all ${bySo.size} order(s) are already on Master or a date tab.${note()}`,
+        counts: {
+          waypoint: waypoint.length, requested: requested.length, fromUc: fromUc.length,
+          alreadyKnown: already.size, written: 0, onMaster: onMaster.size,
+        },
+        notInUc,
+        details: ucDetails,
+      };
+    }
+
+    const target = await freshDateTab(tabs);
     const result = await appendMappedRows(target, missing);
+    const typedWritten = requested.filter((s) => missing.some((o) => soNorm(o[SO_HEADER]) === soNorm(s)));
     return {
-      ok: true,
-      summary: `${result.written} new order(s) written to ${target} (all Waypoint statuses, not already on Master).`,
-      counts: { waypoint: waypoint.length, alreadyKnown: phase1.length - missing.length, written: result.written, tab: target, onMaster: onMaster.size },
+      ok: notInUc.length === 0,
+      summary: `${result.written} new order(s) written to ${target}`
+        + (requested.length
+          ? `, including ${typedWritten.length} of ${requested.length} typed SO(s)`
+          : ' (all Waypoint statuses, not already on Master)')
+        + `.${note()}`,
+      counts: {
+        waypoint: waypoint.length, requested: requested.length, fromUc: fromUc.length,
+        alreadyKnown: already.size, written: result.written, tab: target, onMaster: onMaster.size,
+      },
+      notInUc,
+      details: ucDetails,
     };
   }
 
@@ -376,31 +561,64 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
   // Second fill: enrich DATE TABS only (today's family first, then recent tabs).
   // Master is a mirror of the source and is never patched here.
   //
-  // Give it SO numbers and it does exactly those: each SO is located in the first-fill
-  // rows, and its invoice data from Unicommerce is written onto that same row - even if
-  // the row already carries an invoice, since asking for an SO by name means "refresh
-  // it". With no SO numbers it keeps the old unattended behaviour: sweep the date tabs
-  // and enrich everything still missing an invoice.
+  // Give it SO numbers and it does exactly those: each SO's invoice data from Unicommerce
+  // is written onto its first-fill row - even if that row already carries an invoice,
+  // since asking for an SO by name means "refresh it". An SO with no first-fill row gets
+  // one first, from Unicommerce, on a fresh date tab, so the second fill never depends on
+  // the first having been run by hand. With no SO numbers it keeps the old unattended
+  // behaviour: sweep the date tabs and enrich everything still missing an invoice.
   async function secondFill(input = {}) {
     const err = notReady(); if (err) return { ok: false, error: err };
+    await resolveMasterTab(); // date tabs are created from its header block
     const requested = parseSoInput(input);
     const base = istToday();
-    const { dateTabs } = await listDateTabs();
-    if (!dateTabs.length) return { ok: true, summary: 'No date tabs yet - run First fill first.', counts: { scanned: 0, enriched: 0 } };
+    const { all: tabs, dateTabs } = await listDateTabs();
+    if (!dateTabs.length && !requested.length) {
+      return { ok: true, summary: 'No date tabs yet - run First fill first.', counts: { scanned: 0, enriched: 0 } };
+    }
     const ordered = orderDateTabs(dateTabs, base);
-    const index = await indexDateTabRows(ordered, requested.length ? {} : { stopAfterPending: maxSos });
+    const index = dateTabs.length
+      ? await indexDateTabRows(ordered, requested.length ? {} : { stopAfterPending: maxSos })
+      : new Map();
 
     const notFound = [];
+    const offTabs = [];
     let candidates;
     if (requested.length) {
       candidates = [];
       for (const so of requested) {
         const hit = index.get(soNorm(so));
         if (hit) candidates.push(hit);
-        else notFound.push(so);
+        else offTabs.push(so);
       }
     } else {
       candidates = [...index.values()].filter((c) => !c.invoiced).slice(0, maxSos);
+    }
+
+    // A typed SO on no date tab used to dead-end here with "run First fill first". It no
+    // longer does: the second fill does that first fill itself, through the same shared
+    // machinery - UC resolution, and the same fresh-tab convention, so a batch created here
+    // opens its own date tab exactly as the first-fill button would. Handing over an SO
+    // number should not require knowing which fill it needs.
+    const createdRows = [];
+    let createdTab = '';
+    if (offTabs.length) {
+      const { rows, notInUc } = await ucFirstFillRows(offTabs);
+      notFound.push(...notInUc);
+      if (rows.length) {
+        createdTab = await freshDateTab(tabs);
+        await appendMappedRows(createdTab, rows);
+        for (const row of rows) {
+          createdRows.push(row[SO_HEADER]);
+          candidates.push({
+            so: row[SO_HEADER],
+            tab: createdTab,
+            invoiced: false,
+            warehouse: row['Pickup Wh Name'] || '',
+            firstFill: row,
+          });
+        }
+      }
     }
 
     const byTab = new Map();
@@ -433,9 +651,10 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
 
     const summary = (() => {
       if (requested.length) {
-        const head = `${enriched} of ${requested.length} requested SO(s) enriched on the date tabs`;
+        let head = `${enriched} of ${requested.length} requested SO(s) enriched on the date tabs`;
+        if (createdRows.length) head += `, ${createdRows.length} first filled from Unicommerce onto ${createdTab} first`;
         return notFound.length
-          ? `${head}. Not on any date tab (run First fill first): ${notFound.join(', ')}`
+          ? `${head}. Not in Unicommerce either: ${notFound.join(', ')}`
           : head;
       }
       return candidates.length === 0
@@ -448,8 +667,13 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
       summary,
       requested,
       notFound,
+      created: createdRows,
       details,
-      counts: { requested: requested.length, scanned: candidates.length, enriched, patchedCells, notFound: notFound.length },
+      counts: {
+        requested: requested.length, scanned: candidates.length, enriched, patchedCells,
+        notFound: notFound.length, created: createdRows.length,
+        ...(createdTab ? { createdTab } : {}),
+      },
     };
   }
 
@@ -459,6 +683,8 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
   // want a direct Master append.
   async function push() {
     const err = notReady(); if (err) return { ok: false, error: err };
+    await resolveMasterTab();
+    if (await masterIsMirror()) return mirrorRefusal('pushing rows into it');
     const base = istToday();
     const { dateTabs } = await listDateTabs();
     const todays = dateTabs.filter((t) => t === base || t.startsWith(`${base}_`));
@@ -486,6 +712,9 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
   // while the source had ~3549. Empty-SO rows with other content are kept too.
   async function syncFromSource() {
     const err = notReady(); if (err) return { ok: false, error: err };
+    await resolveMasterTab();
+    // The mirror does this job now, continuously and without us.
+    if (await masterIsMirror()) return mirrorRefusal('syncing it from the source');
     if (!sourceId) return { ok: false, error: 'SOURCE_SHEET_ID is not set.' };
     const src = await readSource();
     const master = await readSheet(masterTab);

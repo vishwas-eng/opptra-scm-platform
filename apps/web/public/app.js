@@ -632,16 +632,21 @@
   });
 
   /* ---------------- Sheet Update tab ---------------- */
-  // Second fill result: one line per SO showing what came off the first fill and what
-  // Unicommerce added, so ops can see the join without opening the sheet.
+  // One line per SO, so ops can see what landed without opening the sheet. Both fills
+  // report details but with different fields present - the first fill shows what
+  // Unicommerce resolved (the warehouse above all), the second shows the join between the
+  // first-fill row and the invoice data - so the columns follow the data.
   function sheetDetailTable(details) {
     if (!details?.length) return '';
-    const head = ['SO', 'Tab', 'Brand', 'PO', 'Invoice', 'Inv Qty', 'Tracking', 'Status']
-      .map((h) => `<th>${h}</th>`).join('');
+    const cols = [
+      ['so', 'SO'], ['tab', 'Tab'], ['warehouse', 'Warehouse'], ['marketplace', 'Marketplace'],
+      ['brand', 'Brand'], ['po', 'PO'], ['qty', 'Qty'], ['destCity', 'Destination'],
+      ['invoice', 'Invoice'], ['invoiceQty', 'Inv Qty'], ['tracking', 'Tracking'],
+      ['ewayBill', 'E-Way'], ['status', 'Status'],
+    ].filter(([k]) => details.some((d) => String(d[k] ?? '').trim() !== ''));
+    const head = cols.map(([, h]) => `<th>${h}</th>`).join('');
     const rows = details.map((d) => '<tr>'
-      + [d.so, d.tab, d.brand, d.po, d.invoice || '—', d.invoiceQty, d.tracking, d.status]
-        .map((v) => `<td>${esc(v ?? '')}</td>`).join('')
-      + '</tr>').join('');
+      + cols.map(([k]) => `<td>${esc(d[k] ?? '')}</td>`).join('') + '</tr>').join('');
     return `<div style="margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
@@ -651,13 +656,17 @@
     render: (r) => (!r.ok && r.error) ? errHead(r.error)
       : resultHead(r.ok, r.summary || 'Done') + kv(Object.entries(r.counts || {})) + sheetDetailTable(r.details),
   });
-  $('sheet-first-btn')?.addEventListener('click', sheetRun('first-fill', 'sheet-first-btn', 'Pulling Waypoint orders into the date tab'));
+  // One SO box, read by both fills: on the first it adds orders Waypoint has not
+  // published, on the second it picks which rows to enrich.
+  const sheetSos = () => {
+    const sos = ($('sheet-sos')?.value || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+    return sos.length ? { saleOrders: sos } : {};
+  };
+  $('sheet-first-btn')?.addEventListener('click', sheetRun(
+    'first-fill', 'sheet-first-btn', 'Pulling Waypoint and Unicommerce orders into the date tab', sheetSos,
+  ));
   $('sheet-second-btn')?.addEventListener('click', sheetRun(
-    'second-fill', 'sheet-second-btn', 'Enriching rows with UC invoice and tracking',
-    () => {
-      const sos = ($('sheet-second-sos')?.value || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
-      return sos.length ? { saleOrders: sos } : {};
-    },
+    'second-fill', 'sheet-second-btn', 'Enriching rows with UC invoice and tracking', sheetSos,
   ));
   $('sheet-push-btn')?.addEventListener('click', sheetRun('push', 'sheet-push-btn', 'Pushing the date tab into Master'));
   $('sheet-sync-btn')?.addEventListener('click', sheetRun('sync-source', 'sheet-sync-btn', 'Pulling missing orders from the source sheet'));

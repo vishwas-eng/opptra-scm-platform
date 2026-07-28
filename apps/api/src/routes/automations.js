@@ -369,14 +369,15 @@ export default async function automationRoutes(app) {
   });
 
   // --- Sheet update (A1): first-fill / second-fill / push / sync-source ---
-  // Second fill optionally takes the SO numbers to enrich; the rest take no input.
-  const SHEET_BODIES = {
-    'second-fill': {
-      type: 'object',
-      properties: { saleOrders: { type: 'array', maxItems: 200, items: SO_CODE } },
-      additionalProperties: false,
-    },
+  // Both fills optionally take SO numbers: the first to add orders Waypoint has not
+  // published (resolved from Unicommerce, warehouse included), the second to enrich
+  // exactly those SOs. Push and sync-source take no input.
+  const SO_LIST_BODY = {
+    type: 'object',
+    properties: { saleOrders: { type: 'array', maxItems: 200, items: SO_CODE } },
+    additionalProperties: false,
   };
+  const SHEET_BODIES = { 'first-fill': SO_LIST_BODY, 'second-fill': SO_LIST_BODY };
   for (const action of ['first-fill', 'second-fill', 'push', 'sync-source']) {
     app.post(`/api/automations/sheet/${action}`, {
       preValidation: opsOnly,

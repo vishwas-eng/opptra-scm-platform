@@ -1,6 +1,7 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSheetPipeline } from '../src/pipeline.js';
+import { soNorm } from '../src/schema.js';
 
 // The mock keys sheets by TAB NAME and ignores spreadsheet ids, so the read-only
 // source sheet is modeled as a 'MasterSheet' tab living alongside our own tabs.
@@ -34,7 +35,9 @@ function blankRow(overrides = {}) {
   return row;
 }
 
-function sheetsMock({ masterRows = [], sourceRows = [], tabs = ['Master', 'MasterSheet'] } = {}) {
+function sheetsMock({
+  masterRows = [], sourceRows = [], tabs = ['Master', 'MasterSheet'], mirrorTabs = [],
+} = {}) {
   const state = {
     tabs: [...tabs],
     sheets: { Master: [BANNER, HEADERS, ...masterRows], MasterSheet: [BANNER, HEADERS, ...sourceRows] },
@@ -67,12 +70,22 @@ function sheetsMock({ masterRows = [], sourceRows = [], tabs = ['Master', 'Maste
         return { data: {} };
       },
       values: {
-        get: async ({ range }) => {
+        // Column-aware on purpose: the fill reads Master's SO column alone (it is a ~29k-row
+        // mirror), so a mock that returned whole rows for a one-column range would hand back
+        // the wrong column and prove nothing.
+        get: async ({ range, valueRenderOption }) => {
           const tab = tabNameFromRange(range);
-          const m = range.match(/![A-Z]+(\d+)(?::[A-Z]+(\d+)?)?/) || [];
-          const startRow = Number(m[1] || 1);
-          const endRow = m[2] ? Number(m[2]) : undefined;
-          const rows = (state.sheets[tab] || []).slice(startRow - 1, endRow).map((r) => [...r]);
+          // An IMPORTRANGE mirror shows its formula only under FORMULA rendering.
+          if (valueRenderOption === 'FORMULA' && mirrorTabs.includes(tab)) {
+            return { data: { values: [[`=IMPORTRANGE("https://docs.google.com/spreadsheets/d/src","${tab}!A1:ZZ")`]] } };
+          }
+          const m = range.match(/!([A-Z]+)(\d+)?(?::([A-Z]+)(\d+)?)?/) || [];
+          const startCol = m[1] ? colIdx(m[1]) : 0;
+          const startRow = Number(m[2] || 1);
+          const endCol = m[3] ? colIdx(m[3]) : startCol;
+          const endRow = m[4] ? Number(m[4]) : undefined;
+          const rows = (state.sheets[tab] || []).slice(startRow - 1, endRow)
+            .map((r) => r.slice(startCol, endCol + 1));
           while (rows.length && rows[rows.length - 1].every((c) => c === '' || c == null)) rows.pop();
           return { data: { values: rows } };
         },
@@ -111,6 +124,46 @@ function tabNameFromRange(range) { return range.match(/^'?([^'!]+)'?!/)[1]; }
 function colIdx(letters) { let n = 0; for (const c of letters) n = n * 26 + (c.charCodeAt(0) - 64); return n - 1; }
 
 const wpCsv = (rows) => ({ ok: true, text: async () => 'SO Code,SO Status,Warehouse,Marketplace,Brand(s),Total Units\n' + rows.join('\n') + '\n' });
+
+// A UC mock that reproduces the ONE asymmetry the warehouse lookup depends on:
+// fetchSummary answers for any SO whatever facility we ask as, while saleorder/fetch
+// succeeds ONLY at the facility that owns the order. That is what turns a bare SO number
+// into a pickup warehouse, so a mock that ignored it would prove nothing.
+const FACILITIES_LIVE = ['Opp_RSG_MH', 'Opp_EKT_KA', 'Opp_WIQ_MH_1', 'AMAZON_FBA_BLR4_KA'];
+function ucOrderMock(orders = {}, { packagesFor = () => [] } = {}) {
+  const calls = { hops: [], summaries: [] };
+  const find = (code) => orders[soNorm(code || '')] || null;
+  const uc = {
+    listFacilities: async () => ({ all: FACILITIES_LIVE, current: 'Opp_RSG_MH' }),
+    data: async (path, body = {}, opts = {}) => {
+      if (path.endsWith('/saleorder/fetchSummary')) {
+        const o = find(body.code);
+        calls.summaries.push(body.code);
+        if (!o) return { successful: true };
+        return {
+          saleOrderSummary: {
+            code: o.code, status: o.status, channel: o.channel,
+            totalPrice: o.value, saleOrderItemCount: o.units,
+            shippingAddress: { city: o.city, pincode: o.pincode || '' },
+            customFieldValues: [
+              { fieldName: 'PO', fieldValue: o.po || null },
+              { fieldName: 'AppointmentReferenceNo', fieldValue: o.appointmentId || null },
+            ],
+          },
+        };
+      }
+      if (path.endsWith('/saleorder/fetch')) {
+        const o = find(body.code);
+        calls.hops.push({ so: body.code, facility: opts.facility });
+        if (!o || o.facility !== opts.facility) return { successful: false };
+        return { successful: true, saleOrderDTO: { code: o.code, saleOrderItems: [{ facilityCode: o.facility }] } };
+      }
+      if (path.endsWith('/fetchShippingPackageDetails')) return { shippingPackages: packagesFor(body.saleOrderCode) };
+      return {};
+    },
+  };
+  return { uc, calls };
+}
 
 /* ------------------------------- first fill ------------------------------- */
 
@@ -160,6 +213,74 @@ test('first-fill rerun: date-tab rows persist and are not duplicated; nothing ne
   const tabCount = state.tabs.filter((t) => t.startsWith(istTabName())).length;
   assert.equal(tabCount, 1, 'no _1 tab when there is nothing new');
   assert.equal(state.sheets[istTabName()][2][SO_COL], 'SO0009', 'original row still there');
+});
+
+// Typed SOs are ADDITIVE: the Waypoint sweep still runs. An order Waypoint has not
+// published has no other way onto the sheet, and without a sheet row the packing mail has
+// no warehouse to group by - which is where operators actually felt this.
+test('first-fill: a typed SO absent from Waypoint is resolved from UC, warehouse and all', async () => {
+  const { google, state } = sheetsMock({});
+  globalThis.fetch = async () => wpCsv(['SO0003,CREATED,Opp_RSG_MH,ZEPTO_B2B,Acme,3']);
+  const { uc, calls } = ucOrderMock({
+    SO02780: {
+      code: 'SO02780', facility: 'Opp_EKT_KA', status: 'PROCESSING',
+      channel: 'RELIANCE_AJIO_SOR_B2B', po: '5179275981', units: 603, value: 80931, city: 'Tumkur',
+    },
+  });
+  const { firstFill } = makeSheetPipeline(uc, CFG, google);
+  const r = await firstFill({ saleOrders: ['SO02780'] });
+
+  assert.equal(r.ok, true);
+  assert.equal(r.counts.written, 2, 'the Waypoint order AND the typed one');
+  assert.equal(r.counts.fromUc, 1);
+  const rows = state.sheets[istTabName()].slice(2);
+  const ucRow = rows.find((x) => x[SO_COL] === 'SO02780');
+  assert.ok(ucRow, 'the typed SO reached the date tab');
+  assert.equal(ucRow[HEADERS.indexOf('Pickup Wh Name')], 'Opp_EKT_KA');
+  assert.equal(ucRow[HEADERS.indexOf('Marketplace')], 'AJIO');
+  assert.equal(ucRow[HEADERS.indexOf('PO / RPO / Gatepass Number')], '5179275981');
+  assert.equal(ucRow[HEADERS.indexOf('PO / RPO Quantity')], 603);
+  assert.equal(ucRow[HEADERS.indexOf('Destination City')], 'Tumkur');
+  assert.equal(ucRow[HEADERS.indexOf('Brand')], 'EKT', 'brand derived from the warehouse code');
+  assert.ok(rows.some((x) => x[SO_COL] === 'SO0003'), 'the Waypoint sweep still ran');
+  // The hop stops at the owning facility instead of walking all of them.
+  assert.ok(!calls.hops.some((h) => h.facility === 'AMAZON_FBA_BLR4_KA'), 'channel drop points are not hopped');
+  assert.deepEqual(r.details[0].warehouse, 'Opp_EKT_KA');
+});
+
+test('first-fill: a typed SO Unicommerce does not have is reported, and never invents a row', async () => {
+  const { google, state } = sheetsMock({});
+  globalThis.fetch = async () => wpCsv([]);
+  const { uc } = ucOrderMock({});
+  const { firstFill } = makeSheetPipeline(uc, CFG, google);
+  const r = await firstFill({ saleOrders: ['SO_GHOST'] });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.notInUc, ['SO_GHOST']);
+  assert.match(r.summary, /not in Unicommerce/i);
+  assert.ok(!(state.sheets[istTabName()] || []).slice(2).some((x) => x[SO_COL] === 'SO_GHOST'));
+});
+
+// Typed SOs are the part the operator is waiting on, so Waypoint being down must not
+// take them with it.
+test('first-fill: typed SOs still land when Waypoint is unavailable', async () => {
+  const { google, state } = sheetsMock({});
+  globalThis.fetch = async () => { throw new Error('waypoint down'); };
+  const { uc } = ucOrderMock({
+    SO02780: { code: 'SO02780', facility: 'Opp_EKT_KA', status: 'PROCESSING', channel: 'AMAZON_B2B', po: 'P1', units: 5, value: 10, city: 'Pune' },
+  });
+  const { firstFill } = makeSheetPipeline(uc, CFG, google);
+  const r = await firstFill({ saleOrders: ['SO02780'] });
+  assert.equal(r.counts.written, 1);
+  assert.match(r.summary, /Waypoint unavailable/i);
+  assert.equal(state.sheets[istTabName()][2][SO_COL], 'SO02780');
+});
+
+test('first-fill: with no typed SOs a Waypoint outage is still a hard failure', async () => {
+  const { google } = sheetsMock({});
+  globalThis.fetch = async () => { throw new Error('waypoint down'); };
+  const { uc } = ucOrderMock({});
+  const { firstFill } = makeSheetPipeline(uc, CFG, google);
+  await assert.rejects(() => firstFill(), /waypoint down/i);
 });
 
 test('first-fill rerun with NEW orders same day: opens the next _1 tab, earlier tab untouched', async () => {
@@ -254,14 +375,65 @@ test('second-fill: a requested SO already carrying an invoice is refreshed, not 
   assert.equal(state.sheets[tab][2][HEADERS.indexOf('Invoice/Consignment Note')], 'INV/FRESH');
 });
 
-test('second-fill: an SO that never came through first fill is reported, not silently dropped', async () => {
+// The dead end that made this whole path necessary: an SO Waypoint never published is on
+// no date tab, so the second fill used to answer "run First fill first" - and the first
+// fill could not help either, because Waypoint is where it looks. UC is the source of
+// record for these orders, so the row is created from UC and enriched in one run.
+test('second-fill: an SO on no date tab is created from Unicommerce, then enriched', async () => {
+  const tab = istTabName();
+  const { google, state } = sheetsMock({ tabs: ['Master', 'MasterSheet', tab] });
+  state.sheets[tab] = [BANNER, HEADERS];
+  const { uc } = ucOrderMock(
+    { SO02780: { code: 'SO02780', facility: 'Opp_EKT_KA', status: 'PROCESSING', channel: 'RELIANCE_AJIO_SOR_B2B', po: '5179275981', units: 603, value: 80931, city: 'Tumkur' } },
+    { packagesFor: () => [{ invoiceCode: 'SIEKA/0811', trackingNumber: 'B3452392', ewbNo: 'EWB7' }] },
+  );
+  const { secondFill } = makeSheetPipeline(uc, CFG, google);
+  const r = await secondFill({ saleOrders: ['SO02780'] });
+
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.notFound, [], 'nothing is reported missing - UC had it');
+  assert.deepEqual(r.created, ['SO02780']);
+  const row = state.sheets[tab][2];
+  assert.equal(row[SO_COL], 'SO02780');
+  assert.equal(row[HEADERS.indexOf('Pickup Wh Name')], 'Opp_EKT_KA', 'warehouse resolved by facility hop');
+  assert.equal(row[HEADERS.indexOf('PO / RPO / Gatepass Number')], '5179275981');
+  assert.equal(row[HEADERS.indexOf('Marketplace')], 'AJIO');
+  assert.equal(row[HEADERS.indexOf('Invoice/Consignment Note')], 'SIEKA/0811', 'and enriched in the same run');
+  assert.equal(row[HEADERS.indexOf('Tracking number')] ?? '', '');
+});
+
+// The first fill's tab convention applies to rows the second fill creates too: one tab per
+// batch, so a batch never gets mixed into a tab that already holds one.
+test('second-fill: rows it first-fills open a fresh date tab when today\'s already has a batch', async () => {
+  const tab = istTabName();
+  const { google, state } = sheetsMock({ tabs: ['Master', 'MasterSheet', tab] });
+  state.sheets[tab] = [BANNER, HEADERS, blankRow({ 'SO/GP Number': 'SO0001', 'Invoice/Consignment Note': 'INV/OLD' })];
+  const { uc } = ucOrderMock(
+    { SO02780: { code: 'SO02780', facility: 'Opp_EKT_KA', status: 'PROCESSING', channel: 'RELIANCE_AJIO_SOR_B2B', po: 'P1', units: 6, value: 9, city: 'Tumkur' } },
+    { packagesFor: () => [{ invoiceCode: 'INV/NEW' }] },
+  );
+  const { secondFill } = makeSheetPipeline(uc, CFG, google);
+  const r = await secondFill({ saleOrders: ['SO02780'] });
+
+  assert.equal(r.counts.createdTab, `${tab}_1`, 'a fresh tab, not the occupied one');
+  assert.ok(state.addedTabs.includes(`${tab}_1`));
+  const fresh = state.sheets[`${tab}_1`];
+  assert.deepEqual(fresh[1], HEADERS, 'the new tab carries Master\'s headers');
+  assert.equal(fresh[2][SO_COL], 'SO02780');
+  assert.equal(fresh[2][HEADERS.indexOf('Pickup Wh Name')], 'Opp_EKT_KA');
+  assert.equal(fresh[2][HEADERS.indexOf('Invoice/Consignment Note')], 'INV/NEW', 'enriched on the tab it was created on');
+  assert.equal(state.sheets[tab][2][HEADERS.indexOf('Invoice/Consignment Note')], 'INV/OLD', 'the occupied tab is untouched');
+});
+
+test('second-fill: an SO in neither the date tabs nor Unicommerce is reported by name', async () => {
   const tab = istTabName();
   const { google } = sheetsMock({ tabs: ['Master', 'MasterSheet', tab] });
-  const { secondFill } = makeSheetPipeline({}, CFG, google);
+  const { uc } = ucOrderMock({});
+  const { secondFill } = makeSheetPipeline(uc, CFG, google);
   const r = await secondFill({ saleOrders: ['SO_NOT_THERE'] });
   assert.equal(r.ok, false);
   assert.deepEqual(r.notFound, ['SO_NOT_THERE']);
-  assert.match(r.summary, /run First fill first/i);
+  assert.match(r.summary, /not in Unicommerce/i);
 });
 
 test('second-fill: no SO input keeps the old sweep of every un-invoiced row', async () => {
@@ -379,6 +551,63 @@ test('sync-source: duplicate SOs and rows without an SO are kept (exact row coun
 });
 
 /* --------------------------------- misc ----------------------------------- */
+
+/* --------------------- Master as an IMPORTRANGE mirror --------------------- */
+// Ops rebuilt Master as =IMPORTRANGE(source) so it refreshes itself. The whole tab is then
+// one spilled formula result: writing ANY cell inside it replaces the formula with #REF!
+// and stops the refresh for everyone. So the two actions that write to Master must refuse.
+
+test('mirror: push refuses rather than overwriting the IMPORTRANGE formula', async () => {
+  const { google, state } = sheetsMock({ mirrorTabs: ['Master'], tabs: ['Master', 'MasterSheet', istTabName()] });
+  state.sheets[istTabName()] = [BANNER, HEADERS, blankRow({ 'SO/GP Number': 'SO0003' })];
+  const r = await makeSheetPipeline({}, CFG, google).push();
+  assert.equal(r.ok, false);
+  assert.match(r.error, /IMPORTRANGE mirror/i);
+  assert.match(r.error, /source sheet/i, 'and says where the rows should go instead');
+  assert.equal(state.updated.length, 0, 'nothing was written to Master');
+});
+
+test('mirror: sync-source refuses - the mirror already does that job', async () => {
+  const { google, state } = sheetsMock({ mirrorTabs: ['Master'], sourceRows: [blankRow({ 'SO/GP Number': 'SO0009' })] });
+  const r = await makeSheetPipeline({}, CFG, google).syncFromSource();
+  assert.equal(r.ok, false);
+  assert.match(r.error, /IMPORTRANGE mirror/i);
+  assert.equal((state.cleared || []).length, 0, 'the Master data block was never cleared');
+  assert.equal(state.updated.length, 0);
+});
+
+// Reading the mirror is fine and necessary - only writing to it is not.
+test('mirror: first fill still reads Master and writes to the date tab', async () => {
+  const { google, state } = sheetsMock({
+    mirrorTabs: ['Master'],
+    masterRows: [blankRow({ 'SO/GP Number': 'SO0001' })],
+  });
+  globalThis.fetch = async () => wpCsv([
+    'SO0001,CREATED,Opp_RSG_MH,ZEPTO_B2B,Acme,3',
+    'SO0003,CREATED,Opp_RSG_MH,ZEPTO_B2B,Acme,3',
+  ]);
+  const r = await makeSheetPipeline({}, CFG, google).firstFill();
+  assert.equal(r.ok, true);
+  assert.equal(r.counts.onMaster, 1, 'the mirror was read for known SOs');
+  assert.equal(r.counts.written, 1, 'only SO0003 is new');
+  assert.equal(state.sheets[istTabName()][2][SO_COL], 'SO0003');
+  assert.ok(!state.updated.some((u) => u.range.includes('Master')), 'Master itself is untouched');
+});
+
+// A rename used to kill every fill with "Could not read Master".
+test('master tab: a renamed master tab is found instead of failing the run', async () => {
+  const { google, state } = sheetsMock({ tabs: ['Master_IR', 'MasterSheet'] });
+  state.sheets.Master_IR = [BANNER, HEADERS, blankRow({ 'SO/GP Number': 'SO0001' })];
+  delete state.sheets.Master;
+  globalThis.fetch = async () => wpCsv([
+    'SO0001,CREATED,Opp_RSG_MH,ZEPTO_B2B,Acme,3',
+    'SO0003,CREATED,Opp_RSG_MH,ZEPTO_B2B,Acme,3',
+  ]);
+  const r = await makeSheetPipeline({}, CFG, google).firstFill();
+  assert.equal(r.ok, true, r.error || '');
+  assert.equal(r.counts.onMaster, 1, 'Master_IR was used as the master tab');
+  assert.equal(r.counts.written, 1);
+});
 
 test('waypoint HTTP failure surfaces cleanly', async () => {
   const { google } = sheetsMock({});

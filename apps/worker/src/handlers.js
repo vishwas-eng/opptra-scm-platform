@@ -144,14 +144,20 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       await markRunning(runUid);
       const fn = { 'first-fill': sheetPipeline.firstFill, 'second-fill': sheetPipeline.secondFill, push: sheetPipeline.push, 'sync-source': sheetPipeline.syncFromSource }[input.action];
       if (!fn) throw new Error(`unknown sheet action: ${input.action}`);
-      const result = await fn(input); // second-fill reads input.saleOrders; the others ignore it
+      const result = await fn(input); // both fills read input.saleOrders; push/sync ignore it
       await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
       return result;
     },
 
-    // Scheduled source sync (no run row - a background cron, logged only).
+    // Scheduled source sync (no run row - a background cron, logged only). When Master is
+    // an IMPORTRANGE mirror it keeps itself current, so there is genuinely nothing to do -
+    // that is a healthy state, not an hourly failure to log as one.
     'sheet.syncSource': async () => {
       const result = await sheetPipeline.syncFromSource();
+      if (result.mirror) {
+        logger.info({ ok: true }, 'scheduled source sync skipped - Master is a self-refreshing IMPORTRANGE mirror');
+        return { ok: true, skipped: 'master-is-mirror' };
+      }
       logger.info({ ok: result.ok, summary: result.summary || result.error }, 'scheduled source sync');
       return result;
     },

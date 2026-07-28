@@ -5,6 +5,7 @@ import { UcClient } from './client.js';
 // client singleton and the two error types callers branch on. Tests reach internals
 // (UcClient, RateLimiter, makeHttp, …) via deep paths on purpose; those are not API.
 export { SessionError, ConfigError } from './errors.js';
+export { makeUcOrderLookup, soVariants, prettyChannel } from './order.js';
 
 let singleton = null;
 

@@ -167,13 +167,28 @@ export const sheetsApi = {
     const meta = await withGoogleRetry(() => sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' }));
     return (meta.data.sheets || []).map((s) => s.properties.title);
   },
-  // Make a new tab look exactly like the template tab's header block: values AND
-  // formatting (colours, bold, fonts) via copyPaste, plus column widths and frozen
-  // header rows - a plain values-write leaves an unstyled tab that ops won't accept.
+  /** Cell FORMULAS rather than rendered values - the only way to see that a tab is an
+   *  IMPORTRANGE mirror instead of ordinary data. */
+  readFormulas: async (sheets, spreadsheetId, range) => {
+    const res = await withGoogleRetry(() => sheets.spreadsheets.values.get({
+      spreadsheetId, range, valueRenderOption: 'FORMULA',
+    }));
+    return res.data.values || [];
+  },
+  // Make a new tab look exactly like the template tab's header block: styling, column
+  // widths and frozen rows from the template, then the header TEXT written literally.
+  //
+  // Formatting and values are copied SEPARATELY on purpose. The master template is an
+  // IMPORTRANGE mirror of the ops source, so its A1 holds a formula rather than a label -
+  // and PASTE_NORMAL copies formulas, which would clone that IMPORTRANGE into the new tab
+  // and drag the entire source sheet into what should be a small date tab. PASTE_FORMAT
+  // takes the colours only; the labels are then written as the plain strings the template
+  // currently renders, with RAW input so a label starting with '=' or '+' stays text.
   cloneHeaderFormatting: async (sheets, spreadsheetId, fromTab, toTab, headerRows = 2) => {
+    const quote = (t) => `'${String(t).replace(/'/g, "''")}'`;
     const meta = await withGoogleRetry(() => sheets.spreadsheets.get({
       spreadsheetId,
-      ranges: [`'${fromTab.replace(/'/g, "''")}'!A1:ZZ1`],
+      ranges: [`${quote(fromTab)}!A1:ZZ1`],
       fields: 'sheets(properties(sheetId,title),data(columnMetadata(pixelSize)))',
     }));
     const all = await withGoogleRetry(() => sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties(sheetId,title)' }));
@@ -184,13 +199,25 @@ export const sheetsApi = {
     const nCols = Math.max(widths.length, 26);
     const requests = [
       { copyPaste: { source: { sheetId: fromId, startRowIndex: 0, endRowIndex: headerRows, startColumnIndex: 0, endColumnIndex: nCols },
-        destination: { sheetId: toId, startRowIndex: 0, endRowIndex: headerRows, startColumnIndex: 0, endColumnIndex: nCols }, pasteType: 'PASTE_NORMAL' } },
+        destination: { sheetId: toId, startRowIndex: 0, endRowIndex: headerRows, startColumnIndex: 0, endColumnIndex: nCols }, pasteType: 'PASTE_FORMAT' } },
       { updateSheetProperties: { properties: { sheetId: toId, gridProperties: { frozenRowCount: headerRows } }, fields: 'gridProperties.frozenRowCount' } },
       ...widths.map((w, i) => (w.pixelSize ? { updateDimensionProperties: {
         range: { sheetId: toId, dimension: 'COLUMNS', startIndex: i, endIndex: i + 1 },
         properties: { pixelSize: w.pixelSize }, fields: 'pixelSize' } } : null)).filter(Boolean),
     ];
     await withGoogleRetry(() => sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } }));
+
+    const header = (await withGoogleRetry(() => sheets.spreadsheets.values.get({
+      spreadsheetId, range: `${quote(fromTab)}!A1:${colToA1(nCols)}${headerRows}`,
+    }))).data.values || [];
+    if (!header.length) return;
+    const block = Array.from({ length: headerRows }, (_, i) => header[i] || []);
+    await withGoogleRetry(() => sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${quote(toTab)}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: block },
+    }));
   },
   // Create a tab if it doesn't exist. Returns true if it was created.
   ensureTab: async (sheets, spreadsheetId, title) => {
@@ -212,3 +239,11 @@ export const sheetsApi = {
 
 // A1 range with a properly single-quoted sheet name (required when the name has a space).
 export const a1 = (tab, range) => `'${String(tab).replace(/'/g, "''")}'!${range}`;
+
+/** 1-based column number -> A1 letters (1 -> A, 27 -> AA). */
+export function colToA1(n) {
+  let s = '';
+  let i = n;
+  while (i > 0) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); }
+  return s || 'A';
+}

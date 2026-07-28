@@ -15,6 +15,7 @@
 //   Every run drafts first (never sends blind); sendDraft() dispatches the exact
 //   reviewed draft.
 import { gmailApi, driveApi, sheetsApi, a1, buildRawMessage } from '@opptra/integrations-google';
+import { makeUcOrderLookup, prettyChannel } from '@opptra/uc-client';
 import {
   loadWarehouseDirectory, resolveWarehouseEntry, shortCodeOf,
 } from './warehouseEmails.js';
@@ -75,6 +76,9 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
   const latestThreadFor = deps.latestThreadFor || (async () => null);
   // Optional test seam for the warehouse-email directory (avoids Sheets in unit tests).
   const directoryOverride = deps.warehouseDirectory || null;
+  // Last resort for an SO the B2B sheet has never seen: Unicommerce knows the order and,
+  // via a facility hop, the warehouse that ships it.
+  const ucOrders = deps.ucOrders || makeUcOrderLookup(uc, { preferFacilities: configured });
 
   const orNull = (e) => { if (e?.name === 'SessionError') throw e; return null; };
 
@@ -272,13 +276,49 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
     return { atts, missing };
   }
 
+  // An SO the B2B sheet has never seen (Waypoint has not published it, so no first fill
+  // could have written it) still has a warehouse, and Unicommerce knows which. Reading it
+  // from there beats dead-ending: the operator asked to mail these orders, and the sheet
+  // being behind is not a reason they cannot be mailed.
+  async function rowFromUc(so) {
+    const o = await ucOrders.resolveOrder(so).catch(orNull);
+    if (!o || !o.facility) return null;
+    return {
+      so: o.so || so,
+      marketplace: prettyChannel(o.channel),
+      brand: shortCodeOf(o.facility),
+      po: o.po || '',
+      qty: o.units || '',
+      value: o.value || '',
+      warehouse: o.facility,
+      destCity: o.city || '',
+      appointmentDate: '',
+      dispatchDate: '',
+      appointmentId: o.appointmentId || '',
+      viaUc: true,
+    };
+  }
+
+  // A sheet row whose Pickup Wh Name is blank is as unusable as no row at all: it groups
+  // under UNKNOWN, which has no email, so the mail goes nowhere. Top the warehouse up from
+  // UC instead of reporting a row we can plainly see.
+  async function withWarehouse(row, so) {
+    if (row?.warehouse) return row;
+    const fromUc = await rowFromUc(so);
+    if (!fromUc) return row || null;
+    return row ? { ...row, warehouse: fromUc.warehouse, viaUc: true } : fromUc;
+  }
+
   async function resolveOrderGroups(soList, recipientsByWh = {}) {
     const sheetRows = await loadSheetRows(soList);
     const unresolved = [];
     const rows = [];
     for (const so of soList) {
-      const row = sheetRows.get(soNorm(so));
-      if (!row) { unresolved.push({ so, reason: 'not found on the B2B sheet - run Sheet Update first' }); continue; }
+      const row = await withWarehouse(sheetRows.get(soNorm(so)), so);
+      if (!row?.warehouse) {
+        unresolved.push({ so, reason: 'no warehouse for it on the B2B sheet or in Unicommerce' });
+        continue;
+      }
       rows.push(row);
     }
     const directory = await warehouseDirectory();
@@ -357,7 +397,8 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
     const unresolved = [];
     const rows = [];
     for (const so of soList) {
-      const row = sheetRows.get(soNorm(so)) || { so, warehouse: '', po: '', appointmentId: '' };
+      const row = await withWarehouse(sheetRows.get(soNorm(so)), so)
+        || { so, warehouse: '', po: '', appointmentId: '' };
       rows.push(row);
     }
     const directory = await warehouseDirectory();

@@ -226,7 +226,8 @@
         <!-- Sheet Update (A1) -->
         <section id="tab-sheet" class="tab hidden">
           <h2>Sheet Update</h2>
-          <p class="lead">First fill: every Waypoint order — any status, whatever view the export came from — checked against Master, and only the new ones go to today's date tab. Second fill takes SO numbers and adds their Unicommerce invoice data to those first-fill rows. Sync rewrites Master as an exact copy of the main B2B View sheet.</p>
+          <p class="lead">First fill: every Waypoint order — any status, whatever view the export came from — checked against Master, and only the new ones go to today's date tab. Second fill adds Unicommerce invoice data to those rows. Type SO numbers below and either fill will pull the order straight from Unicommerce, warehouse included — that is how orders Waypoint has not published yet still reach the sheet.</p>
+          <p class="meta">Master is now an <b>IMPORTRANGE mirror</b> of the B2B View source, so it refreshes itself — nothing here needs to sync it, and nothing may write to it (writing into the formula would replace it with #REF! and stop the refresh). To get date-tab rows into Master, paste them into the source sheet and the mirror brings them back. The Push and Sync buttons below are kept only for a Master that is not a mirror; against a mirror they refuse and explain why.</p>
           <div id="sheet-link" class="panel hidden">
             <div class="row" style="justify-content:space-between;align-items:center">
               <span>Master working-copy sheet</span>
@@ -235,16 +236,16 @@
             <iframe id="sheet-preview-frame" class="sheet-preview" loading="lazy" referrerpolicy="no-referrer"></iframe>
           </div>
           <div class="panel">
-            <label for="sheet-second-sos">SO numbers for the second fill</label>
-            <textarea id="sheet-second-sos" rows="4" placeholder="SO12345&#10;SO12346"></textarea>
-            <p class="meta">One SO per line (commas work too). Each SO is found in the first-fill rows and topped up with its invoice, invoice qty, tracking, e-way bill and status from Unicommerce. Leave this empty to sweep every date-tab row that still has no invoice.</p>
+            <label for="sheet-sos">SO numbers (optional — both fills read this)</label>
+            <textarea id="sheet-sos" rows="4" placeholder="SO12345&#10;OPT-SO-000670"></textarea>
+            <p class="meta">One SO per line (commas work too). On the <b>first fill</b> these are added on top of the Waypoint sweep, resolved from Unicommerce — marketplace, PO, quantity, value, destination and the pickup warehouse. On the <b>second fill</b> each one is topped up with its invoice, invoice qty, tracking, e-way bill and status; an SO on no date tab is created from Unicommerce first. Leave empty for the unattended behaviour: Waypoint sweep, and enrich every row that still has no invoice.</p>
             <div class="row">
-              <button id="sheet-first-btn" class="primary">First fill (Waypoint → date tab)</button>
+              <button id="sheet-first-btn" class="primary">First fill (Waypoint + typed SOs → date tab)</button>
               <button id="sheet-second-btn" class="secondary">Second fill (UC invoice enrich)</button>
               <button id="sheet-push-btn" class="secondary">Push date tab to Master</button>
               <button id="sheet-sync-btn" class="secondary">Sync Master from source</button>
             </div>
-            <p class="meta">First fill looks at Master, finds Waypoint orders of any status that are not on it yet, and writes those to the date tab. Use Sync when you want Master to match the main B2B View sheet row-for-row.</p>
+            <p class="meta">Use Sync when you want Master to match the main B2B View sheet row-for-row.</p>
             <div id="sheet-output" class="result hidden"></div>
           </div>
         </section>
