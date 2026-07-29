@@ -33,12 +33,25 @@ Copy the client ID into `.env` → `GOOGLE_CLIENT_ID`.
 3. `./deploy/update.sh <PROJECT>` — Caddy fetches the certificate automatically.
 4. Add the https origin to the OAuth client.
 
+## Cursor / Slack ops agent token (no Google SSO)
+
+Cloud agents cannot use browser Google SSO for `/api/runs` or Admin analytics. After deploy:
+
+1. `openssl rand -hex 32`
+2. Add `OPS_AGENT_TOKEN=…` to `/opt/opptra-scm/.env` on the VM
+3. `sudo docker compose -f /opt/opptra-scm/docker-compose.yml up -d api` (or full `./deploy/update.sh`)
+4. Put the **same** value in Cursor Automation secrets as `OPS_AGENT_TOKEN`
+5. Test: `curl -sS -H "Authorization: Bearer $OPS_AGENT_TOKEN" https://scm.opptra.com/api/ops/summary`
+
+Never paste this token into Slack. See `AGENTS.md`.
+
 ## Daily operations
 
 | Situation | What to do |
 |---|---|
 | **Session banner red / "session dead" alert** | Admin tab → paste fresh JSESSIONID (until scripted login is live). Worker picks it up immediately. |
 | Check overall health | `curl http://<IP>/healthz` or open the Dashboard |
+| Ops summary (agents) | `curl -H "Authorization: Bearer $OPS_AGENT_TOKEN" https://scm.opptra.com/api/ops/summary` |
 | See logs | `gcloud compute ssh opptra-scm --zone asia-south1-a` then `sudo docker compose logs -f api worker` |
 | Restart everything | on the VM: `sudo docker compose restart` |
 | A job seems stuck | Dashboard shows `pending_retry` runs; after ~1h of retries it fails loudly + alerts |

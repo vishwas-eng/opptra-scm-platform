@@ -110,6 +110,10 @@ const Env = z.object({
   // Alerting. LOG_LEVEL is intentionally NOT here - the logger reads it straight from
   // the environment to stay dependency-free (see logger.js).
   SLACK_WEBHOOK_URL: z.string().default(''),
+
+  // Machine auth for Cursor / Slack ops agents (no Google SSO). Empty = /api/ops/* disabled.
+  // Set the same value on the VM (.env) and in Cursor Automation secrets as OPS_AGENT_TOKEN.
+  OPS_AGENT_TOKEN: z.string().default(''),
 });
 
 let cached = null;

@@ -9,6 +9,7 @@ process.env.UC_BASE_URL = 'https://oppdoorstg.unicommerce.com';
 process.env.GOOGLE_CLIENT_ID = 'test.apps.googleusercontent.com';
 process.env.JWT_SECRET = '0123456789abcdef0123456789abcdef';
 process.env.PUBLIC_URL = 'https://scm.example.com';
+process.env.OPS_AGENT_TOKEN = 'ops-test-token-0123456789abcdef01234567';
 
 let app;
 before(async () => {
@@ -25,6 +26,34 @@ test('protected routes reject anonymous callers with 401 (before any DB access)'
   }
   const post = await app.inject({ method: 'POST', url: '/api/automations/return/process', payload: { saleOrder: 'SO1' } });
   assert.equal(post.statusCode, 401, 'return/process must require auth');
+});
+
+test('/api/ops/summary rejects missing or wrong ops token (before DB)', async () => {
+  const anon = await app.inject({ method: 'GET', url: '/api/ops/summary' });
+  assert.equal(anon.statusCode, 401);
+  const bad = await app.inject({
+    method: 'GET', url: '/api/ops/summary',
+    headers: { authorization: 'Bearer wrong-token' },
+  });
+  assert.equal(bad.statusCode, 401);
+  const badHdr = await app.inject({
+    method: 'GET', url: '/api/ops/summary',
+    headers: { 'x-ops-token': 'also-wrong' },
+  });
+  assert.equal(badHdr.statusCode, 401);
+});
+
+test('/api/ops/summary accepts Bearer or X-Ops-Token (auth gate only; DB may 500 in this harness)', async () => {
+  // With a valid token, preValidation passes. This harness has no real DB, so the
+  // handler may 500 — that still proves the machine-auth gate opened (not 401).
+  for (const headers of [
+    { authorization: 'Bearer ops-test-token-0123456789abcdef01234567' },
+    { 'x-ops-token': 'ops-test-token-0123456789abcdef01234567' },
+  ]) {
+    const res = await app.inject({ method: 'GET', url: '/api/ops/summary', headers });
+    assert.notEqual(res.statusCode, 401, `expected auth to pass with ${JSON.stringify(headers)}`);
+    assert.notEqual(res.statusCode, 503);
+  }
 });
 
 test('security headers present (helmet) and framing denied', async () => {
