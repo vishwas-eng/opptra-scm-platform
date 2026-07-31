@@ -14,11 +14,12 @@ export async function buildApp({ withStatic = true } = {}) {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", 'https://accounts.google.com'],
+        // SheetJS (e-way bulk import) + Chart.js (KPI graphs) load from CDNs.
+        scriptSrc: ["'self'", 'https://accounts.google.com', 'https://cdn.sheetjs.com', 'https://cdn.jsdelivr.net'],
         // blob: lets the in-page PDF/image previews render (generated files are served
         // to the iframe/img as blob URLs; without this the preview pane is just blank).
         frameSrc: ['https://accounts.google.com', 'https://docs.google.com', 'blob:'],
-        connectSrc: ["'self'", 'https://accounts.google.com'],
+        connectSrc: ["'self'", 'https://accounts.google.com', 'https://cdn.sheetjs.com', 'https://cdn.jsdelivr.net'],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://accounts.google.com'],
         fontSrc: ['https://fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'blob:', 'https://*.googleusercontent.com'],
