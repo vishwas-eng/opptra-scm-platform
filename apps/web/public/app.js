@@ -1,10 +1,13 @@
 /* Opptra SCM Platform, sidebar SPA (plain ES2020, no build). */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const PAGE_TITLES = { dashboard: 'Dashboard', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', asn: 'ASN Compile', reversedc: 'Reverse DC', sheet: 'Sheet Update', packing: 'Packing Mail', extensions: 'Extensions', admin: 'Admin' };
+  const PAGE_TITLES = { dashboard: 'Workspace', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', asn: 'ASN Compile', reversedc: 'Reverse DC', sheet: 'Sheet Update', packing: 'Packing Mail', homecentre: 'Home Centre Sync', extensions: 'Extensions', admin: 'Admin' };
   let me = null;
   let pollTimer = null;
   let ucLoginUrl = null;
+  let kpiDays = 7;
+  let kpiChartDaily = null;
+  let kpiChartAutom = null;
 
   /* ---------------- api ---------------- */
   async function api(path, opts = {}) {
@@ -149,7 +152,7 @@
   $('dash-relogin-btn').addEventListener('click', openUcLogin);
   $('admin-relogin-btn')?.addEventListener('click', openUcLogin);
 
-  /* ---------------- dashboard ---------------- */
+  /* ---------------- dashboard + KPIs ---------------- */
   async function refreshDashboard() {
     try {
       const [s, stats, { runs }] = await Promise.all([
@@ -161,8 +164,110 @@
       $('week-breakdown').textContent = `${stats.week.succeeded} ok · ${stats.week.failed} failed`;
       const tbody = $('runs-table').querySelector('tbody');
       tbody.innerHTML = runs.length ? runs.map(runRow).join('') : emptyRow(6);
+      if (me?.role === 'admin') await loadKpis(kpiDays);
     } catch { /* transient, next poll retries */ }
   }
+
+  function destroyChart(ch) { try { ch?.destroy(); } catch { /* noop */ } return null; }
+
+  function chartColors() {
+    return {
+      orange: '#FF5800', soft: 'rgba(255,88,0,.18)', green: '#1f7a45', red: '#c0341d',
+      ink: '#141414', grid: 'rgba(20,20,20,.06)', muted: '#5c5c5c',
+    };
+  }
+
+  async function loadKpis(days = 7) {
+    if (me?.role !== 'admin') return;
+    kpiDays = days;
+    document.querySelectorAll('#kpi-window button').forEach((b) => {
+      b.classList.toggle('active', Number(b.dataset.days) === days);
+    });
+    const a = await api('/api/admin/kpi?days=' + days);
+    const t = a.totals || {};
+    const succeeded = t.succeeded || 0;
+    const failed = t.failed || 0;
+    $('week-count').textContent = a.week?.total ?? (succeeded + failed);
+    $('week-breakdown').textContent = `${succeeded} ok · ${failed} failed · ${days}d`;
+    $('kpi-success-rate').textContent = a.successRate != null ? `${a.successRate}%` : '—';
+    $('kpi-success-meta').textContent = `${succeeded + failed} finished runs`;
+    $('kpi-active-users').textContent = (a.byUser || []).length;
+    $('kpi-users-meta').textContent = `${a.users?.active_logins || 0} logins · ${a.users?.registered || 0} registered`;
+    $('kpi-failures').textContent = failed;
+
+    const features = a.features || [];
+    $('kpi-features').innerHTML = features.length
+      ? features.map((f) => `
+        <div class="agent-chip">
+          <div class="name">${esc(f.label)}</div>
+          <div class="stats">${f.total} runs · ${f.ok} ok · ${f.failed} failed</div>
+          <div class="rate">${f.successRate != null ? f.successRate + '% success' : 'n/a'}${f.active ? ` · ${f.active} active` : ''}</div>
+        </div>`).join('')
+      : '<div class="meta">No automation runs in this window yet.</div>';
+
+    const ut = $('kpi-users-table')?.querySelector('tbody');
+    if (ut) {
+      ut.innerHTML = (a.byUser || []).length
+        ? a.byUser.map((r) => `<tr><td>${esc(r.user_email)}</td><td>${r.total}</td><td>${r.ok}</td><td>${r.failed}</td><td>${fmt(r.last_run_at)}</td></tr>`).join('')
+        : emptyRow(5);
+    }
+
+    if (typeof Chart === 'undefined') return;
+    const c = chartColors();
+    const daysRows = a.byDay || [];
+    const labels = daysRows.map((d) => String(d.day).slice(0, 10));
+    kpiChartDaily = destroyChart(kpiChartDaily);
+    const dailyEl = $('kpi-chart-daily');
+    if (dailyEl) {
+      kpiChartDaily = new Chart(dailyEl, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Total', data: daysRows.map((d) => d.total), borderColor: c.orange, backgroundColor: c.soft, fill: true, tension: 0.3 },
+            { label: 'Succeeded', data: daysRows.map((d) => d.ok), borderColor: c.green, backgroundColor: 'transparent', tension: 0.3 },
+            { label: 'Failed', data: daysRows.map((d) => d.failed), borderColor: c.red, backgroundColor: 'transparent', tension: 0.3 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: c.muted, boxWidth: 12 } } },
+          scales: {
+            x: { ticks: { color: c.muted, maxRotation: 0 }, grid: { color: c.grid } },
+            y: { beginAtZero: true, ticks: { color: c.muted, precision: 0 }, grid: { color: c.grid } },
+          },
+        },
+      });
+    }
+
+    kpiChartAutom = destroyChart(kpiChartAutom);
+    const automEl = $('kpi-chart-autom');
+    if (automEl) {
+      const feats = features.slice(0, 8);
+      kpiChartAutom = new Chart(automEl, {
+        type: 'bar',
+        data: {
+          labels: feats.map((f) => f.label),
+          datasets: [
+            { label: 'OK', data: feats.map((f) => f.ok), backgroundColor: c.green },
+            { label: 'Failed', data: feats.map((f) => f.failed), backgroundColor: c.orange },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: c.muted, boxWidth: 12 } } },
+          scales: {
+            x: { stacked: true, ticks: { color: c.muted }, grid: { display: false } },
+            y: { stacked: true, beginAtZero: true, ticks: { color: c.muted, precision: 0 }, grid: { color: c.grid } },
+          },
+        },
+      });
+    }
+  }
+
+  document.querySelectorAll('#kpi-window button').forEach((b) => {
+    b.addEventListener('click', () => loadKpis(Number(b.dataset.days) || 7).catch((err) => toast(err.message, 'bad')));
+  });
 
   function renderSession(s) {
     const alive = s.status === 'alive';
@@ -286,22 +391,160 @@
     });
   });
 
-  /* ---------------- e-way bill tab ---------------- */
-  $('ewb-run-btn')?.addEventListener('click', () => {
-    const sos = $('ewb-sos').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    const gstin = $('ewb-gstin').value.trim();
-    const dryRun = $('ewb-dry').checked;
-    const rows = sos.map((so) => ({
-      so, gstin, transporterName: $('ewb-tname').value.trim(), transMode: $('ewb-mode').value.trim(),
-      vehicleType: $('ewb-vtype').value.trim(), vehicleNo: $('ewb-vno').value.trim(), distance: $('ewb-dist').value.trim(),
+  /* ---------------- e-way bill tab (template + bulk upload like Apps Script) ---------------- */
+  const EWB_COLS = [
+    { key: 'so', ph: 'SO number' },
+    { key: 'gstin', ph: 'GSTIN (15)' },
+    { key: 'transporterName', ph: 'name' },
+    { key: 'transMode', ph: 'ROAD' },
+    { key: 'vehicleNo', ph: 'vehicle no' },
+    { key: 'distance', ph: 'km' },
+    { key: 'docNo', ph: 'doc no' },
+    { key: 'docDate', ph: 'DD/MM/YYYY' },
+    { key: 'vehicleType', ph: 'REGULAR' },
+  ];
+  const EWB_HEADERS = ['SO Number', 'Transporter GSTIN', 'Transporter Name', 'Transport Mode', 'Vehicle No', 'Distance (km)', 'Transport Doc No', 'Doc Date (DD/MM/YYYY)', 'Vehicle Type'];
+
+  function ewbAddRow(data = {}) {
+    const tbody = $('ewb-rows');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = EWB_COLS.map((c) => `<td><input data-k="${c.key}" placeholder="${c.ph}" /></td>`).join('')
+      + '<td><button type="button" class="ewb-del" title="Remove row">✕</button></td>';
+    tbody.appendChild(tr);
+    EWB_COLS.forEach((c) => {
+      if (data[c.key] != null && data[c.key] !== '') tr.querySelector(`input[data-k="${c.key}"]`).value = data[c.key];
+    });
+    if (!tr.querySelector('input[data-k="transMode"]').value) tr.querySelector('input[data-k="transMode"]').value = 'ROAD';
+    if (!tr.querySelector('input[data-k="vehicleType"]').value) tr.querySelector('input[data-k="vehicleType"]').value = 'REGULAR';
+    tr.querySelector('.ewb-del').addEventListener('click', () => tr.remove());
+  }
+
+  function ewbParseRows() {
+    return [...document.querySelectorAll('#ewb-rows tr')].map((tr) => {
+      const row = {};
+      EWB_COLS.forEach((c) => { row[c.key] = (tr.querySelector(`input[data-k="${c.key}"]`)?.value || '').trim(); });
+      return row;
+    }).filter((r) => r.so);
+  }
+
+  function ewbCellStr(v) {
+    if (v == null || v === '') return '';
+    if (v instanceof Date) {
+      const p = (n) => (n < 10 ? '0' : '') + n;
+      return `${p(v.getDate())}/${p(v.getMonth() + 1)}/${v.getFullYear()}`;
+    }
+    if (typeof v === 'number') return String(Math.round(v) === v ? v : v);
+    return String(v).trim();
+  }
+
+  // Prefer exact header matches, then startsWith, then includes (min length 4) to
+  // avoid "vehicle" matching "Vehicle Type" when looking for vehicle number.
+  function ewbPick(obj, keys) {
+    const entries = Object.keys(obj).map((k) => ({
+      k, kk: String(k).toLowerCase().replace(/[^a-z0-9]/g, ''),
     }));
+    for (const want of keys) {
+      const hit = entries.find((e) => e.kk === want);
+      if (hit) return ewbCellStr(obj[hit.k]);
+    }
+    for (const want of keys) {
+      const hit = entries.find((e) => e.kk.startsWith(want) || (want.length >= 4 && e.kk.includes(want)));
+      if (hit) return ewbCellStr(obj[hit.k]);
+    }
+    return '';
+  }
+
+  function ewbToApiRows(rows) {
+    return rows.map((r) => {
+      const out = { so: r.so };
+      for (const k of ['gstin', 'transporterName', 'vehicleNo', 'transMode', 'distance', 'docDate', 'docNo', 'vehicleType']) {
+        if (r[k]) out[k] = r[k];
+      }
+      return out;
+    });
+  }
+
+  function ewbEnsureSheetJs() {
+    if (window.XLSX) return true;
+    toast('Excel library still loading — wait a second and try again.', 'bad');
+    return false;
+  }
+
+  $('ewb-template-btn')?.addEventListener('click', () => {
+    if (!ewbEnsureSheetJs()) return;
+    const ws = XLSX.utils.aoa_to_sheet([
+      EWB_HEADERS,
+      ['SO01562', '22AAAAA0000A1Z5', 'Opptra Logistics', 'ROAD', 'GJ01AB1234', '12', 'DOC123', '23/06/2026', 'REGULAR'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Eway');
+    XLSX.writeFile(wb, 'opptra-eway-template.xlsx');
+  });
+
+  $('ewb-add-row')?.addEventListener('click', () => ewbAddRow());
+  $('ewb-clear-rows')?.addEventListener('click', () => {
+    if ($('ewb-rows')) { $('ewb-rows').innerHTML = ''; ewbAddRow(); ewbAddRow(); }
+    if ($('ewb-imp-msg')) $('ewb-imp-msg').textContent = '';
+  });
+
+  $('ewb-file')?.addEventListener('change', (ev) => {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    if (!ewbEnsureSheetJs()) { ev.target.value = ''; return; }
+    const rd = new FileReader();
+    rd.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: true });
+        if (!rows.length) { $('ewb-imp-msg').textContent = 'No rows found in the file.'; return; }
+        $('ewb-rows').innerHTML = '';
+        let imported = 0;
+        rows.forEach((o) => {
+          const so = ewbPick(o, ['sonumber', 'socode', 'saleorder', 'so']);
+          if (!so) return;
+          imported += 1;
+          ewbAddRow({
+            so,
+            gstin: ewbPick(o, ['transportergstin', 'gstin', 'transporterid']),
+            transporterName: ewbPick(o, ['transportername', 'transportname']),
+            transMode: ewbPick(o, ['transportmode', 'transmode', 'mode']) || 'ROAD',
+            vehicleNo: ewbPick(o, ['vehicleno', 'vehiclenumber']),
+            distance: ewbPick(o, ['distancekm', 'distance']),
+            docNo: ewbPick(o, ['transportdocno', 'docno', 'documentno']),
+            docDate: ewbPick(o, ['docdateddmmyyyy', 'docdate']),
+            vehicleType: ewbPick(o, ['vehicletype']) || 'REGULAR',
+          });
+        });
+        if (!imported) { ewbAddRow(); ewbAddRow(); }
+        $('ewb-imp-msg').textContent = imported ? `${imported} row(s) imported` : 'No SO rows found in the file.';
+        toast(imported ? `${imported} row(s) imported from sheet` : 'No SO rows found in the file.', imported ? 'ok' : 'bad');
+      } catch (err) {
+        $('ewb-imp-msg').textContent = `Import failed: ${err.message}`;
+        toast(`Import failed: ${err.message}`, 'bad');
+      }
+      ev.target.value = '';
+    };
+    rd.readAsArrayBuffer(f);
+  });
+
+  // Seed two empty rows when the tab is first opened
+  if ($('ewb-rows') && !$('ewb-rows').children.length) { ewbAddRow(); ewbAddRow(); }
+
+  $('ewb-run-btn')?.addEventListener('click', () => {
+    const parsed = ewbParseRows();
+    const rows = ewbToApiRows(parsed);
+    const dryRun = $('ewb-dry').checked;
+    const badGstin = rows.find((r) => r.gstin && r.gstin.length !== 15);
+    const over = rows.length > 100;
     return runJob({
       btn: $('ewb-run-btn'), out: $('ewb-output'),
       working: dryRun ? 'Previewing (no e-way bills created)…' : 'Generating e-way bills…',
-      validate: () => (!sos.length ? 'Enter at least one SO number.'
-        : gstin && gstin.length !== 15 ? 'GSTIN must be exactly 15 characters (or leave it blank).' : null),
+      validate: () => (!rows.length ? 'Add at least one row with an SO Number (or import the Excel template).'
+        : over ? 'Maximum 100 rows per batch.'
+        : badGstin ? `GSTIN for ${badGstin.so} must be exactly 15 characters (or leave blank).` : null),
       submit: () => api('/api/automations/ewaybill/generate', { body: { dryRun, rows } }),
-      render: (r) => renderBatch(r, 'E-way bill'),
+      render: (r) => renderEwayBatch(r),
     });
   });
 
@@ -348,6 +591,53 @@
         [['SO', r.so], ['Channel', r.channel], ['Facility', r.facility], ['PO', r.po], ['Invoice', r.invoice]], 'asn'),
     });
   });
+
+  /* ---------------- Home Centre (GCC) — manual, empty-safe ---------------- */
+  function renderHc(r) {
+    const ok = r.ok !== false;
+    const msg = r.message || (r.empty ? 'No orders — nothing to do' : (ok ? 'Done' : 'Failed'));
+    const rows = [
+      ['Status', ok ? (r.empty ? 'OK (empty)' : 'OK') : 'Failed'],
+      ['Dry run', r.dryRun ? 'yes' : 'no'],
+      ['Fetched', r.fetched ?? '—'],
+      ['Processed', r.processed ?? 0],
+      ['OK / failed', `${r.okCount ?? 0} / ${r.failed ?? 0}`],
+      ['Configured', r.configured === false ? 'Vinculum creds missing' : 'yes'],
+    ];
+    return resultHead(ok, msg) + kv(rows);
+  }
+
+  $('hc-sync-btn')?.addEventListener('click', () => {
+    const dryRun = !!$('hc-dry')?.checked;
+    return runJob({
+      btn: $('hc-sync-btn'), out: $('hc-output'),
+      working: dryRun ? 'Checking Home Centre orders (dry run)…' : 'Syncing Home Centre → UC B2C SO…',
+      submit: () => api('/api/automations/homecentre/sync', { body: { dryRun, limit: 50, source: 'active' } }),
+      render: renderHc,
+    });
+  });
+
+  $('hc-fulfill-btn')?.addEventListener('click', () => runJob({
+    btn: $('hc-fulfill-btn'), out: $('hc-output'),
+    working: 'Fulfill dry-run…',
+    submit: () => api('/api/automations/homecentre/fulfill', { body: { dryRun: true, limit: 20 } }),
+    render: renderHc,
+  }));
+
+  /* ---------------- India / GCC region toggle ---------------- */
+  function setRegion(region) {
+    const r = region === 'gcc' ? 'gcc' : 'india';
+    localStorage.setItem('opptra_scm_region', r);
+    document.body.classList.toggle('region-india', r === 'india');
+    document.body.classList.toggle('region-gcc', r === 'gcc');
+    $('region-india')?.classList.toggle('active', r === 'india');
+    $('region-gcc')?.classList.toggle('active', r === 'gcc');
+    // If HC tab hidden while on it, bounce to dashboard
+    if (r === 'india' && !$('tab-homecentre')?.classList.contains('hidden')) go('dashboard');
+  }
+  $('region-india')?.addEventListener('click', () => setRegion('india'));
+  $('region-gcc')?.addEventListener('click', () => setRegion('gcc'));
+  setRegion(localStorage.getItem('opptra_scm_region') || 'india');
 
   /* ---------------- Reverse DC: facility + Bulk Return ID → clean DC PDF ---------------- */
   // Hybrid modes: "rebuild" = parsed data reconciled against CN totals and a fresh DC
@@ -754,16 +1044,19 @@
     } catch {}
     // analytics
     try {
-      const a = await api('/api/admin/analytics');
+      const a = await api('/api/admin/kpi?days=7');
       const t = a.totals || {};
+      const inflight = a.inflight || {};
       $('analytics-cards').innerHTML = `
         ${statCard('Succeeded', t.succeeded || 0, 'ok')}
         ${statCard('Failed', t.failed || 0, 'bad')}
-        ${statCard('In flight', (a.inflight.queued + a.inflight.running + a.inflight.pending) || 0, 'warn')}
-        ${statCard('Session', (a.session.status || '?').toUpperCase(), a.session.status === 'alive' ? 'ok' : 'bad')}`;
-      $('autom-table').querySelector('tbody').innerHTML = a.byAutomation.map((r) => `
-        <tr><td>${esc(r.automation)}</td><td>${r.total}</td><td>${r.ok}</td><td>${r.failed}</td><td>${r.active}</td></tr>`).join('') || emptyRow(5);
-      $('user-usage-table').querySelector('tbody').innerHTML = a.byUser.map((r) => `
+        ${statCard('Success rate', a.successRate != null ? a.successRate + '%' : '—', 'ok')}
+        ${statCard('In flight', (inflight.queued + inflight.running + inflight.pending) || 0, 'warn')}
+        ${statCard('Active users', (a.byUser || []).length, '')}
+        ${statCard('Session', (a.session?.status || '?').toUpperCase(), a.session?.status === 'alive' ? 'ok' : 'bad')}`;
+      $('autom-table').querySelector('tbody').innerHTML = (a.features || a.byAutomation || []).map((r) => `
+        <tr><td>${esc(r.label || r.automation)}</td><td>${r.total}</td><td>${r.ok}</td><td>${r.failed}</td><td>${r.active || 0}</td></tr>`).join('') || emptyRow(5);
+      $('user-usage-table').querySelector('tbody').innerHTML = (a.byUser || []).map((r) => `
         <tr><td>${esc(r.user_email)}</td><td>${r.total}</td><td>${r.ok}</td><td>${r.failed}</td></tr>`).join('') || emptyRow(4);
       $('errors-table').querySelector('tbody').innerHTML = a.recentErrors.map((r) => `
         <tr><td>${fmt(r.finished_at)}</td><td>${esc(r.user_email)}</td><td>${esc(r.automation)}</td>
@@ -841,6 +1134,43 @@
       return `<li class="${x.ok ? 'ok' : 'bad'}"><span class="so">${esc(x.so)}</span><span>${esc(line)}</span></li>`;
     }).join('');
     return head + `<ul class="result-list">${list}</ul>` + raw(r);
+  }
+
+  // E-way batch: same per-SO status list, plus a Download button whenever the worker
+  // returned the PDF bytes (fresh generate or an SO that already had an EWB).
+  function renderEwayBatch(r) {
+    const items = r.results || [];
+    const withPdf = items.filter((x) => x.file?.base64).length;
+    const head = resultHead(r.failed === 0,
+      `E-way bill: ${r.ok ?? 0} ok · ${r.failed ?? 0} failed`
+      + (withPdf ? ` · ${withPdf} PDF${withPdf === 1 ? '' : 's'} ready` : ''));
+    const list = items.map((x, i) => {
+      const line = x.skipped ? `already had EWB ${x.ewb}`
+        : x.dryRun ? `would generate · invoice ${x.invoiceCode}`
+        : x.ewb ? `EWB ${x.ewb}` : (x.error || '-');
+      const note = x.pdfError ? ` <span class="meta">(${esc(x.pdfError)})</span>` : '';
+      const dl = x.file?.base64 ? ewayDownloadLink(x.file, `eway-${i}-${x.so}`) : '';
+      return `<li class="${x.ok ? 'ok' : 'bad'}"><span class="so">${esc(x.so)}</span>`
+        + `<span>${esc(line)}${note}${dl}</span></li>`;
+    }).join('');
+    const slim = {
+      ...r,
+      results: items.map(({ file, ...rest }) => (
+        file ? { ...rest, file: { filename: file.filename, contentType: file.contentType, base64: '…' } } : rest
+      )),
+    };
+    return head + `<ul class="result-list">${list}</ul>` + raw(slim);
+  }
+
+  function ewayDownloadLink(file, slot) {
+    try {
+      const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: file.contentType || 'application/pdf' }));
+      trackBlobUrl(slot, url);
+      return ` <a href="${url}" download="${esc(file.filename)}" class="dl-btn" style="display:inline-block;margin:4px 0 0 8px;padding:4px 10px;font-size:12px">⤓ Download PDF</a>`;
+    } catch {
+      return '';
+    }
   }
 
   function renderInventory(r, op) {

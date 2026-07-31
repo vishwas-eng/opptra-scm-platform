@@ -74,6 +74,7 @@ const MARKETPLACE_MAP = {
   ZEPTO_B2B: 'Zepto', ZEPTO: 'Zepto', FLIPKART_B2B: 'Flipkart Alpha',
   BLINKIT_B2B: 'Blinkit', BLINKIT: 'Blinkit', INSTAMART_B2B: 'Instamart', INSTAMART: 'Instamart',
   RELIANCE_AJIO_SOR_B2B: 'AJIO', AJIO: 'AJIO', COCOBLU: 'Cocoblu',
+  BIGBASKET_B2B_SOR: 'BigBasket', BIGBASKET_B2B: 'BigBasket', BIGBASKET: 'BigBasket',
 };
 
 export function mapMarketplaceDropdown(raw) {
@@ -82,19 +83,49 @@ export function mapMarketplaceDropdown(raw) {
   if (MARKETPLACE_MAP[v]) return MARKETPLACE_MAP[v];
   const u = v.toUpperCase();
   if (MARKETPLACE_MAP[u]) return MARKETPLACE_MAP[u];
+  // Waypoint Customer codes (customer_code) are the real marketplace signal for Amazon
+  // family and several 1P channels — match those before falling back to the raw string.
   if (/AJIO/i.test(v)) return 'AJIO';
-  if (/ZEPTO/i.test(v)) return 'Zepto';
+  if (/ZEPTO|B2B0000\d/i.test(v)) return 'Zepto';
   if (/BLINKIT/i.test(v)) return 'Blinkit';
-  if (/INSTAMART/i.test(v)) return 'Instamart';
+  if (/INSTAMART|SWIGGY/i.test(v)) return 'Instamart';
+  if (/BIGBASKET|BIG_BASKET|Big_Basket/i.test(v)) return 'BigBasket';
   if (/FLIPKART/i.test(v) && /FBF/i.test(v)) return 'Flipkart FBF';
   if (/FLIPKART/i.test(v)) return 'Flipkart Alpha';
   if (/COCOBLU/i.test(v)) return 'Cocoblu';
   if (/KKOC/i.test(v)) return 'AZ KKOC';
   if (/ETRADE/i.test(v)) return 'AZ Etrade';
-  if (/RETAILEZ/i.test(v)) return 'AZ RetailEZ';
+  if (/RETAILEZ|CLICKTECH/i.test(v)) return 'AZ RetailEZ';
   if (/FBA/i.test(v)) return 'Amazon FBA';
   if (/AMAZON/i.test(v) || /^AZ\b/i.test(v)) return 'AZ Etrade';
+  if (/SHOPPERS?STOP/i.test(v)) return 'Shoppersstop';
   return v;
+}
+
+/**
+ * What goes in the B2B Marketplace column.
+ * Amazon-family customers collapse to short labels ops use day-to-day; Swiggy/Flipkart
+ * similarly. Everything else stays the Waypoint customer name as-is.
+ */
+export function marketplaceLabelFromCustomer(customer, channel = '') {
+  const c = String(customer || '').trim();
+  const ch = String(channel || '').trim();
+  const src = `${c} ${ch}`.trim();
+  if (!src) return '';
+
+  // Amazon UCB family — only these four short names
+  if (/ETRADE/i.test(src)) return 'E-Trade';
+  if (/KKOC/i.test(src)) return 'KKOC';
+  if (/COCOBLU|COCOA\s*BLU/i.test(src)) return 'Cocoa Blue';
+  if (/CLICKTECH|CLICK\s*TAG|CLICKTAG/i.test(src)) return 'ClickTag';
+
+  // Channel short names (match customer or marketplace channel)
+  if (/SWIGGY|INSTAMART/i.test(src)) return 'Swiggy';
+  if (/FLIPKART/i.test(src)) return 'Flipkart';
+
+  // Prefer the customer name when we have it; otherwise a readable channel fallback.
+  if (c) return c;
+  return mapMarketplaceDropdown(ch);
 }
 
 export function mapOverallStatus(soStatus) {
@@ -133,15 +164,30 @@ export function parseFlexibleDate(v) {
 
 /** Waypoint so-summary export row -> B2B-VIEW Phase-1 headers (Config.gs phase1Mapper_). */
 export function phase1Mapper(wpRow, cfg = {}) {
-  const marketplace = mapMarketplaceDropdown(wpRow['Marketplace'] || wpRow['marketplace'] || '');
+  // Marketplace column: Amazon family → E-Trade / KKOC / Cocoa Blue / ClickTag;
+  // Swiggy / Flipkart short names; everything else = Waypoint customer name as-is.
+  const customer = String(
+    wpRow['Customer'] || wpRow['customer'] || wpRow['Customer Code']
+    || wpRow['customer_code'] || '',
+  ).trim();
+  const channel = String(wpRow['Marketplace'] || wpRow['marketplace'] || '').trim();
+  const marketplace = marketplaceLabelFromCustomer(customer, channel);
+
   let typeOfSales = wpRow['Type of Sales'] || '';
   if (!typeOfSales) {
-    if (/FBA/i.test(marketplace)) typeOfSales = 'FBA';
-    else if (/FBF/i.test(marketplace)) typeOfSales = 'FBF';
+    const typeHint = mapMarketplaceDropdown(channel) || marketplace;
+    if (/FBA/i.test(typeHint)) typeOfSales = 'FBA';
+    else if (/FBF/i.test(typeHint)) typeOfSales = 'FBF';
     else typeOfSales = cfg.defaultTypeOfSales || '1P';
   }
   let brand = firstBrand(wpRow['Brand(s)'] || wpRow['Brand'] || '');
   if (brand.replace(/\s+/g, '').toLowerCase() === 'jack&jones') brand = 'Jack & Jones';
+
+  // Origin City must NOT be filled with the warehouse code — Pickup Wh Name already
+  // holds that. Only keep a distinct city value if one was supplied explicitly.
+  const origin = String(wpRow['Origin City'] || '').trim();
+  const warehouse = String(wpRow['Warehouse'] || wpRow['Pickup Wh Name'] || '').trim();
+  const originCity = origin && origin !== warehouse ? origin : '';
 
   return {
     Category: wpRow['Category'] || cfg.defaultCategory || 'HARDLINES',
@@ -157,7 +203,7 @@ export function phase1Mapper(wpRow, cfg = {}) {
     'PO / RPO Received Date': parseFlexibleDate(wpRow['Created Date'] || wpRow['PO / RPO Received Date'] || ''),
     'Invoice Qty': wpRow['Invoice Qty'] || '',
     'Pickup Wh Name': wpRow['Warehouse'] || wpRow['Pickup Wh Name'] || '',
-    'Origin City': wpRow['Warehouse'] || wpRow['Origin City'] || '',
+    'Origin City': originCity,
     'Destination City': wpRow['Ship-to City'] || wpRow['Ship-to'] || wpRow['Destination City'] || '',
     'Appointment Date / EDD': parseFlexibleDate(wpRow['Appt Date'] || wpRow['Appointment Date / EDD'] || ''),
     'Appointment ID': wpRow['Appt ID'] || wpRow['Appointment ID'] || '',
@@ -176,6 +222,9 @@ export function normalizeWaypointRow(r) {
   if (!out['Brand(s)'] && out['Brand']) out['Brand(s)'] = out['Brand'];
   if (!out['Total Units'] && out['PO / RPO Quantity']) out['Total Units'] = out['PO / RPO Quantity'];
   if (!out['SO Value'] && out['PO / Invoice Value Total']) out['SO Value'] = out['PO / Invoice Value Total'];
+  if (!out.Customer && (out['Customer Code'] || out.customer_code || out.customer)) {
+    out.Customer = out['Customer Code'] || out.customer_code || out.customer;
+  }
   return out;
 }
 

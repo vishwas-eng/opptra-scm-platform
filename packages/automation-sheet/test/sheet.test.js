@@ -241,7 +241,7 @@ test('first-fill: a typed SO absent from Waypoint is resolved from UC, warehouse
   assert.equal(ucRow[HEADERS.indexOf('PO / RPO / Gatepass Number')], '5179275981');
   assert.equal(ucRow[HEADERS.indexOf('PO / RPO Quantity')], 603);
   assert.equal(ucRow[HEADERS.indexOf('Destination City')], 'Tumkur');
-  assert.equal(ucRow[HEADERS.indexOf('Brand')], 'EKT', 'brand derived from the warehouse code');
+  assert.equal(ucRow[HEADERS.indexOf('Brand')], '', 'Brand is not invented from the warehouse code (WIQ/EKT/RSG are not brands)');
   assert.ok(rows.some((x) => x[SO_COL] === 'SO0003'), 'the Waypoint sweep still ran');
   // The hop stops at the owning facility instead of walking all of them.
   assert.ok(!calls.hops.some((h) => h.facility === 'AMAZON_FBA_BLR4_KA'), 'channel drop points are not hopped');

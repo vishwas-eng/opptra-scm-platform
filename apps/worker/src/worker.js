@@ -16,6 +16,7 @@ import { makeAsnPipeline } from '@opptra/automation-asn';
 import { makeReverseDcPipeline } from '@opptra/automation-reversedc';
 import { makePackingPipeline } from '@opptra/automation-packing';
 import { makeSheetPipeline } from '@opptra/automation-sheet';
+import { makeHomecentrePipeline } from '@opptra/automation-homecentre';
 import { googleClients } from '@opptra/integrations-google';
 import { makeHandlers } from './handlers.js';
 
@@ -117,6 +118,9 @@ const handlers = makeHandlers({
     // Legacy shared pipeline kept for tests; packing handlers rebuild per user.
     packingPipeline: makePackingPipeline(uc, cfg, google, { saveThread: savePackingThread, latestThreadFor: latestPackingThread }),
     sheetPipeline: makeSheetPipeline(uc, cfg, google),
+    homecentrePipeline: (cfg.VINCULUM_USER && cfg.VINCULUM_PASS)
+      ? makeHomecentrePipeline(uc, cfg)
+      : null,
   },
   reenqueue: (name, data, opts) => queue.add(name, data, opts),
 });
@@ -161,7 +165,10 @@ if (cfg.SHEET_SYNC_MINUTES > 0) {
   await queue.removeJobScheduler('sheet-sync-source').catch(() => {});
 }
 
-logger.info({ keepaliveEveryMin: cfg.UC_KEEPALIVE_MINUTES }, 'worker started');
+// Home Centre is MANUAL ONLY for now (no orders yet / testing). Never auto-schedule.
+await queue.removeJobScheduler('homecentre-sync').catch(() => {});
+
+logger.info({ keepaliveEveryMin: cfg.UC_KEEPALIVE_MINUTES, hcManualOnly: true }, 'worker started');
 
 /* ------------------------------ shutdown ------------------------------ */
 let shuttingDown = false;

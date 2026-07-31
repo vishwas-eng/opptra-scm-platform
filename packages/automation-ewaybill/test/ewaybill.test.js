@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeEwaybillPipeline } from '../src/pipeline.js';
+import { makeEwaybillPipeline, downloadEwayPdf } from '../src/pipeline.js';
 
 // Mock UC: facilities list + facility-scoped invoice resolution + generate.
 function mockUc({ invoiceByFacility = {}, generateResult, calls = [] } = {}) {
@@ -24,19 +24,35 @@ function mockUc({ invoiceByFacility = {}, generateResult, calls = [] } = {}) {
   };
 }
 
-test('resolves invoice by hopping facilities, then generates', async () => {
-  const uc = mockUc({
-    invoiceByFacility: { F2: { shippingPackages: [{ invoiceCode: 'INV2', statusCode: 'READY_TO_SHIP', code: 'PK2' }] } },
-    generateResult: { successful: true, ewayBillNo: 'EWB123', ewayBillPdfUrl: 'https://x/y.pdf' },
-  });
-  const { generateOne } = makeEwaybillPipeline(uc);
-  const r = await generateOne({ so: 'SO1', gstin: '29ABCDE1234F1Z5' });
-  assert.equal(r.ok, true);
-  assert.equal(r.ewb, 'EWB123');
-  assert.equal(r.invoiceCode, 'INV2');
-  // the generate call used facility F2 (where the invoice was found)
-  const gen = uc.calls.find((c) => c.path?.includes('generateEWayBill'));
-  assert.equal(gen.facility, 'F2');
+function pdfFetch(ok = true) {
+  const prev = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (!ok) return { ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) };
+    const body = Buffer.from('%PDF-1.4 mock e-way bill content ' + 'x'.repeat(600));
+    return { ok: true, status: 200, arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) };
+  };
+  return () => { globalThis.fetch = prev; };
+}
+
+test('resolves invoice by hopping facilities, then generates and downloads the PDF', async () => {
+  const restore = pdfFetch(true);
+  try {
+    const uc = mockUc({
+      invoiceByFacility: { F2: { shippingPackages: [{ invoiceCode: 'INV2', statusCode: 'READY_TO_SHIP', code: 'PK2' }] } },
+      generateResult: { successful: true, ewayBillNo: 'EWB123', ewayBillPdfUrl: 'https://s3/ewb.pdf' },
+    });
+    const { generateOne } = makeEwaybillPipeline(uc);
+    const r = await generateOne({ so: 'SO1', gstin: '29ABCDE1234F1Z5' });
+    assert.equal(r.ok, true);
+    assert.equal(r.ewb, 'EWB123');
+    assert.equal(r.invoiceCode, 'INV2');
+    assert.ok(r.file?.base64, 'PDF must be attached for download');
+    assert.equal(r.file.contentType, 'application/pdf');
+    assert.match(r.file.filename, /EWB_SO1_EWB123\.pdf/);
+    assert.equal(Buffer.from(r.file.base64, 'base64').slice(0, 4).toString(), '%PDF');
+    const gen = uc.calls.find((c) => c.path?.includes('generateEWayBill'));
+    assert.equal(gen.facility, 'F2');
+  } finally { restore(); }
 });
 
 test('rejects a GSTIN that is not exactly 15 chars, before any generate', async () => {
@@ -48,21 +64,99 @@ test('rejects a GSTIN that is not exactly 15 chars, before any generate', async 
   assert.ok(!uc.calls.some((c) => c.path?.includes('generateEWayBill')), 'must not call generate with a bad GSTIN');
 });
 
-test('dry run resolves + validates but never calls generate', async () => {
-  const uc = mockUc({ invoiceByFacility: { F1: { shippingPackages: [{ invoiceCode: 'INV1', code: 'PK1' }] } }, generateResult: {} });
-  const { generateOne } = makeEwaybillPipeline(uc);
-  const r = await generateOne({ so: 'SO1', gstin: '29ABCDE1234F1Z5' }, { dryRun: true });
-  assert.equal(r.ok, true);
-  assert.equal(r.dryRun, true);
-  assert.equal(r.invoiceCode, 'INV1');
-  assert.ok(!uc.calls.some((c) => c.path?.includes('generateEWayBill')), 'dry run must not generate');
+test('dry run resolves + validates but never calls generate or downloads PDF', async () => {
+  const restore = pdfFetch(true);
+  try {
+    const uc = mockUc({ invoiceByFacility: { F1: { shippingPackages: [{ invoiceCode: 'INV1', code: 'PK1' }] } }, generateResult: {} });
+    const { generateOne } = makeEwaybillPipeline(uc);
+    const r = await generateOne({ so: 'SO1', gstin: '29ABCDE1234F1Z5' }, { dryRun: true });
+    assert.equal(r.ok, true);
+    assert.equal(r.dryRun, true);
+    assert.equal(r.invoiceCode, 'INV1');
+    assert.equal(r.file, undefined);
+    assert.ok(!uc.calls.some((c) => c.path?.includes('generateEWayBill')), 'dry run must not generate');
+  } finally { restore(); }
 });
 
-test('skips an SO that already has an EWB', async () => {
-  const uc = mockUc({ invoiceByFacility: { F1: { shippingPackages: [{ invoiceCode: 'INV1', code: 'PK1', ewayBillNo: 'EXISTING' }] } }, generateResult: {} });
-  const { generateOne } = makeEwaybillPipeline(uc);
-  const r = await generateOne({ so: 'SO1' });
-  assert.equal(r.ok, true);
-  assert.equal(r.skipped, true);
-  assert.equal(r.ewb, 'EXISTING');
+test('skips an SO that already has an EWB but still downloads its PDF', async () => {
+  const restore = pdfFetch(true);
+  try {
+    const uc = mockUc({
+      invoiceByFacility: {
+        F1: { shippingPackages: [{ invoiceCode: 'INV1', code: 'PK1', ewayBillNo: 'EXISTING', ewayBillPdfUrl: 'https://s3/old.pdf' }] },
+      },
+      generateResult: {},
+    });
+    const { generateOne } = makeEwaybillPipeline(uc);
+    const r = await generateOne({ so: 'SO1' });
+    assert.equal(r.ok, true);
+    assert.equal(r.skipped, true);
+    assert.equal(r.ewb, 'EXISTING');
+    assert.ok(r.file?.base64, 'existing EWB should still be downloadable');
+    assert.ok(!uc.calls.some((c) => c.path?.includes('generateEWayBill')), 'must not regenerate');
+  } finally { restore(); }
+});
+
+test('generate still succeeds when PDF download fails - flags pdfError', async () => {
+  const restore = pdfFetch(false);
+  try {
+    const uc = mockUc({
+      invoiceByFacility: { F1: { shippingPackages: [{ invoiceCode: 'INV1', code: 'PK1' }] } },
+      generateResult: { successful: true, ewayBillNo: 'EWB9', ewayBillPdfUrl: 'https://s3/gone.pdf' },
+    });
+    const { generateOne } = makeEwaybillPipeline(uc);
+    const r = await generateOne({ so: 'SO1', gstin: '29ABCDE1234F1Z5' });
+    assert.equal(r.ok, true);
+    assert.equal(r.ewb, 'EWB9');
+    assert.equal(r.file, null);
+    assert.match(r.pdfError, /could not be downloaded/i);
+  } finally { restore(); }
+});
+
+test('skips when only a PDF URL is present (no EWB number) and still downloads', async () => {
+  const restore = pdfFetch(true);
+  try {
+    const uc = mockUc({
+      invoiceByFacility: {
+        F1: { shippingPackages: [{ invoiceCode: 'INV1', code: 'PK1', ewayBillPdfUrl: 'https://s3/only-url.pdf' }] },
+      },
+      generateResult: { successful: true, ewayBillNo: 'SHOULD_NOT' },
+    });
+    const { generateOne } = makeEwaybillPipeline(uc);
+    const r = await generateOne({ so: 'SO1' });
+    assert.equal(r.ok, true);
+    assert.equal(r.skipped, true);
+    assert.ok(r.file?.base64);
+    assert.ok(!uc.calls.some((c) => c.path?.includes('generateEWayBill')), 'must not regenerate when PDF URL already exists');
+  } finally { restore(); }
+});
+
+test('already-had EWB still returns the PDF even on dry run', async () => {
+  const restore = pdfFetch(true);
+  try {
+    const uc = mockUc({
+      invoiceByFacility: {
+        F1: { shippingPackages: [{ invoiceCode: 'INV1', code: 'PK1', ewayBillNo: 'EXISTING', ewayBillPdfUrl: 'https://s3/old.pdf' }] },
+      },
+      generateResult: {},
+    });
+    const { generateOne } = makeEwaybillPipeline(uc);
+    const r = await generateOne({ so: 'SO1' }, { dryRun: true });
+    assert.equal(r.ok, true);
+    assert.equal(r.skipped, true);
+    assert.equal(r.dryRun, true);
+    assert.ok(r.file?.base64, 'existing EWB PDF must download even when dry-run is on');
+    assert.ok(!uc.calls.some((c) => c.path?.includes('generateEWayBill')));
+  } finally { restore(); }
+});
+
+test('downloadEwayPdf rejects non-PDF bodies', async () => {
+  const prev = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    arrayBuffer: async () => Buffer.from('<html>not a pdf</html>').buffer,
+  });
+  try {
+    assert.equal(await downloadEwayPdf('https://x'), null);
+  } finally { globalThis.fetch = prev; }
 });

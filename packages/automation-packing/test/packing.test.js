@@ -5,13 +5,15 @@ import { parseWarehouseEmailRows, resolveWarehouseEntry } from '../src/warehouse
 
 // A sheet mock: Master + optional date tabs, keyed by tab name. Order details come from
 // here now (not UC), matching the two-step flow.
-const HEADERS = ['Marketplace', 'Brand', 'PO / RPO / Gatepass Number', 'SO/GP Number', 'PO / RPO Quantity', 'PO / Invoice Value Total', 'Pickup Wh Name', 'Destination City', 'Appointment Date / EDD', 'Dispatch Date', 'Appointment ID'];
+const HEADERS = ['Marketplace', 'Brand', 'PO / RPO / Gatepass Number', 'SO/GP Number', 'PO / RPO Quantity', 'PO / Invoice Value Total', 'Pickup Wh Name', 'Destination City', 'Appointment Date / EDD', 'Dispatch / Pickup Date', 'Appointment ID'];
 function sheetRow(o) {
   const idx = (n) => HEADERS.indexOf(n);
   const r = HEADERS.map(() => '');
   r[idx('SO/GP Number')] = o.so; r[idx('Pickup Wh Name')] = o.wh || 'Opp_RSG_MH';
   r[idx('PO / RPO / Gatepass Number')] = o.po || ''; r[idx('Appointment ID')] = o.appt || '';
   r[idx('Marketplace')] = o.mkt || 'AZ Etrade'; r[idx('Brand')] = o.brand || 'Acme';
+  if (o.dispatch) r[idx('Dispatch / Pickup Date')] = o.dispatch;
+  if (o.apptDate) r[idx('Appointment Date / EDD')] = o.apptDate;
   return r;
 }
 function googleMock({ rows = [], driveHas = () => false, draftReturns = { id: 'd1', message: { threadId: 't1' } } } = {}) {
@@ -96,15 +98,42 @@ test('step 1: order table + label + appointment, To/CC from warehouse sheet (not
   assert.equal(r.drafts[0].attachmentCount, 2, 'label + appointment letter');
   assert.match(r.drafts[0].to, /ajit@risingscs\.com/);
   assert.match(r.drafts[0].cc, /indiaops@opptra\.com/);
-  assert.match(r.drafts[0].subject, /^Consignment Packing & Readiness - .+ - \d{2}-[A-Z][a-z]+-\d{4} RSG$/);
+  assert.match(r.drafts[0].subject, /^Consignment Packing & Readiness - AZ Etrade - \d{2}-[A-Z][a-z]+-\d{4} RSG$/);
   const raw = rawOf(capturedDrafts[0]);
   assert.match(raw, /To: ajit@risingscs\.com, sachin@risingscs\.com/);
   assert.match(raw, /Cc: indiaops@opptra\.com/);
   assert.match(raw, /Hi RSG,/);
+  assert.match(raw, /AZ Etrade dispatches/);
+  assert.doesNotMatch(raw, /Amazon UCB/);
   assert.match(raw, /Label_PO777\.pdf/);
   assert.match(raw, /Appt_APT9\.pdf/);
 });
 
+test('step 1: blank Appointment ID is omitted from the email table (not an empty column)', async () => {
+  const { google, capturedDrafts } = googleMock({
+    rows: [sheetRow({ so: 'SO1', wh: 'Opp_RSG_MH', po: 'PO777', appt: '', mkt: 'Blinkit' })],
+    driveHas: (base) => base === 'PO777',
+  });
+  const r = await pipeOf({}, google).createDrafts(['SO1']);
+  assert.equal(r.ok, true);
+  assert.equal(r.drafts[0].attachmentCount, 1, 'label only — no appointment PDF required');
+  assert.ok(!(r.drafts[0].missing || []).some((m) => /appointment id/i.test(m)), 'blank appt is not flagged missing');
+  const raw = rawOf(capturedDrafts[0]);
+  assert.match(raw, /Blinkit dispatches/);
+  assert.doesNotMatch(raw, /Appointment ID/);
+});
+
+test('step 1: Dispatch / Pickup Date from the B2B tracker is included in the email when filled', async () => {
+  const { google, capturedDrafts } = googleMock({
+    rows: [sheetRow({ so: 'SO1', wh: 'Opp_RSG_MH', po: 'PO777', appt: 'APT9', mkt: 'Blinkit', dispatch: '29-Jul-2026' })],
+    driveHas: () => true,
+  });
+  const r = await pipeOf({}, google).createDrafts(['SO1']);
+  assert.equal(r.ok, true);
+  const raw = rawOf(capturedDrafts[0]);
+  assert.match(raw, /Dispatch Date/);
+  assert.match(raw, /29-Jul-2026/);
+});
 test('step 1: operator can narrow recipients via the recipients override', async () => {
   const { google, capturedDrafts } = googleMock({
     rows: [sheetRow({ so: 'SO1', wh: 'Opp_RSG_MH', po: 'PO777', appt: 'APT9' })],

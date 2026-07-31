@@ -11,7 +11,7 @@ export const RETURN_PENDING_RETRY_MS = 90_000;
 
 export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, packingGoogleFor, runUserEmail, packingPipelineFor }) {
   const { markRunning, markPendingRetry, finishRun } = runs;
-  const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, packingPipeline, sheetPipeline, reverseDcPipeline } = pipelines;
+  const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, packingPipeline, sheetPipeline, reverseDcPipeline, homecentrePipeline } = pipelines;
 
   async function packingPipe(runUid, userEmailHint) {
     const userEmail = runUserEmail
@@ -199,6 +199,69 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       await finishRun(runUid, { ok: out.ok, result: out, error: out.error || null });
       if (!out.ok) await alert('return-failed', `Return pipeline FAILED on ${input.saleOrder}`, { runUid, error: out.error });
       return out;
+    },
+
+    // Home Centre: Vinculum orders → UC B2C SO punch (customer + saleOrder only). Manual only.
+    'homecentre.sync': async ({ data: { runUid, input = {} } }) => {
+      if (runUid) await markRunning(runUid);
+      if (!homecentrePipeline) {
+        const result = {
+          ok: true,
+          empty: true,
+          configured: false,
+          processed: 0,
+          message: 'Home Centre ready (manual). Set VINCULUM_USER + VINCULUM_PASS to list/punch orders. No orders expected yet.',
+        };
+        if (runUid) await finishRun(runUid, { ok: true, result });
+        return result;
+      }
+      const result = await homecentrePipeline.syncOrders({
+        dryRun: !!input.dryRun,
+        limit: input.limit || 50,
+        source: input.source || 'active',
+        buyerByOrder: input.buyerByOrder || {},
+      });
+      if (runUid) await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
+      // Never Slack-alert on empty list or dry-run
+      if (result.failed && !result.dryRun && result.processed > 0) {
+        await alert('homecentre-sync', `Home Centre sync: ${result.failed} of ${result.processed} failed`, { runUid });
+      }
+      return result;
+    },
+
+    // Home Centre: Vinculum confirm / ship / label (needs VINCULUM_FULFILL_ACTIONS_JSON).
+    'homecentre.fulfill': async ({ data: { runUid, input = {} } }) => {
+      if (runUid) await markRunning(runUid);
+      if (!homecentrePipeline) {
+        const result = { ok: true, empty: true, configured: false, processed: 0, message: 'Vinculum not configured — fulfill skipped' };
+        if (runUid) await finishRun(runUid, { ok: true, result });
+        return result;
+      }
+      const result = await homecentrePipeline.fulfillOrders({
+        dryRun: !!input.dryRun,
+        limit: input.limit || 20,
+        webOrderNos: input.webOrderNos || null,
+      });
+      if (runUid) await finishRun(runUid, { ok: result.ok !== false, result });
+      return result;
+    },
+
+    // Home Centre: punch SO then attempt Vinculum fulfill.
+    'homecentre.syncAndFulfill': async ({ data: { runUid, input = {} } }) => {
+      if (runUid) await markRunning(runUid);
+      if (!homecentrePipeline) {
+        const result = { ok: true, empty: true, configured: false, message: 'Vinculum not configured — nothing to do' };
+        if (runUid) await finishRun(runUid, { ok: true, result });
+        return result;
+      }
+      const result = await homecentrePipeline.syncAndFulfill({
+        dryRun: !!input.dryRun,
+        limit: input.limit || 50,
+        skipFulfill: input.skipFulfill !== false,
+        buyerByOrder: input.buyerByOrder || {},
+      });
+      if (runUid) await finishRun(runUid, { ok: result.ok !== false, result });
+      return result;
     },
   };
 }

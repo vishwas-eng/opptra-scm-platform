@@ -1,1 +1,1 @@
-export { makeEwaybillPipeline } from './pipeline.js';
+export { makeEwaybillPipeline, downloadEwayPdf } from './pipeline.js';

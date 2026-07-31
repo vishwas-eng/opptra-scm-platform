@@ -4,6 +4,9 @@
 // facilities until found) → generate the EWB via the PROVEN endpoint
 // /data/oms/invoice/generateEWayBill (regenerateEWayBill is only for an invoice that
 // ALREADY has an EWB - do not switch). transporterId MUST be a 15-char GSTIN.
+//
+// After generate (or when the SO already has an EWB), the PDF is downloaded so the UI
+// can offer a direct "Download" link - operators should not have to dig in Unicommerce.
 
 const v = (x) => (x == null ? '' : String(x).trim());
 
@@ -17,6 +20,33 @@ function toEpoch(d) {
   return Number.isNaN(t) ? null : t;
 }
 
+function safeName(s) {
+  return String(s || 'bill').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'bill';
+}
+
+function pdfFile(so, ewb, buf) {
+  return {
+    filename: `EWB_${safeName(so)}_${safeName(ewb)}.pdf`,
+    contentType: 'application/pdf',
+    base64: Buffer.from(buf).toString('base64'),
+  };
+}
+
+/** Fetch an e-way PDF from the Unicommerce / S3 URL returned on the shipping package. */
+export async function downloadEwayPdf(url) {
+  if (!url) return null;
+  try {
+    const res = await fetch(String(url), {
+      headers: { Accept: 'application/pdf,*/*', 'User-Agent': 'OpptraSCM/1.0' },
+    });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length > 500 && buf.slice(0, 4).toString() === '%PDF' ? buf : null;
+  } catch {
+    return null;
+  }
+}
+
 export function makeEwaybillPipeline(uc) {
   /** Resolve an SO's invoice in a specific facility. notHere=true → hop to the next. */
   async function resolveInFacility(so, facility) {
@@ -25,9 +55,12 @@ export function makeEwaybillPipeline(uc) {
     if (!sps.length) return { ok: false, notHere: true, error: 'not in this facility' };
     const sp = sps.find((p) => p.invoiceCode);
     if (!sp) return { ok: false, error: `not invoiced yet (status ${sps[0].statusCode || '?'})` };
+    const ewbNo = sp.ewayBillNo || sp.ewayBillNumber || '';
+    const ewayPdfUrl = sp.ewayBillPdfUrl || sp.eWayBillPdfUrl || '';
     return {
       ok: true, invoiceCode: sp.invoiceCode, status: sp.statusCode, packageCode: sp.code,
-      existingEwb: sp.ewayBillNo || sp.ewayBillNumber || (sp.ewayBillPdfUrl ? 'present' : null),
+      existingEwb: ewbNo || (ewayPdfUrl ? 'present' : null),
+      ewayPdfUrl,
     };
   }
 
@@ -64,15 +97,37 @@ export function makeEwaybillPipeline(uc) {
     return td;
   }
 
-  /** Generate one EWB. dryRun → resolve + validate + return payload, no write. */
+  /** Prefer the generate response URL; if missing, re-read the package for one. */
+  async function fetchPdf(so, facility, preferredUrl) {
+    let buf = await downloadEwayPdf(preferredUrl);
+    if (buf) return { buf, url: preferredUrl || null };
+    const again = await resolveInFacility(so, facility).catch(() => null);
+    if (!again?.ok || !again.ewayPdfUrl) return { buf: null, url: preferredUrl || null };
+    buf = await downloadEwayPdf(again.ewayPdfUrl);
+    return { buf, url: again.ewayPdfUrl };
+  }
+
+  /** Generate one EWB. dryRun → resolve + validate + return payload, no write / no PDF. */
   async function generateOne(row, { dryRun = false } = {}) {
     const so = v(row.so);
     if (!so) return { so, ok: false, error: 'empty SO' };
 
     const inv = await resolveInvoice(so);
     if (!inv.ok) return { so, ok: false, error: inv.error };
-    if (inv.existingEwb && inv.existingEwb !== 'present') {
-      return { so, ok: true, skipped: true, ewb: inv.existingEwb, invoiceCode: inv.invoiceCode, note: 'already had EWB' };
+
+    // Already has an EWB (number and/or PDF URL) → never regenerate. Always try to hand
+    // back the PDF, even when the UI asked for a dry run: downloading an existing bill is
+    // read-only and is exactly what operators want when they paste SOs that are already done.
+    if (inv.existingEwb) {
+      const ewbLabel = inv.existingEwb === 'present' ? 'on-invoice' : inv.existingEwb;
+      const { buf, url } = await fetchPdf(so, inv.facility, inv.ewayPdfUrl);
+      return {
+        so, ok: true, skipped: true, dryRun: !!dryRun, ewb: ewbLabel,
+        invoiceCode: inv.invoiceCode, facility: inv.facility,
+        note: 'already had EWB', pdf: url || null,
+        file: buf ? pdfFile(so, ewbLabel, buf) : null,
+        pdfError: buf ? undefined : 'EWB exists but PDF could not be downloaded',
+      };
     }
 
     let td;
@@ -88,8 +143,15 @@ export function makeEwaybillPipeline(uc) {
     }
     const ewb = d.ewayBillNo || d.ewayBillNumber ||
       (d.ewbeinvoicelist && d.ewbeinvoicelist[0] && (d.ewbeinvoicelist[0].ewayBillNo || d.ewbeinvoicelist[0].ewbNo)) || '(generated)';
-    return { so, ok: true, invoiceCode: inv.invoiceCode, ewb, pdf: d.ewayBillPdfUrl || null };
+    const pdfUrl = d.ewayBillPdfUrl || d.eWayBillPdfUrl || null;
+    const { buf, url } = await fetchPdf(so, inv.facility, pdfUrl || inv.ewayPdfUrl);
+    return {
+      so, ok: true, invoiceCode: inv.invoiceCode, facility: inv.facility, ewb,
+      pdf: url || pdfUrl,
+      file: buf ? pdfFile(so, ewb, buf) : null,
+      pdfError: buf ? undefined : 'EWB generated but PDF could not be downloaded',
+    };
   }
 
-  return { generateOne, resolveInvoice };
+  return { generateOne, resolveInvoice, downloadEwayPdf };
 }

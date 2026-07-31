@@ -103,9 +103,22 @@ const Env = z.object({
   SHEET_ENRICH_MAX_SOS: z.coerce.number().int().min(1).max(2000).default(200),
 
   // --- Vinculum (Home Centre sync) ---
-  VINCULUM_BASE_URL: z.string().default(''),
+  VINCULUM_BASE_URL: z.string().default('https://landmarkgroup.vinsupplier.com/eRetailWeb'),
   VINCULUM_USER: z.string().default(''),
   VINCULUM_PASS: z.string().default(''),
+  // JSON map of named fulfill steps once HAR-captured (confirm/invoice/ship/label).
+  VINCULUM_FULFILL_ACTIONS_JSON: z.string().default(''),
+  // How often to poll HC orders (minutes). 0 = disabled schedule.
+  HC_SYNC_MINUTES: z.coerce.number().int().min(0).max(1440).default(0),
+  // UC B2C punch settings for Home Centre (GCC)
+  HC_UC_CHANNEL: z.string().default('CUSTOM'),
+  HC_UC_SHIP_METHOD: z.string().default('STD'),
+  HC_UC_CURRENCY: z.string().default('AED'),
+  HC_UC_FACILITY: z.string().default(''),
+  // {"LAND02600683":"UC-SKU"} — empty = use HC SKU as UC SKU
+  HC_SKU_MAP_JSON: z.string().default(''),
+  // UI default region: india | gcc
+  SCM_DEFAULT_REGION: z.string().default('india'),
 
   // Alerting. LOG_LEVEL is intentionally NOT here - the logger reads it straight from
   // the environment to stay dependency-free (see logger.js).

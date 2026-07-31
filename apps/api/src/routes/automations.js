@@ -427,4 +427,51 @@ export default async function automationRoutes(app) {
     if (!rows.length) return reply.code(404).send({ error: 'run not found' });
     return rows[0];
   });
+
+  // --- Home Centre (GCC): manual only. Empty order list = success. ---
+  const hcBody = {
+    type: 'object',
+    properties: {
+      dryRun: { type: 'boolean', default: true },
+      limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+      source: { type: 'string', enum: ['active', 'archive'], default: 'active' },
+      skipFulfill: { type: 'boolean', default: true },
+      webOrderNos: { type: 'array', items: { type: 'string' }, maxItems: 100 },
+    },
+    additionalProperties: false,
+  };
+
+  app.post('/api/automations/homecentre/sync', {
+    preValidation: opsOnly,
+    config: perUser(10, '1 minute'),
+    schema: { body: hcBody },
+  }, async (req) => {
+    const input = {
+      dryRun: req.body?.dryRun !== false,
+      limit: req.body?.limit || 50,
+      source: req.body?.source || 'active',
+    };
+    const run = await createRun({
+      userEmail: req.user.email, automation: 'homecentre', action: 'sync', input,
+    });
+    await enqueue('homecentre.sync', { runUid: run.run_uid, input });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  app.post('/api/automations/homecentre/fulfill', {
+    preValidation: opsOnly,
+    config: perUser(10, '1 minute'),
+    schema: { body: hcBody },
+  }, async (req) => {
+    const input = {
+      dryRun: req.body?.dryRun !== false,
+      limit: req.body?.limit || 20,
+      webOrderNos: req.body?.webOrderNos || null,
+    };
+    const run = await createRun({
+      userEmail: req.user.email, automation: 'homecentre', action: 'fulfill', input,
+    });
+    await enqueue('homecentre.fulfill', { runUid: run.run_uid, input });
+    return { runUid: run.run_uid, queued: true };
+  });
 }

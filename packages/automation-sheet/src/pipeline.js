@@ -56,24 +56,16 @@ function parseSoInput(input = {}) {
   return out;
 }
 
-// Opp_BSB_HR_1P -> BSB. The warehouse code carries the brand it ships for, and for an
-// operator-typed SO it is the only brand signal Unicommerce offers (UC knows channels and
-// SKUs, not our brand column). Ops can correct the cell; a derived brand beats a blank.
-const brandFromFacility = (facility) => {
-  const parts = String(facility || '').split('_').filter(Boolean);
-  return parts.length > 1 ? parts[1] : '';
-};
-
-// A Unicommerce order rendered in the shape a Waypoint export row has, so an
-// operator-typed SO goes through the SAME phase1Mapper as the Waypoint sweep. One mapper
-// means one set of marketplace/status/date conventions - not a second dialect of
-// first-fill row that drifts from the first.
+// Do NOT invent Brand from the warehouse code (Opp_WIQ_MH_1 → "WIQ"). WIQ/RSG/EKT are
+// 3PL / facility tokens, not product brands. Brand stays blank until Waypoint or a
+// later enrich has a real brand_name — ops can fill the cell if needed.
 export function ucOrderToWaypointRow(o) {
   return {
     'SO Code': o.so || '',
     'PO Code': o.po || '',
     Marketplace: o.channel || '',
-    'Brand(s)': brandFromFacility(o.facility),
+    Customer: o.customer || o.customerCode || '',
+    'Brand(s)': o.brand || '',
     Warehouse: o.facility || '',
     'Ship-to City': o.city || '',
     'Total Units': o.units || '',

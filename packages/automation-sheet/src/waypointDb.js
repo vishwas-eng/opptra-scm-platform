@@ -22,7 +22,7 @@ function pool_(dbUrl) {
 // stay out.
 const ALL_SOS_SQL = `
   SELECT
-    so.so_code, so.so_status, so.marketplace, so.dispatch_warehouse_code,
+    so.so_code, so.so_status, so.marketplace, so.customer_code, so.dispatch_warehouse_code,
     so.ship_to_city, so.so_value, so.so_creation_date, so.po_code,
     li.brands, li.total_units,
     ap.appointment_date, ap.appointment_id
@@ -47,6 +47,9 @@ export function mapNeonRow(r) {
     'SO Status': r.so_status,
     'PO Code': r.po_code,
     Warehouse: r.dispatch_warehouse_code || '',
+    // Customer (customer_code) is the Marketplace ops expect on the sheet; channel
+    // marketplace stays as a fallback when customer_code is blank.
+    Customer: r.customer_code || '',
     Marketplace: r.marketplace || '',
     'Brand(s)': r.brands || '',
     'Total Units': r.total_units || 0,

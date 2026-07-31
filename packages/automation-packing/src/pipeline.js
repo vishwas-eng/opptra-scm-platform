@@ -23,8 +23,21 @@ import {
 const FACILITIES = ['Opp_RSG_MH', 'Opp_WIQ_MH_1', 'Opp_BSB_HR_1P', 'Opp_WIQ_KA', 'Opp_WIQ_HR'];
 const HEADER_ROW = 2;
 const DATE_TAB_RE = /^\d{2}-[A-Za-z]{3}-\d{4}(_\d+)?$/;
-const MAIL_TABLE_HEADERS = ['Marketplace', 'Brand', 'Po No', 'So No', 'Qty', 'Value', 'Pickup Wh Name', 'Destination City', 'Appointment Date', 'Dispatch Date', 'Appointment ID'];
-const AMAZON_FAMILY = /AMAZON|^AZ\b|KKOC|ETRADE|RETAILEZ|FBA|COCOBLU/i;
+// Columns in display order. Appointment ID (and any other col) is dropped from the HTML
+// table when every row in the batch leaves it blank — no empty Appointment ID column.
+const MAIL_COLS = [
+  { key: 'marketplace', header: 'Marketplace' },
+  { key: 'brand', header: 'Brand' },
+  { key: 'po', header: 'Po No' },
+  { key: 'so', header: 'So No' },
+  { key: 'qty', header: 'Qty' },
+  { key: 'value', header: 'Value', fmt: true },
+  { key: 'warehouse', header: 'Pickup Wh Name' },
+  { key: 'destCity', header: 'Destination City' },
+  { key: 'appointmentDate', header: 'Appointment Date' },
+  { key: 'dispatchDate', header: 'Dispatch Date' },
+  { key: 'appointmentId', header: 'Appointment ID' },
+];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 const soNorm = (s) => String(s || '').trim().toUpperCase().replace(/[\s_-]/g, '');
@@ -120,7 +133,8 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
             qty: col(row, 'PO / RPO Quantity'), value: col(row, 'PO / Invoice Value Total'),
             warehouse: col(row, 'Pickup Wh Name'), destCity: col(row, 'Destination City'),
             appointmentDate: fmtSheetDate(col(row, 'Appointment Date / EDD')),
-            dispatchDate: fmtSheetDate(col(row, 'Dispatch Date')),
+            // B2B tracker header is "Dispatch / Pickup Date" (ops fill this manually before packing mail).
+            dispatchDate: fmtSheetDate(col(row, 'Dispatch / Pickup Date') || col(row, 'Dispatch Date')),
             appointmentId: col(row, 'Appointment ID'),
           });
         }
@@ -179,14 +193,17 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
 
   function marketplaceLabel(list) {
     const mkts = [...new Set(list.map((o) => String(o.marketplace || '').trim()).filter(Boolean))];
-    if (mkts.length && mkts.every((m) => AMAZON_FAMILY.test(m))) return 'Amazon';
     if (mkts.length === 1) return mkts[0];
     if (mkts.length > 1) return 'Multi-Marketplace';
     return 'Packing';
   }
+  // Body phrase uses the real Marketplace value from the sheet (e.g. AZ Etrade, Blinkit) —
+  // never the old "Amazon UCB" blanket for every Amazon-family channel.
   const marketplacePhrase = (list) => {
     const label = marketplaceLabel(list);
-    return label === 'Amazon' ? 'Amazon UCB' : label === 'Packing' ? 'marketplace' : label === 'Multi-Marketplace' ? 'multi-marketplace' : label;
+    if (label === 'Packing') return 'marketplace';
+    if (label === 'Multi-Marketplace') return 'multi-marketplace';
+    return label;
   };
 
   const fmtValue = (v) => {
@@ -197,11 +214,15 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
 
   // The navy-header order table — shared by BOTH emails in the thread so the
   // invoice/e-way follow-up keeps the exact same look as the first packing mail.
+  // Columns with no data across the whole batch (e.g. blank Appointment ID) are omitted.
   function orderTableHtml(list) {
-    const head = MAIL_TABLE_HEADERS.map((h) => `<th style="border:1px solid #ccc;padding:6px 8px;background:#131A48;color:#fff;font-size:12px;">${h}</th>`).join('');
+    const cols = MAIL_COLS.filter((c) => list.some((o) => {
+      const raw = c.fmt ? fmtValue(o[c.key]) : String(o[c.key] ?? '').trim();
+      return String(raw ?? '').trim() !== '';
+    }));
+    const head = cols.map((c) => `<th style="border:1px solid #ccc;padding:6px 8px;background:#131A48;color:#fff;font-size:12px;">${c.header}</th>`).join('');
     const rows = list.map((o) => '<tr>'
-      + tdCell(o.marketplace) + tdCell(o.brand) + tdCell(o.po) + tdCell(o.so) + tdCell(o.qty) + tdCell(fmtValue(o.value))
-      + tdCell(o.warehouse) + tdCell(o.destCity) + tdCell(o.appointmentDate) + tdCell(o.dispatchDate) + tdCell(o.appointmentId)
+      + cols.map((c) => tdCell(c.fmt ? fmtValue(o[c.key]) : (o[c.key] ?? ''))).join('')
       + '</tr>').join('');
     return `<table style="border-collapse:collapse;margin-top:12px;"><tr>${head}</tr>${rows}</table>`;
   }
@@ -227,8 +248,9 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
         if (buf) { atts.push({ filename: `Label_${po}.pdf`, contentType: 'application/pdf', buffer: buf }); seen.add(`L:${po.toUpperCase()}`); }
         else missing.push(`shipping label for PO ${po}`);
       }
-      if (!appt) missing.push(`no appointment ID on the sheet for ${o.so}`);
-      else if (!seen.has(`A:${appt.toUpperCase()}`)) {
+      // No appointment ID is normal for many channels — don't flag it as missing, and
+      // don't look for an appointment PDF that does not exist.
+      if (appt && !seen.has(`A:${appt.toUpperCase()}`)) {
         const buf = await driveApi.findPdfByName(google.drive, cfg.APPOINTMENT_DRIVE_FOLDER, appt);
         if (buf) { atts.push({ filename: `Appt_${appt}.pdf`, contentType: 'application/pdf', buffer: buf }); seen.add(`A:${appt.toUpperCase()}`); }
         else missing.push(`appointment letter ${appt}`);

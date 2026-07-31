@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Opptra SCM Platform</title>
+  <title>Opptra SCM · Automations Workspace</title>
+  <link rel="icon" href="/assets/opptra-logo.png" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -13,8 +16,9 @@
   <!-- ───────── Login (landing) ───────── -->
   <div id="login-view" class="hidden">
     <div class="login-card">
-      <h1>Opptra <span>SCM</span> Platform</h1>
-      <p>Supply-chain automations, one place. Sign in with your <b>@opptra.com</b> account.</p>
+      <img class="login-logo" src="/assets/opptra-logo.png" alt="Opptra" />
+      <h1>Supply Chain <span>Automations</span></h1>
+      <p>Agentic workspace for packing, sheets, e-way, ASN and more. Sign in with your <b>@opptra.com</b> account.</p>
       <div id="gsi-button"></div>
       <button id="dev-login-btn" class="secondary hidden mt-md">Dev login (local only)</button>
       <p id="login-error" class="error hidden"></p>
@@ -24,20 +28,23 @@
   <!-- ───────── App (sidebar + content) ───────── -->
   <div id="app-view" class="hidden">
     <aside id="sidebar">
-      <div class="side-brand">Opptra <span>SCM</span></div>
+      <div class="side-brand">
+        <img src="/assets/opptra-logo.png" alt="Opptra" />
+        <span class="brand-sub">SCM</span>
+      </div>
       <nav id="side-nav">
-        <button data-tab="dashboard" class="active"><i>▪</i> Dashboard</button>
-        <div class="side-group">Automations</div>
+        <button data-tab="dashboard" class="active"><i>▪</i> Workspace</button>
+        <div class="side-group">Agents</div>
         <button data-tab="asn"><i>▤</i> ASN Compile</button>
         <button data-tab="reversedc"><i>⤺</i> Reverse DC</button>
         <button data-tab="packing"><i>✉</i> Packing Mail</button>
         <button data-tab="sheet"><i>▦</i> Sheet Update</button>
+        <button data-tab="ewaybill"><i>▤</i> E-way Bill</button>
+        <button data-tab="homecentre" class="region-gcc"><i>⇄</i> Home Centre Sync</button>
         <div class="side-group">Coming soon</div>
         <button disabled title="Coming soon"><i>↺</i> Return Flow <span class="soon">soon</span></button>
-        <button disabled title="Coming soon"><i>▤</i> E-way Bill <span class="soon">soon</span></button>
         <button disabled title="Coming soon"><i>⇅</i> Inward / Outward <span class="soon">soon</span></button>
         <button disabled title="Coming soon"><i>▧</i> Reports Digest <span class="soon">soon</span></button>
-        <button disabled title="Coming soon"><i>⇄</i> Home Centre Sync <span class="soon">soon</span></button>
         <div class="side-group">Tools</div>
         <button data-tab="extensions"><i>⤓</i> Extensions</button>
         <button data-tab="admin" id="admin-nav-btn" class="hidden"><i>⚙</i> Admin</button>
@@ -50,9 +57,16 @@
 
     <div id="content">
       <header id="topbar">
-        <div id="page-title">Dashboard</div>
+        <div>
+          <div class="workspace-eyebrow">Opptra SCM</div>
+          <div id="page-title">Workspace</div>
+        </div>
         <div class="topbar-right">
-          <div id="health-pill" class="health-pill" title="Overall system status"><span class="dot"></span><span id="health-pill-text">Checking…</span></div>
+          <div class="region-toggle" title="India vs GCC workspace">
+            <button type="button" id="region-india" class="region-btn active" data-region="india">India</button>
+            <button type="button" id="region-gcc" class="region-btn" data-region="gcc">GCC</button>
+          </div>
+          <div id="health-pill" class="health-pill" title="Overall system status"><span class="dot"></span><span id="health-pill-text" class="health-pill-text-full">Checking…</span></div>
           <div class="user-chip">
             <img id="user-pic" alt="" />
             <span id="user-name"></span>
@@ -65,26 +79,72 @@
       <div id="relogin-banner" class="banner hidden"></div>
 
       <main>
-        <!-- Dashboard -->
+        <!-- Dashboard / Workspace -->
         <section id="tab-dashboard" class="tab">
-          <div class="cards">
-            <div class="card admin-only" id="session-card">
-              <h3>Unicommerce Connection</h3>
+          <p class="lead">Your supply-chain automation workspace — run agents, track usage, and watch live activity.</p>
+          <div class="cards" id="dash-kpi-cards">
+            <div class="card admin-only kpi-card" id="session-card">
+              <h3>Unicommerce</h3>
               <div class="big" id="session-status">…</div>
               <div class="meta" id="session-meta"></div>
               <button id="dash-relogin-btn" class="primary hidden">Re-login to Unicommerce</button>
             </div>
-            <div class="card">
+            <div class="card kpi-card">
               <h3>Running now</h3>
               <div class="big" id="inflight-count">0</div>
-              <div class="meta">jobs currently in progress</div>
+              <div class="meta">jobs in progress</div>
             </div>
-            <div class="card">
-              <h3>Last 7 days</h3>
+            <div class="card kpi-card">
+              <h3>Runs (window)</h3>
               <div class="big" id="week-count">0</div>
               <div class="meta" id="week-breakdown">-</div>
             </div>
+            <div class="card kpi-card admin-only">
+              <h3>Success rate</h3>
+              <div class="big" id="kpi-success-rate">—</div>
+              <div class="meta" id="kpi-success-meta">finished runs</div>
+            </div>
+            <div class="card kpi-card admin-only">
+              <h3>Active people</h3>
+              <div class="big" id="kpi-active-users">0</div>
+              <div class="meta" id="kpi-users-meta">users with runs</div>
+            </div>
+            <div class="card kpi-card admin-only">
+              <h3>Failures</h3>
+              <div class="big bad" id="kpi-failures">0</div>
+              <div class="meta">in selected window</div>
+            </div>
           </div>
+
+          <div id="kpi-admin-block" class="admin-only">
+            <div class="chart-head" style="margin-top:18px">
+              <h2 style="margin:0">Usage &amp; KPIs</h2>
+              <div class="seg" id="kpi-window">
+                <button type="button" data-days="7" class="active">7 days</button>
+                <button type="button" data-days="30">30 days</button>
+              </div>
+            </div>
+            <p class="lead">Real run history from the platform — packing, sheet, e-way, reverse DC, ASN, Home Centre and more.</p>
+            <div class="agent-strip" id="kpi-features"></div>
+            <div class="charts-grid">
+              <div class="panel chart-panel">
+                <div class="chart-head"><h3>Runs over time</h3></div>
+                <canvas id="kpi-chart-daily" height="220"></canvas>
+              </div>
+              <div class="panel chart-panel">
+                <div class="chart-head"><h3>By automation</h3></div>
+                <canvas id="kpi-chart-autom" height="220"></canvas>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Who is using what</h3>
+              <table id="kpi-users-table">
+                <thead><tr><th>User</th><th>Runs</th><th>OK</th><th>Failed</th><th>Last run</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
           <h2>Recent Activity</h2>
           <p class="lead" id="runs-lead">Your latest runs · refreshes automatically.</p>
           <table id="runs-table">
@@ -132,22 +192,41 @@
         <!-- E-way Bill -->
         <section id="tab-ewaybill" class="tab hidden">
           <h2>E-way Bill Generation</h2>
-          <p class="lead">Paste SO numbers (one per line). The platform finds each invoice across facilities and generates its e-way bill. Transporter details below apply to all rows.</p>
+          <p class="lead">Same as the old Apps Script tool: download the Excel template, fill one row per SO (transporter details per row), upload it, then generate. Already-created e-way bills offer a PDF download. Dry run validates without creating.</p>
           <div class="panel">
-            <label>Sale Orders (one per line)
-              <textarea id="ewb-sos" rows="5" class="textarea" placeholder="SO02444&#10;SO02445"></textarea>
-            </label>
-            <div class="field-grid mb-md">
-              <label>Transporter GSTIN (15 chars)<input id="ewb-gstin" placeholder="29ABCDE1234F1Z5" maxlength="15" /></label>
-              <label>Transporter name<input id="ewb-tname" placeholder="ABC Logistics" /></label>
-              <label>Transport mode<input id="ewb-mode" placeholder="ROAD" value="ROAD" /></label>
-              <label>Vehicle type<input id="ewb-vtype" placeholder="REGULAR" value="REGULAR" /></label>
-              <label>Vehicle no.<input id="ewb-vno" placeholder="optional" /></label>
-              <label>Distance (km)<input id="ewb-dist" placeholder="optional" /></label>
+            <div class="row ewb-toolbar">
+              <button type="button" id="ewb-template-btn" class="secondary">⬇ Download Excel template</button>
+              <label class="file-btn">
+                ⬆ Import Excel / CSV
+                <input type="file" id="ewb-file" accept=".xlsx,.xls,.csv" style="display:none" />
+              </label>
+              <button type="button" id="ewb-add-row" class="secondary">+ Add row</button>
+              <button type="button" id="ewb-clear-rows" class="secondary">Clear rows</button>
+              <span id="ewb-imp-msg" class="meta"></span>
             </div>
-            <div class="row">
-              <label class="check"><input type="checkbox" id="ewb-dry" checked /> Dry run (preview, no e-way bill created)</label>
-              <button id="ewb-run-btn" class="primary">Generate</button>
+            <div style="overflow-x:auto">
+              <table class="data-table" id="ewb-table" style="min-width:980px">
+                <thead>
+                  <tr>
+                    <th>SO Number</th>
+                    <th>Transporter GSTIN</th>
+                    <th>Transporter Name</th>
+                    <th>Mode</th>
+                    <th>Vehicle No</th>
+                    <th>Distance</th>
+                    <th>Doc No</th>
+                    <th>Doc Date</th>
+                    <th>Vehicle Type</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="ewb-rows"></tbody>
+              </table>
+            </div>
+            <p class="meta" style="margin-top:8px">Only <b>SO Number</b> is required. GSTIN must be 15 characters when filled. Mode defaults to ROAD, vehicle type to REGULAR.</p>
+            <div class="row" style="margin-top:12px">
+              <label class="check"><input type="checkbox" id="ewb-dry" checked /> Dry run (preview only — already-created EWBs still download)</label>
+              <button id="ewb-run-btn" class="primary">Generate E-way Bills</button>
             </div>
             <div id="ewb-output" class="result hidden"></div>
           </div>
@@ -188,6 +267,21 @@
             <label>Sale Order<input id="asn-so" placeholder="e.g. SO02696" autocomplete="off" /></label>
             <div class="row"><button id="asn-run-btn" class="primary">Compile ASN</button></div>
             <div id="asn-output" class="result hidden"></div>
+          </div>
+        </section>
+
+        <!-- Home Centre (GCC) — manual only -->
+        <section id="tab-homecentre" class="tab hidden">
+          <h2>Home Centre Sync</h2>
+          <p class="lead">GCC only. Pulls Home Centre (Vinculum) orders and punches a Unicommerce <b>B2C sale order</b> (create customer → SO). Confirm / ship / label on Vinculum is a separate step once capture is ready. <b>Manual only</b> — safe when there are zero orders (returns success, nothing to do).</p>
+          <div class="panel">
+            <p class="meta" id="hc-hint">Use <b>Dry run</b> while testing. Live punch only when you uncheck dry run and Vinculum + UC are configured.</p>
+            <label class="check"><input type="checkbox" id="hc-dry" checked /> Dry run (no UC create, no Vinculum writes)</label>
+            <div class="row" style="margin-top:12px">
+              <button id="hc-sync-btn" class="primary">Check / sync orders</button>
+              <button id="hc-fulfill-btn" class="secondary">Fulfill dry-run</button>
+            </div>
+            <div id="hc-output" class="result hidden"></div>
           </div>
         </section>
 

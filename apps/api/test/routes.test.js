@@ -19,7 +19,7 @@ before(async () => {
 after(async () => { await app?.close(); });
 
 test('protected routes reject anonymous callers with 401 (before any DB access)', async () => {
-  const protectedGets = ['/api/me', '/api/runs', '/api/uc-session', '/api/admin/users', '/api/admin/analytics'];
+  const protectedGets = ['/api/me', '/api/runs', '/api/uc-session', '/api/admin/users', '/api/admin/analytics', '/api/admin/kpi'];
   for (const url of protectedGets) {
     const res = await app.inject({ method: 'GET', url });
     assert.equal(res.statusCode, 401, `${url} should be 401 when unauthenticated`);

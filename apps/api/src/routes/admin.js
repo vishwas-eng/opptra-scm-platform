@@ -198,10 +198,11 @@ export default async function adminRoutes(app) {
     return { audit: rows };
   });
 
-  // ── Analytics: the "is everything working?" panel ────────────────────────
-  app.get('/api/admin/analytics', adminOnly, async () => {
-    const since = "now() - interval '7 days'";
-    const [totals, byAutomation, byUser, recentErrors, sessionRow, queueRow] = await Promise.all([
+  // Shared analytics builder (7- or 30-day window). Used by /analytics and /kpi.
+  async function buildAnalytics(windowDays = 7) {
+    const days = windowDays === 30 ? 30 : 7;
+    const since = `now() - interval '${days} days'`;
+    const [totals, byAutomation, byUser, byAction, byDay, recentErrors, recentActivity, sessionRow, queueRow, usersTotal] = await Promise.all([
       query(`SELECT status, count(*)::int n FROM runs WHERE created_at > ${since} GROUP BY status`),
       query(`SELECT automation,
                 count(*)::int total,
@@ -212,28 +213,88 @@ export default async function adminRoutes(app) {
       query(`SELECT user_email,
                 count(*)::int total,
                 count(*) FILTER (WHERE status='succeeded')::int ok,
-                count(*) FILTER (WHERE status='failed')::int failed
+                count(*) FILTER (WHERE status='failed')::int failed,
+                max(created_at) AS last_run_at
               FROM runs WHERE created_at > ${since} AND user_email <> 'system'
               GROUP BY user_email ORDER BY total DESC LIMIT 50`),
-      query(`SELECT run_uid, user_email, automation, action, input, error, finished_at
+      query(`SELECT automation, action,
+                count(*)::int total,
+                count(*) FILTER (WHERE status='succeeded')::int ok,
+                count(*) FILTER (WHERE status='failed')::int failed
+              FROM runs WHERE created_at > ${since}
+              GROUP BY automation, action ORDER BY total DESC LIMIT 80`),
+      query(`SELECT date_trunc('day', created_at)::date AS day,
+                count(*)::int total,
+                count(*) FILTER (WHERE status='succeeded')::int ok,
+                count(*) FILTER (WHERE status='failed')::int failed
+              FROM runs WHERE created_at > ${since}
+              GROUP BY 1 ORDER BY 1`),
+      query(`SELECT run_uid, user_email, automation, action, input, error, finished_at, created_at
               FROM runs WHERE status='failed' AND created_at > ${since}
               ORDER BY finished_at DESC NULLS LAST LIMIT 25`),
+      query(`SELECT run_uid, user_email, automation, action, status, created_at, finished_at
+              FROM runs WHERE created_at > ${since} AND user_email <> 'system'
+              ORDER BY created_at DESC LIMIT 40`),
       query(`SELECT status, source, needs_relogin, relogin_since, last_ok_at, fail_count,
                 (jsessionid <> '') has_cookie FROM uc_session WHERE id = 1`),
       query(`SELECT count(*) FILTER (WHERE status='queued')::int queued,
                      count(*) FILTER (WHERE status='running')::int running,
                      count(*) FILTER (WHERE status='pending_retry')::int pending
               FROM runs WHERE created_at > ${since}`),
+      query(`SELECT count(*)::int AS registered,
+                     count(*) FILTER (WHERE last_login > ${since})::int AS active_logins
+              FROM users WHERE is_active`),
     ]);
     const totalsMap = Object.fromEntries(totals.rows.map((r) => [r.status, r.n]));
+    const succeeded = totalsMap.succeeded || 0;
+    const failed = totalsMap.failed || 0;
+    const decided = succeeded + failed;
+    const featureKey = (automation) => String(automation || 'other').toLowerCase();
+    const FEATURE_LABELS = {
+      packing: 'Packing Mail', sheet: 'Sheet Update', ewaybill: 'E-way Bill',
+      reversedc: 'Reverse DC', asn: 'ASN Compile', return: 'Return Flow',
+      inventory: 'Inward/Outward', inward: 'Inward', outward: 'Outward',
+      homecentre: 'Home Centre', uc: 'Order Lookup', system: 'System',
+    };
+    const features = byAutomation.rows.map((r) => {
+      const d = (r.ok || 0) + (r.failed || 0);
+      return {
+        key: featureKey(r.automation),
+        label: FEATURE_LABELS[featureKey(r.automation)] || r.automation,
+        total: r.total, ok: r.ok, failed: r.failed, active: r.active,
+        successRate: d ? Math.round((r.ok / d) * 1000) / 10 : null,
+      };
+    });
     return {
-      windowDays: 7,
+      windowDays: days,
+      generatedAt: new Date().toISOString(),
       totals: totalsMap,
+      week: { total: Object.values(totalsMap).reduce((s, n) => s + n, 0), succeeded, failed },
+      successRate: decided ? Math.round((succeeded / decided) * 1000) / 10 : null,
       byAutomation: byAutomation.rows,
+      features,
       byUser: byUser.rows,
+      byAction: byAction.rows,
+      byDay: byDay.rows,
       recentErrors: recentErrors.rows,
+      recentActivity: recentActivity.rows,
       session: sessionRow.rows[0],
       inflight: queueRow.rows[0],
+      users: usersTotal.rows[0] || { registered: 0, active_logins: 0 },
     };
-  });
+  }
+
+  // ── Analytics: the "is everything working?" panel ────────────────────────
+  app.get('/api/admin/analytics', adminOnly, async () => buildAnalytics(7));
+
+  // Richer KPI payload for the dashboard (boxes + charts). Same auth as analytics.
+  app.get('/api/admin/kpi', {
+    ...adminOnly,
+    schema: {
+      querystring: {
+        type: 'object', additionalProperties: false,
+        properties: { days: { type: 'integer', enum: [7, 30] } },
+      },
+    },
+  }, async (req) => buildAnalytics(req.query.days || 7));
 }

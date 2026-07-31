@@ -10,6 +10,8 @@
     "@opptra/automation-packing": "*",
     "@opptra/automation-return": "*",
     "@opptra/automation-sheet": "*",
+    "@opptra/automation-homecentre": "*",
+    "@opptra/automation-reversedc": "*",
     "@opptra/integrations-google": "*",
     "@opptra/core": "*",
     "@opptra/uc-client": "*",
