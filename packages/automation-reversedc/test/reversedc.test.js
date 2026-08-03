@@ -224,3 +224,10 @@ test('validation gate: unparseable CN falls back to in-place edit of the origina
   const reloaded = await P.load(Buffer.from(r.file.base64, 'base64'));
   assert.equal(reloaded.getPageCount(), 1, 'original document survives intact');
 });
+
+test('rejects typo / multi bulk-return IDs before calling Unicommerce', async () => {
+  const { downloadCnByBulkReturn } = await import('../src/download.js');
+  const uc = { dataBinary: async () => { throw new Error('should not call UC'); }, data: async () => { throw new Error('should not call UC'); } };
+  await assert.rejects(() => downloadCnByBulkReturn(uc, 'vugj', 'Opp_WIQ_MH_1'), /Bulk Return ID like BR0160/);
+  await assert.rejects(() => downloadCnByBulkReturn(uc, 'BR0052 BR0053', 'Opp_WIQ_MH_1'), /Bulk Return ID like BR0160/);
+});

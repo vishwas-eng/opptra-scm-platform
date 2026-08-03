@@ -436,6 +436,28 @@ test('second-fill: an SO in neither the date tabs nor Unicommerce is reported by
   assert.match(r.summary, /not in Unicommerce/i);
 });
 
+// Regression: a date tab whose row 2 was wiped / overwritten used to hard-fail every
+// second-fill with "row 2 has no SO/GP Number". ensureDateTab must restore headers
+// from Master before writing.
+test('second-fill: repairs a date tab whose header row was damaged', async () => {
+  const tab = istTabName();
+  const { google, state } = sheetsMock({ tabs: ['Master', 'MasterSheet', tab] });
+  // Damaged: row 2 is order data, not headers (the Jul-31 production failure mode).
+  state.sheets[tab] = [BANNER, blankRow({ 'SO/GP Number': 'SO_OLD' })];
+  const { uc } = ucOrderMock(
+    { SO02780: { code: 'SO02780', facility: 'Opp_EKT_KA', status: 'PROCESSING', channel: 'ZEPTO_B2B', po: 'P1', units: 2, value: 5, city: 'Pune' } },
+    { packagesFor: () => [{ invoiceCode: 'INV/X' }] },
+  );
+  const { secondFill } = makeSheetPipeline(uc, CFG, google);
+  const r = await secondFill({ saleOrders: ['SO02780'] });
+  assert.equal(r.ok, true, r.error || r.summary);
+  // Either repaired the base tab or opened _1 after treating base as occupied —
+  // either way headers must be real SO/GP headers.
+  const writtenTab = r.counts.createdTab || tab;
+  assert.deepEqual(state.sheets[writtenTab][1], HEADERS, 'headers restored from Master');
+  assert.ok(state.sheets[writtenTab].some((row, i) => i >= 2 && row[SO_COL] === 'SO02780'));
+});
+
 test('second-fill: no SO input keeps the old sweep of every un-invoiced row', async () => {
   const tab = istTabName();
   const { google, state } = sheetsMock({ tabs: ['Master', 'MasterSheet', tab] });

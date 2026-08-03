@@ -234,7 +234,7 @@ test('step 1: warehouse with no directory entry is reported clearly', async () =
   });
   const r = await pipeOf({}, google).createDrafts(['SO1']);
   assert.equal(r.draftCount, 0);
-  assert.match(r.unresolved[0].reason, /no warehouse email/);
+  assert.match(r.unresolved[0].reason, /No warehouse email/i);
 });
 
 /* ------------------------------- step 2 ------------------------------- */

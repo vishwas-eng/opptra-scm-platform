@@ -9,3 +9,27 @@ export {
   getUserGoogleOAuthToken, setUserGoogleOAuthToken, clearUserGoogleOAuthToken,
 } from './googleOAuth.js';
 export { savePackingThread, latestPackingThread } from './packingThreads.js';
+export {
+  createAgentThread, listAgentThreads, getAgentThread, touchAgentThread,
+  addAgentMessage, listAgentMessages,
+  getConnectorState, listConnectorStates, setConnectorEnabled,
+} from './agentChat.js';
+export {
+  getConnectorCredentialMeta, listConnectorCredentialMeta,
+  getConnectorSecret, setConnectorCredential, clearConnectorCredential,
+  markConnectorAlive, markConnectorDead,
+} from './connectorVault.js';
+export {
+  validateReverseDcInput,
+  validateEwaybillInput,
+  validatePackingInput,
+  validateSheetSaleOrders,
+  validateAsnInput,
+  validateRequiredId,
+  validateIdList,
+  asnUnsupportedChannelMessage,
+  validationFailBody,
+  isValidSaleOrder,
+  isValidGstin,
+  isValidBulkReturnId,
+} from './validate.js';

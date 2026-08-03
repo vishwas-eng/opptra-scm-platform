@@ -260,8 +260,26 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
   }
 
   /* ---- UC attachments: invoice PDF + e-way bill PDF ---- */
+  // Prefer known Opp_* warehouses, then hop every live facility. A static FACILITIES
+  // list silently missed newer centers (e.g. Opp_SDG_*) and marked "no invoice/e-way"
+  // when the package lived elsewhere.
+  async function facilityHopOrder(prefer = null) {
+    let live = [];
+    try {
+      if (typeof uc.listFacilities === 'function') {
+        const { all, current } = await uc.listFacilities();
+        live = all || [];
+        if (!prefer && current) prefer = current;
+      }
+    } catch (e) { if (e?.name === 'SessionError') throw e; }
+    const opp = live.filter((f) => /^Opp/i.test(f));
+    const rest = live.filter((f) => !/^Opp/i.test(f));
+    return [...new Set([prefer, ...configured, ...opp, ...rest].filter(Boolean))];
+  }
+
   async function resolveInvoiceAndEway(so) {
-    for (const facility of configured) {
+    const order = await facilityHopOrder();
+    for (const facility of order) {
       const d = await uc.data('/data/oms/saleorder/fetchShippingPackageDetails', { saleOrderCode: so }, { facility }).catch(orNull);
       const sp = (d?.shippingPackages || []).find((p) => p.invoiceCode || p.ewayBillPdfUrl || p.eWayBillPdfUrl);
       if (sp) return { invoiceCode: sp.invoiceCode || sp.invoiceDisplayCode || '', ewayUrl: sp.ewayBillPdfUrl || sp.eWayBillPdfUrl || '', facility };
@@ -349,7 +367,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
       if (!g.to.length) {
         g.orders.forEach((o) => unresolved.push({
           so: o.so,
-          reason: `no warehouse email for ${g.warehouse} - add it on the warehouse-email sheet`,
+          reason: `No warehouse email for ${g.warehouse} — add it on the warehouse email sheet`,
         }));
       }
     }
@@ -428,7 +446,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
       .map((g) => applyRecipients(g, directory, recipients))
       .filter((g) => {
         if (g.to.length) return true;
-        g.orders.forEach((o) => unresolved.push({ so: o.so, reason: `no warehouse email for ${g.warehouse}` }));
+        g.orders.forEach((o) => unresolved.push({ so: o.so, reason: `No warehouse email for ${g.warehouse} — add it on the warehouse email sheet` }));
         return false;
       });
 

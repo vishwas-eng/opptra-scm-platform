@@ -127,6 +127,29 @@ const Env = z.object({
   // Machine auth for Cursor / Slack ops agents (no Google SSO). Empty = /api/ops/* disabled.
   // Set the same value on the VM (.env) and in Cursor Automation secrets as OPS_AGENT_TOKEN.
   OPS_AGENT_TOKEN: z.string().default(''),
+
+  // --- Agent chat LLM (optional). Empty key → tool-router mode (no external LLM calls). ---
+  // AGENT_LLM_PROVIDER: openai | anthropic | auto (detect from key / base URL)
+  AGENT_LLM_PROVIDER: z.enum(['openai', 'anthropic', 'auto', 'none']).default('auto'),
+  AGENT_LLM_API_KEY: z.string().default(''),
+  AGENT_LLM_BASE_URL: z.string().default(''), // e.g. https://api.openai.com/v1 or Anthropic-compatible
+  AGENT_LLM_MODEL: z.string().default(''), // empty → provider default (gpt-4o-mini / claude-haiku)
+  // Also accept common aliases if set instead of AGENT_LLM_API_KEY
+  OPENAI_API_KEY: z.string().default(''),
+  ANTHROPIC_API_KEY: z.string().default(''),
+
+  // --- Amazon SP-API (official path when registered; else session/RE via vault) ---
+  AMAZON_SP_CLIENT_ID: z.string().default(''),
+  AMAZON_SP_CLIENT_SECRET: z.string().default(''),
+  AMAZON_SP_REFRESH_TOKEN: z.string().default(''),
+  AMAZON_SP_MARKETPLACE_ID: z.string().default('A21TJRUUN4KGV'), // amazon.in
+  AMAZON_SP_ENDPOINT: z.string().default('https://sellingpartnerapi-eu.amazon.com'),
+
+  // --- Flipkart Seller API (official when keys exist; else session/RE via vault) ---
+  FLIPKART_APP_ID: z.string().default(''),
+  FLIPKART_APP_SECRET: z.string().default(''),
+  FLIPKART_ACCESS_TOKEN: z.string().default(''),
+  FLIPKART_API_BASE: z.string().default('https://api.flipkart.net/sellers'),
 });
 
 let cached = null;
@@ -144,6 +167,11 @@ export function config() {
     ...parsed.data,
     isProd: parsed.data.NODE_ENV === 'production',
     adminEmails: parsed.data.ADMIN_EMAILS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+    // Prefer AGENT_LLM_*; fall back to OPENAI_/ANTHROPIC_ aliases.
+    agentLlmApiKey: parsed.data.AGENT_LLM_API_KEY
+      || parsed.data.OPENAI_API_KEY
+      || parsed.data.ANTHROPIC_API_KEY
+      || '',
   });
   return cached;
 }

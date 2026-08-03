@@ -72,7 +72,8 @@ test('pipeline refuses an SO on a channel with no ASN format, naming the channel
   const r = await compile('SO02696');
   assert.equal(r.ok, false);
   assert.match(r.error, /AMAZON_B2B/);
-  assert.match(r.error, /Flipkart, Myntra, and Zepto/);
+  assert.match(r.error, /Flipkart\/Myntra\/Zepto only/);
+  assert.match(r.error, /Packing Mail/);
 });
 
 test('pipeline reports missing SO clearly', async () => {

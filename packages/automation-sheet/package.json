@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./waypointDb.js": "./src/waypointDb.js"
+  },
   "dependencies": {
     "@opptra/core": "*",
     "@opptra/integrations-google": "*",

@@ -60,7 +60,7 @@ test('rejects a GSTIN that is not exactly 15 chars, before any generate', async 
   const { generateOne } = makeEwaybillPipeline(uc);
   const r = await generateOne({ so: 'SO1', gstin: 'TOOSHORT' });
   assert.equal(r.ok, false);
-  assert.match(r.error, /15 characters/);
+  assert.match(r.error, /15-character Indian GSTIN|15 characters/i);
   assert.ok(!uc.calls.some((c) => c.path?.includes('generateEWayBill')), 'must not call generate with a bad GSTIN');
 });
 
@@ -159,4 +159,33 @@ test('downloadEwayPdf rejects non-PDF bodies', async () => {
   try {
     assert.equal(await downloadEwayPdf('https://x'), null);
   } finally { globalThis.fetch = prev; }
+});
+
+test('defaults transDistance to 1 when distance is blank (GST error 107)', async () => {
+  const restore = pdfFetch(true);
+  try {
+    const uc = mockUc({
+      invoiceByFacility: { F1: { shippingPackages: [{ invoiceCode: 'INV1', code: 'PK1' }] } },
+      generateResult: { successful: true, ewayBillNo: 'EWB1', ewayBillPdfUrl: 'https://s3/ewb.pdf' },
+    });
+    const { generateOne } = makeEwaybillPipeline(uc);
+    const r = await generateOne({ so: 'SO1', gstin: '29ABCDE1234F1Z5' });
+    assert.equal(r.ok, true);
+    const gen = uc.calls.find((c) => c.path?.includes('generateEWayBill'));
+    assert.equal(gen.body.transporterDetail.transDistance, '1');
+  } finally { restore(); }
+});
+
+test('keeps an explicit positive distance', async () => {
+  const restore = pdfFetch(true);
+  try {
+    const uc = mockUc({
+      invoiceByFacility: { F1: { shippingPackages: [{ invoiceCode: 'INV1', code: 'PK1' }] } },
+      generateResult: { successful: true, ewayBillNo: 'EWB1', ewayBillPdfUrl: 'https://s3/ewb.pdf' },
+    });
+    const { generateOne } = makeEwaybillPipeline(uc);
+    await generateOne({ so: 'SO1', gstin: '29ABCDE1234F1Z5', distance: '42' });
+    const gen = uc.calls.find((c) => c.path?.includes('generateEWayBill'));
+    assert.equal(gen.body.transporterDetail.transDistance, '42');
+  } finally { restore(); }
 });

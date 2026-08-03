@@ -7,6 +7,7 @@
 //
 // After generate (or when the SO already has an EWB), the PDF is downloaded so the UI
 // can offer a direct "Download" link - operators should not have to dig in Unicommerce.
+import { GSTIN_RE } from '@opptra/core/validate';
 
 const v = (x) => (x == null ? '' : String(x).trim());
 
@@ -82,15 +83,25 @@ export function makeEwaybillPipeline(uc) {
 
   function buildTransporterDetail(row) {
     const gstin = v(row.gstin);
-    if (gstin && gstin.length !== 15) {
-      throw new Error(`transporterId (GSTIN) must be exactly 15 characters, got ${gstin.length}`);
+    if (gstin && !GSTIN_RE.test(gstin)) {
+      throw new Error(`transporter GSTIN must be a valid 15-character Indian GSTIN, got "${gstin}" (${gstin.length} chars)`);
+    }
+    const mode = v(row.transMode).toUpperCase();
+    const vehicleNo = v(row.vehicleNo);
+    // Explicit Road requires vehicle (GST 4011). Blank mode is left for UC defaults.
+    if (mode === 'ROAD' && !vehicleNo) {
+      throw new Error('vehicle number is required for Road transport (GST error 4011)');
     }
     const td = {};
     if (gstin) td.transporterId = gstin;
     if (v(row.transporterName)) td.transporterName = v(row.transporterName);
-    if (v(row.vehicleNo)) td.vehicleNo = v(row.vehicleNo);
-    if (v(row.transMode)) td.transMode = v(row.transMode).toUpperCase();
-    if (v(row.distance)) td.transDistance = v(row.distance);
+    if (vehicleNo) td.vehicleNo = vehicleNo;
+    if (mode) td.transMode = mode;
+    // NIC/GST rejects distance 0 / empty when ship-from and ship-to share a pincode
+    // (error 107). Ops often leave distance blank for local moves — default to 1 km;
+    // an explicit positive value still wins.
+    const dist = v(row.distance);
+    td.transDistance = dist && Number(dist) > 0 ? dist : '1';
     const dt = toEpoch(row.docDate); if (dt) td.transDocDate = dt;
     if (v(row.docNo)) td.transDocNo = v(row.docNo);
     if (v(row.vehicleType)) td.vehicleType = v(row.vehicleType).toUpperCase().replace(/\s+/g, '_');
@@ -139,7 +150,12 @@ export function makeEwaybillPipeline(uc) {
     const d = await uc.data('/data/oms/invoice/generateEWayBill',
       { invoiceCode: inv.invoiceCode, transporterDetail: td }, { facility: inv.facility });
     if (d?.successful === false) {
-      return { so, ok: false, invoiceCode: inv.invoiceCode, error: (d.errors || []).map((x) => x.description || x.message).join('; ') || 'failed' };
+      let err = (d.errors || []).map((x) => x.description || x.message).join('; ') || 'failed';
+      // Tip for the two most common GST payload mistakes so operators fix input, not "retry forever".
+      if (/4011|vehicle number/i.test(err) && !td.vehicleNo) {
+        err += ' — add a vehicle number (required for Road transport).';
+      }
+      return { so, ok: false, invoiceCode: inv.invoiceCode, error: err };
     }
     const ewb = d.ewayBillNo || d.ewayBillNumber ||
       (d.ewbeinvoicelist && d.ewbeinvoicelist[0] && (d.ewbeinvoicelist[0].ewayBillNo || d.ewbeinvoicelist[0].ewbNo)) || '(generated)';

@@ -3,17 +3,12 @@ FROM node:20-slim AS base
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Install deps first for layer caching.
+# Copy workspace manifests + sources, then install (workspaces need every package.json).
 COPY package.json package-lock.json ./
-COPY packages/core/package.json packages/core/
-COPY packages/uc-client/package.json packages/uc-client/
-COPY packages/automation-return/package.json packages/automation-return/
-COPY apps/api/package.json apps/api/
-COPY apps/worker/package.json apps/worker/
-RUN npm ci --omit=dev --no-audit --no-fund
-
 COPY packages ./packages
 COPY apps ./apps
+RUN npm ci --omit=dev --no-audit --no-fund
+
 COPY extensions ./extensions
 COPY scripts ./scripts
 

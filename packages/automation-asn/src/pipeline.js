@@ -4,6 +4,7 @@
 //      operator never picks it, so a Zepto SO can't be compiled into a Flipkart file
 //   3. map saleOrderItems → rows (this SO only)
 //   4. write the channel file (Flipkart/Myntra XLSX · Zepto CSV)
+import { asnUnsupportedChannelMessage } from '@opptra/core/validate';
 import { rowsFromSaleOrderDto, poFromDto } from './rows.js';
 import { writeFlipkart, writeMyntra, writeZepto } from './writers.js';
 
@@ -41,12 +42,7 @@ export function makeAsnPipeline(uc, cfg = {}) {
     const ucChannel = found.dto.channel || found.dto.channelCode || '';
     const ch = String(channelOverride || '').toLowerCase().trim() || channelFamily(ucChannel);
     if (!['flipkart', 'myntra', 'zepto'].includes(ch)) {
-      const isAmazon = /AMAZON|COCOBLU/i.test(ucChannel);
-      return {
-        ok: false,
-        error: `SO ${so} is a ${ucChannel || 'unknown-channel'} order. ASN files exist only for Flipkart, Myntra, and Zepto.`
-          + (isAmazon ? ' Amazon orders use the Packing Mail flow instead (labels + appointment letters).' : ''),
-      };
+      return { ok: false, error: asnUnsupportedChannelMessage(ucChannel) };
     }
 
     const rows = rowsFromSaleOrderDto(found.dto, so);

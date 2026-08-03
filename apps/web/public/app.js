@@ -1,13 +1,20 @@
 /* Opptra SCM Platform, sidebar SPA (plain ES2020, no build). */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const PAGE_TITLES = { dashboard: 'Workspace', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward', asn: 'ASN Compile', reversedc: 'Reverse DC', sheet: 'Sheet Update', packing: 'Packing Mail', homecentre: 'Home Centre Sync', extensions: 'Extensions', admin: 'Admin' };
+  const PAGE_TITLES = {
+    dashboard: 'Workspace', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward',
+    asn: 'ASN Compile', reversedc: 'Reverse DC', sheet: 'Sheet Update', packing: 'Packing Mail',
+    homecentre: 'Home Centre Sync', extensions: 'Extensions', admin: 'Admin',
+    agent: 'Agent · Beta',
+  };
   let me = null;
   let pollTimer = null;
   let ucLoginUrl = null;
   let kpiDays = 7;
   let kpiChartDaily = null;
   let kpiChartAutom = null;
+  let agentThreadId = null;
+  let agentBusy = false;
 
   /* ---------------- api ---------------- */
   async function api(path, opts = {}) {
@@ -19,7 +26,19 @@
     });
     if (res.status === 401) { showLogin(); throw new Error('signed out'); }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      const details = Array.isArray(data.fieldErrors) && data.fieldErrors.length
+        ? data.fieldErrors.map((f) => f.message || f).filter(Boolean)
+        : [];
+      // Prefer the summary error; append first field detail when it adds new info.
+      let msg = data.error || `HTTP ${res.status}`;
+      if (details.length && !details.includes(msg)) {
+        const extra = details.filter((d) => d !== msg);
+        if (extra.length === 1) msg = `${msg} — ${extra[0]}`;
+        else if (extra.length > 1) msg = `${msg} (${extra.length} issues)`;
+      }
+      throw new Error(msg);
+    }
     return data;
   }
 
@@ -96,7 +115,10 @@
     $('user-name').textContent = me.name || me.email;
     $('user-role').textContent = me.role;
     $('user-pic').src = me.picture || '';
-    if (me.role === 'admin') $('admin-nav-btn').classList.remove('hidden');
+    if (me.role === 'admin') {
+      $('admin-nav-btn').classList.remove('hidden');
+      $('agent-nav-btn')?.classList.remove('hidden');
+    }
     // Role-aware chrome: admin-only surfaces (technical cards, raw details, the everyone
     // feed) show only for admins; users get their own activity in plain words.
     document.body.classList.toggle('is-admin', me.role === 'admin');
@@ -115,6 +137,10 @@
 
   /* ---------------- sidebar routing ---------------- */
   function go(tab) {
+    if (tab === 'agent' && me?.role !== 'admin') {
+      toast('Agent is admin-only (Beta).', 'bad');
+      tab = 'dashboard';
+    }
     document.querySelectorAll('#side-nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.tab').forEach((t) => t.classList.add('hidden'));
     $('tab-' + tab).classList.remove('hidden');
@@ -123,6 +149,7 @@
     if (tab === 'sheet') loadSheetLink();
     if (tab === 'packing') loadPackingGmail();
     if (tab === 'reversedc') loadRdcFacilities();
+    if (tab === 'agent') loadAgentTab();
   }
 
   let sheetLinkLoaded = false;
@@ -172,8 +199,17 @@
 
   function chartColors() {
     return {
-      orange: '#FF5800', soft: 'rgba(255,88,0,.18)', green: '#1f7a45', red: '#c0341d',
-      ink: '#141414', grid: 'rgba(20,20,20,.06)', muted: '#5c5c5c',
+      orange: '#FF5800',
+      soft: 'rgba(255,88,0,.16)',
+      ink: '#141414',
+      /* OK / success — soft charcoal (no forest green) */
+      ok: 'rgba(20,20,20,.48)',
+      okLine: '#5c5c5c',
+      /* Failed — muted rose / soft red-orange */
+      failed: 'rgba(196,90,70,.72)',
+      failedLine: '#C45A46',
+      grid: 'rgba(20,20,20,.06)',
+      muted: '#5c5c5c',
     };
   }
 
@@ -224,9 +260,9 @@
         data: {
           labels,
           datasets: [
-            { label: 'Total', data: daysRows.map((d) => d.total), borderColor: c.orange, backgroundColor: c.soft, fill: true, tension: 0.3 },
-            { label: 'Succeeded', data: daysRows.map((d) => d.ok), borderColor: c.green, backgroundColor: 'transparent', tension: 0.3 },
-            { label: 'Failed', data: daysRows.map((d) => d.failed), borderColor: c.red, backgroundColor: 'transparent', tension: 0.3 },
+            { label: 'Total', data: daysRows.map((d) => d.total), borderColor: c.orange, backgroundColor: c.soft, fill: true, tension: 0.3, borderWidth: 2 },
+            { label: 'Succeeded', data: daysRows.map((d) => d.ok), borderColor: c.okLine, backgroundColor: 'transparent', tension: 0.3, borderWidth: 2 },
+            { label: 'Failed', data: daysRows.map((d) => d.failed), borderColor: c.failedLine, backgroundColor: 'transparent', tension: 0.3, borderWidth: 2 },
           ],
         },
         options: {
@@ -249,8 +285,8 @@
         data: {
           labels: feats.map((f) => f.label),
           datasets: [
-            { label: 'OK', data: feats.map((f) => f.ok), backgroundColor: c.green },
-            { label: 'Failed', data: feats.map((f) => f.failed), backgroundColor: c.orange },
+            { label: 'OK', data: feats.map((f) => f.ok), backgroundColor: c.ok, borderRadius: 3 },
+            { label: 'Failed', data: feats.map((f) => f.failed), backgroundColor: c.failed, borderRadius: 3 },
           ],
         },
         options: {
@@ -272,16 +308,18 @@
   function renderSession(s) {
     const alive = s.status === 'alive';
     const needs = s.needs_relogin || s.status === 'dead' || !s.has_cookie;
+    const ucLabel = alive ? 'UC synced' : needs ? 'UC offline' : 'UC checking…';
+    const ucClass = alive ? 'ok' : needs ? 'bad' : 'warn';
 
-    // Topbar pill - the ONE status surface everyone sees. Plain words, no jargon.
+    // Compact UC sync pill in the "system working" area — no source/timestamps.
     const pill = $('health-pill');
-    pill.className = 'health-pill ' + (alive ? 'ok' : needs ? 'bad' : 'warn');
-    $('health-pill-text').textContent = alive ? 'All systems working' : needs ? 'Needs attention' : 'Checking…';
-    $('side-session').innerHTML = alive ? 'All systems working' : needs ? 'Needs attention' : '…';
+    pill.className = 'health-pill ' + ucClass;
+    $('health-pill-text').textContent = ucLabel;
+    $('side-session').innerHTML = `<span class="uc-chip ${ucClass}">${ucLabel}</span>`;
 
-    // Technical connection card - admins only (hidden by CSS for everyone else).
+    // Hidden hooks for app.js / Admin — keep IDs wired; UI no longer shows the bulky card.
     const el = $('session-status');
-    el.className = 'big ' + (alive ? 'ok' : needs ? 'bad' : 'warn');
+    el.className = 'big ' + ucClass;
     el.textContent = alive ? 'CONNECTED' : needs ? 'DISCONNECTED' : 'CHECKING';
     $('session-meta').textContent =
       `source: ${s.source} · last OK: ${fmt(s.last_ok_at)}` + (s.fail_count ? ` · fails: ${s.fail_count}` : '');
@@ -321,7 +359,14 @@
    * -------------------------------------------------------------------- */
   async function runJob({ btn, out, validate, submit, render, working = 'Working…' }) {
     const err = validate?.();
-    if (err) { toast(err, 'bad'); return; }
+    if (err) {
+      if (out) {
+        out.classList.remove('hidden');
+        out.innerHTML = `<div class="result-head"><span class="badge bad">invalid input</span><span class="title">${esc(err)}</span></div>`;
+      }
+      toast(err, 'bad');
+      return;
+    }
     setLoading(btn, true);
     out.classList.remove('hidden');
     out.innerHTML = `<div class="result-head"><span class="badge info">running</span><span class="title">${esc(working)}</span></div>`;
@@ -360,11 +405,12 @@
 
   function runReturn(kind) {
     const so = $('ret-so').value.trim();
+    const V = window.OpptraValidate;
     return runJob({
       btn: kind === 'status' ? $('ret-status-btn') : $('ret-run-btn'),
       out: $('ret-output'),
       working: kind === 'status' ? 'Checking SO status…' : 'Processing, the worker may take a few minutes…',
-      validate: () => (!so ? 'Enter a Sale Order code.' : null),
+      validate: () => V?.validateSaleOrder(so) || (!so ? 'Enter a Sale Order code.' : null),
       submit: () => kind === 'status'
         ? api('/api/automations/uc/so-status', { body: { saleOrder: so } })
         : api('/api/automations/return/process', {
@@ -535,14 +581,11 @@
     const parsed = ewbParseRows();
     const rows = ewbToApiRows(parsed);
     const dryRun = $('ewb-dry').checked;
-    const badGstin = rows.find((r) => r.gstin && r.gstin.length !== 15);
-    const over = rows.length > 100;
+    const V = window.OpptraValidate;
     return runJob({
       btn: $('ewb-run-btn'), out: $('ewb-output'),
       working: dryRun ? 'Previewing (no e-way bills created)…' : 'Generating e-way bills…',
-      validate: () => (!rows.length ? 'Add at least one row with an SO Number (or import the Excel template).'
-        : over ? 'Maximum 100 rows per batch.'
-        : badGstin ? `GSTIN for ${badGstin.so} must be exactly 15 characters (or leave blank).` : null),
+      validate: () => (V ? V.validateEwayRows(rows) : (!rows.length ? 'Add at least one row with an SO Number.' : null)),
       submit: () => api('/api/automations/ewaybill/generate', { body: { dryRun, rows } }),
       render: (r) => renderEwayBatch(r),
     });
@@ -583,9 +626,10 @@
   /* ---------------- ASN tab ---------------- */
   $('asn-run-btn')?.addEventListener('click', () => {
     const so = $('asn-so').value.trim();
+    const V = window.OpptraValidate;
     return runJob({
       btn: $('asn-run-btn'), out: $('asn-output'), working: `Compiling ASN for ${so} (detecting marketplace)`,
-      validate: () => (!so ? 'Enter a Sale Order code.' : null),
+      validate: () => V?.validateSaleOrder(so) || (!so ? 'Enter a Sale Order code.' : null),
       submit: () => api('/api/automations/asn/compile', { body: { saleOrder: so } }),
       render: (r) => renderFileResult(r, r.ok ? `ASN ready, ${r.lineCount} line(s)` : (r.error || 'Failed'),
         [['SO', r.so], ['Channel', r.channel], ['Facility', r.facility], ['PO', r.po], ['Invoice', r.invoice]], 'asn'),
@@ -686,14 +730,15 @@
   $('rdc-run-btn')?.addEventListener('click', () => {
     const facility = $('rdc-facility')?.value?.trim() || '';
     const bulkReturnId = $('rdc-bulk-id')?.value?.trim() || '';
+    const V = window.OpptraValidate;
     return runJob({
       btn: $('rdc-run-btn'),
       out: $('rdc-output'),
       working: 'Downloading credit note and building Delivery Challan…',
       validate: () => {
         if (!facility) return 'Select a warehouse / facility first.';
-        if (!bulkReturnId) return 'Enter the Bulk Return ID.';
-        return null;
+        return V?.validateBulkReturnId(bulkReturnId)
+          || (!bulkReturnId ? 'Enter one Bulk Return ID like BR0160 (not multiple, not random text)' : null);
       },
       submit: () => api('/api/automations/reversedc/from-bulk-return', { body: { facility, bulkReturnId } }),
       render: (r) => renderFileResult(
@@ -827,15 +872,18 @@
 
   $('packing-preview-btn')?.addEventListener('click', () => {
     const saleOrders = packingSaleOrders();
+    const V = window.OpptraValidate;
     return runJob({
       btn: $('packing-preview-btn'), out: $('packing-output'), working: 'Looking up warehouses and email recipients',
-      validate: () => (!saleOrders.length ? 'Enter at least one SO number.' : null),
+      validate: () => V?.validateSaleOrderList(saleOrders) || (!saleOrders.length ? 'Enter at least one SO number.' : null),
       submit: () => api('/api/automations/packing/preview', { body: { saleOrders } }),
       render: (r) => {
         if (r.error) { renderPackingRecipients(null); return errHead(r.error); }
         renderPackingRecipients(r);
+        const un = (r.unresolved || []).map((u) => `<li class="bad"><span class="so">${esc(u.so)}</span><span>${esc(u.reason)}</span></li>`).join('');
         return resultHead(!!r.groups?.length, `${r.groups?.length || 0} warehouse group(s) ready - tick recipients, then create drafts`)
-          + (r.directoryCount != null ? kv([['Warehouses on email sheet', r.directoryCount]]) : '');
+          + (r.directoryCount != null ? kv([['Warehouses on email sheet', r.directoryCount]]) : '')
+          + (un ? `<p class="result-note">Cannot process:</p><ul class="result-list">${un}</ul>` : '');
       },
     });
   });
@@ -843,9 +891,12 @@
   $('packing-btn')?.addEventListener('click', () => {
     const saleOrders = packingSaleOrders();
     const recipients = packingRecipientsFromUi();
+    const V = window.OpptraValidate;
     return runJob({
       btn: $('packing-btn'), out: $('packing-output'), working: 'Composing per-warehouse drafts',
       validate: () => {
+        const idErr = V?.validateSaleOrderList(saleOrders);
+        if (idErr) return idErr;
         if (!saleOrders.length) return 'Enter at least one SO number.';
         if (!packingPreview?.groups?.length) return 'Resolve warehouses first so you can pick recipients.';
         const missing = Object.values(recipients).some((x) => !(x.to || []).length);
@@ -876,9 +927,10 @@
   $('packing-inveway-btn')?.addEventListener('click', () => {
     const saleOrders = packingSaleOrders();
     const recipients = packingRecipientsFromUi();
+    const V = window.OpptraValidate;
     return runJob({
       btn: $('packing-inveway-btn'), out: $('packing-output'), working: 'Downloading invoices and e-way bills from Unicommerce',
-      validate: () => (!saleOrders.length ? 'Enter at least one SO number.' : null),
+      validate: () => V?.validateSaleOrderList(saleOrders) || (!saleOrders.length ? 'Enter at least one SO number.' : null),
       submit: () => api('/api/automations/packing/invoice-eway', { body: { saleOrders, recipients } }),
       render: (r) => {
         if (!r.ok && r.error) return errHead(r.error);
@@ -940,12 +992,21 @@
     return `<div style="margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
-  const sheetRun = (action, btn, working, body = () => ({})) => () => runJob({
-    btn: $(btn), out: $('sheet-output'), working,
-    submit: () => api('/api/automations/sheet/' + action, { body: body() }),
-    render: (r) => (!r.ok && r.error) ? errHead(r.error)
-      : resultHead(r.ok, r.summary || 'Done') + kv(Object.entries(r.counts || {})) + sheetDetailTable(r.details),
-  });
+  const sheetRun = (action, btn, working, body = () => ({})) => () => {
+    const V = window.OpptraValidate;
+    return runJob({
+      btn: $(btn), out: $('sheet-output'), working,
+      validate: () => {
+        if (action !== 'first-fill' && action !== 'second-fill') return null;
+        const sos = (body()?.saleOrders) || [];
+        if (!sos.length) return null; // optional list
+        return V?.validateSaleOrderList(sos, 'SO / GP number') || null;
+      },
+      submit: () => api('/api/automations/sheet/' + action, { body: body() }),
+      render: (r) => (!r.ok && r.error) ? errHead(r.error)
+        : resultHead(r.ok, r.summary || 'Done') + kv(Object.entries(r.counts || {})) + sheetDetailTable(r.details),
+    });
+  };
   // One SO box, read by both fills: on the first it adds orders Waypoint has not
   // published, on the second it picks which rows to enrich.
   const sheetSos = () => {
@@ -1260,6 +1321,171 @@
       return firstString ? String(firstString).slice(0, 30) : '';
     } catch { return ''; }
   };
+
+  /* ---------------- Agent · Beta (admin only) ---------------- */
+  async function loadAgentTab() {
+    if (me?.role !== 'admin') return;
+    await Promise.all([loadAgentConnectors(), loadAgentThreads(), loadAgentMeta()]);
+    if (agentThreadId) await loadAgentMessages(agentThreadId);
+  }
+
+  async function loadAgentMeta() {
+    try {
+      const m = await api('/api/agent/meta');
+      $('agent-llm-mode').textContent = m.llmMode === 'tool-router' ? 'Mode: tool-router' : `Mode: ${m.llmMode}`;
+    } catch { /* ignore */ }
+  }
+
+  async function loadAgentConnectors() {
+    const box = $('agent-connectors-list');
+    if (!box) return;
+    try {
+      const { connectors } = await api('/api/agent/connectors');
+      box.innerHTML = connectors.map((c) => {
+        const disabled = !c.live;
+        const status = disabled ? 'coming_soon' : (c.status || 'disconnected');
+        const statusLabel = disabled ? 'Coming soon' : (
+          status === 'connected' ? 'Connected' : status === 'ready' ? 'Ready' : 'Disconnected'
+        );
+        let btn = '';
+        if (disabled) {
+          btn = `<button type="button" class="agent-conn-btn" disabled>Connect</button>`;
+        } else if (c.connected) {
+          btn = `<button type="button" class="agent-conn-btn" data-disc="${esc(c.id)}">Disconnect</button>`;
+        } else {
+          btn = `<button type="button" class="agent-conn-btn primary-mini" data-conn="${esc(c.id)}">Connect</button>`;
+        }
+        return `<div class="agent-conn-card ${disabled ? 'disabled' : ''}">
+          <div class="agent-conn-icon">${esc(c.icon || '?')}</div>
+          <div>
+            <div class="agent-conn-name">${esc(c.name)}</div>
+            <div class="agent-conn-hint">${esc(c.connectHint || '')}</div>
+          </div>
+          <div class="agent-conn-actions">
+            <span class="status-pill ${status}">${statusLabel}</span>
+            ${btn}
+          </div>
+        </div>`;
+      }).join('');
+      box.querySelectorAll('[data-conn]').forEach((b) => b.addEventListener('click', () => agentConnect(b.dataset.conn)));
+      box.querySelectorAll('[data-disc]').forEach((b) => b.addEventListener('click', () => agentDisconnect(b.dataset.disc)));
+    } catch (e) {
+      box.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+    }
+  }
+
+  async function agentConnect(id) {
+    try {
+      await api('/api/agent/connectors/' + encodeURIComponent(id) + '/connect', { method: 'POST', body: {} });
+      toast(id + ' connected for Agent.', 'ok');
+      await loadAgentConnectors();
+    } catch (e) { toast(e.message, 'bad'); }
+  }
+  async function agentDisconnect(id) {
+    try {
+      await api('/api/agent/connectors/' + encodeURIComponent(id) + '/disconnect', { method: 'POST', body: {} });
+      toast(id + ' disconnected from Agent.', 'ok');
+      await loadAgentConnectors();
+    } catch (e) { toast(e.message, 'bad'); }
+  }
+
+  async function loadAgentThreads() {
+    const box = $('agent-threads');
+    if (!box) return;
+    try {
+      const { threads } = await api('/api/agent/threads');
+      box.innerHTML = (threads || []).map((t) =>
+        `<button type="button" class="agent-thread-chip ${t.thread_uid === agentThreadId ? 'active' : ''}" data-tid="${esc(t.thread_uid)}">${esc(t.title || 'Chat')}</button>`
+      ).join('');
+      box.querySelectorAll('[data-tid]').forEach((b) => b.addEventListener('click', () => selectAgentThread(b.dataset.tid)));
+    } catch { box.innerHTML = ''; }
+  }
+
+  async function selectAgentThread(uid) {
+    agentThreadId = uid;
+    await loadAgentThreads();
+    await loadAgentMessages(uid);
+  }
+
+  async function loadAgentMessages(uid) {
+    const box = $('agent-messages');
+    if (!box || !uid) return;
+    try {
+      const { messages } = await api('/api/agent/threads/' + encodeURIComponent(uid) + '/messages');
+      renderAgentMessages(messages || []);
+    } catch (e) {
+      box.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderAgentMessages(messages) {
+    const box = $('agent-messages');
+    if (!messages.length) {
+      box.innerHTML = `<div class="agent-empty" id="agent-empty">
+        <h3>Ask Opptra Agent</h3>
+        <p>Try <code>/uc health</code>, <code>/uc facilities</code>, <code>/waypoint</code>, or <code>/help</code>.</p>
+      </div>`;
+      return;
+    }
+    box.innerHTML = messages.map((m) => {
+      if (m.role !== 'user' && m.role !== 'assistant') return '';
+      const tools = Array.isArray(m.tool_calls) ? m.tool_calls : [];
+      const toolHtml = tools.length ? `<div class="agent-tools">${tools.map((t) => {
+        const ok = t.status !== 'error';
+        const body = esc(JSON.stringify(t.result ?? t.error ?? {}, null, 2));
+        return `<details class="agent-tool"><summary><span class="${ok ? 'tool-ok' : 'tool-err'}">${ok ? '●' : '●'}</span> ${esc(t.name || 'tool')}</summary><pre>${body}</pre></details>`;
+      }).join('')}</div>` : '';
+      return `<div class="agent-msg ${m.role}"><div class="agent-bubble">${esc(m.content || '')}</div>${toolHtml}</div>`;
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  $('agent-new-chat')?.addEventListener('click', async () => {
+    agentThreadId = null;
+    $('agent-messages').innerHTML = `<div class="agent-empty"><h3>Ask Opptra Agent</h3><p>Start a new conversation.</p></div>`;
+    await loadAgentThreads();
+  });
+
+  $('agent-composer')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (agentBusy || me?.role !== 'admin') return;
+    const input = $('agent-input');
+    const message = (input?.value || '').trim();
+    if (!message) return;
+    agentBusy = true;
+    $('agent-send').disabled = true;
+    input.value = '';
+    // Optimistic user bubble
+    const empty = $('agent-empty');
+    if (empty) empty.remove();
+    $('agent-messages').insertAdjacentHTML('beforeend',
+      `<div class="agent-msg user"><div class="agent-bubble">${esc(message)}</div></div>
+       <div class="agent-msg assistant" id="agent-pending"><div class="agent-bubble">Thinking…</div></div>`);
+    $('agent-messages').scrollTop = $('agent-messages').scrollHeight;
+    try {
+      const res = await api('/api/agent/chat', {
+        body: { message, threadId: agentThreadId || undefined },
+      });
+      agentThreadId = res.threadId;
+      await loadAgentThreads();
+      await loadAgentMessages(agentThreadId);
+    } catch (err) {
+      const pending = $('agent-pending');
+      if (pending) pending.innerHTML = `<div class="agent-bubble">${esc(err.message)}</div>`;
+      toast(err.message, 'bad');
+    } finally {
+      agentBusy = false;
+      $('agent-send').disabled = false;
+      input.focus();
+    }
+  });
+
+  $('agent-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      $('agent-composer')?.requestSubmit();
+    }
+  });
 
   /* ---------------- request an automation ---------------- */
   $('request-automation-btn')?.addEventListener('click', () => $('request-modal').classList.remove('hidden'));

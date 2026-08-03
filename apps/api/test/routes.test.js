@@ -22,6 +22,7 @@ test('protected routes reject anonymous callers with 401 (before any DB access)'
   const protectedGets = [
     '/api/me', '/api/runs', '/api/uc-session', '/api/admin/users', '/api/admin/analytics', '/api/admin/kpi',
     '/api/connectors', '/api/connectors/unicommerce/capabilities', '/api/connectors/unicommerce/health',
+    '/api/agent/meta', '/api/agent/connectors', '/api/agent/threads',
   ];
   for (const url of protectedGets) {
     const res = await app.inject({ method: 'GET', url });
@@ -34,6 +35,11 @@ test('protected routes reject anonymous callers with 401 (before any DB access)'
     payload: { action: 'health.ping' },
   });
   assert.equal(invoke.statusCode, 401, 'connector invoke must require auth');
+  const agentChat = await app.inject({
+    method: 'POST', url: '/api/agent/chat',
+    payload: { message: 'hello' },
+  });
+  assert.equal(agentChat.statusCode, 401, 'agent chat must require auth');
 });
 
 test('/api/ops/summary rejects missing or wrong ops token (before DB)', async () => {

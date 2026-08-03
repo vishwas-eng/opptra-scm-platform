@@ -1,6 +1,7 @@
 // Download a credit-note PDF from Unicommerce using a bulk return id + facility.
 // Proven path (CONTEXT.md): GET /oms/invoice/bulkReturn/show?bulkReturnId=…&legacy=1
 // Fallback: fetchBulkReturnSummary → credit-note invoice codes → /oms/invoice/show.
+import { validateReverseDcInput } from '@opptra/core/validate';
 
 /** Real PDF only — never trust Content-Type alone (UC returns application/pdf with 0 bytes on bad IDs). */
 function isRealPdf(buf) {
@@ -46,10 +47,11 @@ function pickInvoiceCodes(meta) {
  * @returns {Promise<{ pdf: Buffer, creditNoteNo?: string, meta?: object }>}
  */
 export async function downloadCnByBulkReturn(uc, bulkReturnId, facility) {
-  const id = String(bulkReturnId || '').trim();
-  const fac = String(facility || '').trim();
-  if (!id) throw new Error('Bulk Return ID is required');
-  if (!fac) throw new Error('Select a warehouse / facility first');
+  // Catch typos / multi-IDs before burning UC round-trips (shared with API pre-flight).
+  const checked = validateReverseDcInput({ bulkReturnId, facility });
+  if (!checked.ok) throw new Error(checked.error);
+  const id = checked.bulkReturnId;
+  const fac = checked.facility;
 
   const enc = encodeURIComponent(id);
   // Primary: bulk-return print endpoint (returns the CIR credit note PDF).

@@ -194,9 +194,36 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
   // New date tabs get Master's banner + header rows with FULL formatting (colours,
   // bold, column widths, frozen rows) - not just values. Ops reads the colours as
   // ownership markers; an unstyled tab is a bug, not a nicety.
+  //
+  // Also repair EXISTING tabs whose row-2 headers were wiped or overwritten with order
+  // data (manual edits, a failed prior clone while Master IMPORTRANGE was still loading).
+  // Without this, second-fill / append die with "row 2 has no SO/GP Number column" even
+  // though Master is fine and the tab only needs its header block restored.
   async function ensureDateTab(tab) {
     const created = await sheetsApi.ensureTab(google.sheets, sheetId, tab);
-    if (created) await sheetsApi.cloneHeaderFormatting(google.sheets, sheetId, masterTab, tab, HEADER_ROW);
+    let needsHeaders = created;
+    if (!needsHeaders) {
+      try {
+        const { headerMap } = await readSheet(tab);
+        soColumnIndex(headerMap);
+      } catch {
+        needsHeaders = true;
+      }
+    }
+    if (needsHeaders) {
+      await sheetsApi.cloneHeaderFormatting(google.sheets, sheetId, masterTab, tab, HEADER_ROW);
+      // Confirm Master actually rendered usable headers (IMPORTRANGE can briefly be empty).
+      try {
+        const { headerMap } = await readSheet(tab);
+        soColumnIndex(headerMap);
+      } catch {
+        throw new Error(
+          `Could not restore headers on "${tab}" from "${masterTab}". `
+          + `Check that Master row ${HEADER_ROW} still has an "SO/GP Number" column `
+          + `(IMPORTRANGE may still be loading — retry in a minute).`,
+        );
+      }
+    }
     return created;
   }
 
@@ -683,6 +710,9 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
     if (!todays.length) return { ok: true, summary: `No date tab for today (${base}) yet - run First fill first.`, counts: { pushed: 0 } };
     const rows = [];
     for (const t of todays) {
+      try { await ensureDateTab(t); } catch (e) {
+        return { ok: false, error: String(e.message || e) };
+      }
       const { headerMap, dataRows } = await readSheet(t);
       const soCol = soColOf(t, headerMap);
       for (const r of dataRows) if (String(r[soCol - 1] || '').trim()) rows.push(rowToObject(headerMap, r));

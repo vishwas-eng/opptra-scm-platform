@@ -4,8 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Opptra SCM · Automations Workspace</title>
-  <link rel="icon" href="/assets/opptra-logo.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="/assets/opptra-logo-official.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="styles.css?v=agent-beta-1" />
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -16,9 +18,9 @@
   <!-- ───────── Login (landing) ───────── -->
   <div id="login-view" class="hidden">
     <div class="login-card">
-      <img class="login-logo" src="/assets/opptra-logo.png" alt="Opptra" />
+      <img class="login-logo" src="/assets/opptra-logo-official.svg" alt="Opptra" width="160" height="51" />
       <h1>Supply Chain <span>Automations</span></h1>
-      <p>Agentic workspace for packing, sheets, e-way, ASN and more. Sign in with your <b>@opptra.com</b> account.</p>
+      <p>Sign in with your <b>@opptra.com</b> account.</p>
       <div id="gsi-button"></div>
       <button id="dev-login-btn" class="secondary hidden mt-md">Dev login (local only)</button>
       <p id="login-error" class="error hidden"></p>
@@ -29,12 +31,13 @@
   <div id="app-view" class="hidden">
     <aside id="sidebar">
       <div class="side-brand">
-        <img src="/assets/opptra-logo.png" alt="Opptra" />
+        <img src="/assets/opptra-logo-white.svg?v=2" alt="Opptra" width="152" height="38" />
         <span class="brand-sub">SCM</span>
       </div>
       <nav id="side-nav">
         <button data-tab="dashboard" class="active"><i>▪</i> Workspace</button>
         <div class="side-group">Agents</div>
+        <button data-tab="agent" id="agent-nav-btn" class="hidden"><i>✦</i> Agent <span class="nav-beta">Beta</span></button>
         <button data-tab="asn"><i>▤</i> ASN Compile</button>
         <button data-tab="reversedc"><i>⤺</i> Reverse DC</button>
         <button data-tab="packing"><i>✉</i> Packing Mail</button>
@@ -66,11 +69,12 @@
             <button type="button" id="region-india" class="region-btn active" data-region="india">India</button>
             <button type="button" id="region-gcc" class="region-btn" data-region="gcc">GCC</button>
           </div>
-          <div id="health-pill" class="health-pill" title="Overall system status"><span class="dot"></span><span id="health-pill-text" class="health-pill-text-full">Checking…</span></div>
+          <div id="health-pill" class="health-pill" title="Unicommerce sync status"><span class="dot"></span><span id="health-pill-text" class="health-pill-text-full">Checking…</span></div>
           <div class="user-chip">
-            <img id="user-pic" alt="" />
-            <span id="user-name"></span>
-            <span id="user-role" class="role-badge"></span>
+            <!-- Hooks kept for app.js; avatar/name/role hidden via CSS -->
+            <img id="user-pic" alt="" hidden />
+            <span id="user-name" hidden></span>
+            <span id="user-role" class="role-badge" hidden></span>
             <button id="logout-btn" title="Sign out">Sign out</button>
           </div>
         </div>
@@ -78,41 +82,81 @@
 
       <div id="relogin-banner" class="banner hidden"></div>
 
+      <!-- Hidden hooks for app.js (UC session card removed from UI; Admin tab retains session controls) -->
+      <div class="hidden" aria-hidden="true">
+        <div class="card admin-only kpi-card" id="session-card">
+          <h3>Unicommerce</h3>
+          <div class="big" id="session-status">…</div>
+          <div class="meta" id="session-meta"></div>
+          <button id="dash-relogin-btn" class="primary hidden">Re-login to Unicommerce</button>
+        </div>
+      </div>
+
       <main>
+        <!-- Agent · Beta (admin only) -->
+        <section id="tab-agent" class="tab hidden">
+          <div class="agent-shell">
+            <aside class="agent-connectors-panel" id="agent-connectors-panel">
+              <div class="agent-panel-head">
+                <h2>Connectors</h2>
+                <span class="pill beta-pill">Beta</span>
+              </div>
+              <p class="agent-panel-lead">Connect live tools for chat. Marketplace channels are visible but coming soon.</p>
+              <div id="agent-connectors-list" class="agent-conn-grid"></div>
+            </aside>
+            <div class="agent-chat-panel">
+              <div class="agent-chat-head">
+                <div>
+                  <div class="workspace-eyebrow">Opptra SCM</div>
+                  <h2 id="agent-chat-title">Agent <span class="beta-inline">Beta</span></h2>
+                </div>
+                <div class="agent-chat-actions">
+                  <button type="button" id="agent-new-chat" class="secondary">New chat</button>
+                  <span id="agent-llm-mode" class="meta"></span>
+                </div>
+              </div>
+              <div class="agent-threads" id="agent-threads"></div>
+              <div class="agent-messages" id="agent-messages">
+                <div class="agent-empty" id="agent-empty">
+                  <h3>Ask Opptra Agent</h3>
+                  <p>Try <code>/uc health</code>, <code>/uc facilities</code>, <code>/waypoint</code>, or <code>/help</code>. Connectors must show Connected.</p>
+                </div>
+              </div>
+              <form class="agent-composer" id="agent-composer">
+                <textarea id="agent-input" rows="2" placeholder="Message Agent…" autocomplete="off"></textarea>
+                <button type="submit" id="agent-send" class="primary">Send</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
         <!-- Dashboard / Workspace -->
         <section id="tab-dashboard" class="tab">
-          <p class="lead">Your supply-chain automation workspace — run agents, track usage, and watch live activity.</p>
           <div class="cards" id="dash-kpi-cards">
-            <div class="card admin-only kpi-card" id="session-card">
-              <h3>Unicommerce</h3>
-              <div class="big" id="session-status">…</div>
-              <div class="meta" id="session-meta"></div>
-              <button id="dash-relogin-btn" class="primary hidden">Re-login to Unicommerce</button>
-            </div>
             <div class="card kpi-card">
               <h3>Running now</h3>
               <div class="big" id="inflight-count">0</div>
-              <div class="meta">jobs in progress</div>
+              <div class="meta">in progress</div>
             </div>
             <div class="card kpi-card">
-              <h3>Runs (window)</h3>
+              <h3>Runs</h3>
               <div class="big" id="week-count">0</div>
               <div class="meta" id="week-breakdown">-</div>
             </div>
             <div class="card kpi-card admin-only">
               <h3>Success rate</h3>
               <div class="big" id="kpi-success-rate">—</div>
-              <div class="meta" id="kpi-success-meta">finished runs</div>
+              <div class="meta" id="kpi-success-meta">finished</div>
             </div>
             <div class="card kpi-card admin-only">
               <h3>Active people</h3>
               <div class="big" id="kpi-active-users">0</div>
-              <div class="meta" id="kpi-users-meta">users with runs</div>
+              <div class="meta" id="kpi-users-meta">with runs</div>
             </div>
             <div class="card kpi-card admin-only">
               <h3>Failures</h3>
               <div class="big bad" id="kpi-failures">0</div>
-              <div class="meta">in selected window</div>
+              <div class="meta">in window</div>
             </div>
           </div>
 
@@ -124,7 +168,6 @@
                 <button type="button" data-days="30">30 days</button>
               </div>
             </div>
-            <p class="lead">Real run history from the platform — packing, sheet, e-way, reverse DC, ASN, Home Centre and more.</p>
             <div class="agent-strip" id="kpi-features"></div>
             <div class="charts-grid">
               <div class="panel chart-panel">
@@ -146,7 +189,7 @@
           </div>
 
           <h2>Recent Activity</h2>
-          <p class="lead" id="runs-lead">Your latest runs · refreshes automatically.</p>
+          <p class="lead hidden" id="runs-lead"></p>
           <table id="runs-table">
             <thead><tr><th>When</th><th>User</th><th>Automation</th><th>Action</th><th>Order</th><th>Status</th></tr></thead>
             <tbody></tbody>
@@ -156,7 +199,6 @@
         <!-- Return -->
         <section id="tab-return" class="tab hidden">
           <h2>Return + Re-dispatch</h2>
-          <p class="lead">Cancel the wrong SO, punch + allocate the correct one, drive it to delivered, one order at a time so inventory never leaks to B2C.</p>
           <div class="panel">
             <label>Sale Order, the CORRECT SO to process
               <input id="ret-so" placeholder="e.g. SO02696" autocomplete="off" />
@@ -176,9 +218,8 @@
           </div>
 
           <div class="panel">
-            <h3>Batch, original → correct SO pairs</h3>
-            <p class="lead">The manager's flow: paste the sheet of pairs, one per line as <code>originalSO, correctSO</code>. Each pair cancels the wrong SO and processes the correct one, sequentially, so inventory never leaks.</p>
-            <label>Pairs (one per line)
+            <h3>Batch</h3>
+            <label>Pairs (one per line: originalSO, correctSO)
               <textarea id="ret-batch" rows="5" class="textarea" placeholder="SO02690, SO02696&#10;SO02701, SO02705"></textarea>
             </label>
             <div class="row">
@@ -192,7 +233,6 @@
         <!-- E-way Bill -->
         <section id="tab-ewaybill" class="tab hidden">
           <h2>E-way Bill Generation</h2>
-          <p class="lead">Same as the old Apps Script tool: download the Excel template, fill one row per SO (transporter details per row), upload it, then generate. Already-created e-way bills offer a PDF download. Dry run validates without creating.</p>
           <div class="panel">
             <div class="row ewb-toolbar">
               <button type="button" id="ewb-template-btn" class="secondary">⬇ Download Excel template</button>
@@ -223,9 +263,9 @@
                 <tbody id="ewb-rows"></tbody>
               </table>
             </div>
-            <p class="meta" style="margin-top:8px">Only <b>SO Number</b> is required. GSTIN must be 15 characters when filled. Mode defaults to ROAD, vehicle type to REGULAR.</p>
+            <p class="meta" style="margin-top:8px">Only <b>SO Number</b> required. GSTIN must be 15 characters when filled.</p>
             <div class="row" style="margin-top:12px">
-              <label class="check"><input type="checkbox" id="ewb-dry" checked /> Dry run (preview only — already-created EWBs still download)</label>
+              <label class="check"><input type="checkbox" id="ewb-dry" checked /> Dry run (preview only)</label>
               <button id="ewb-run-btn" class="primary">Generate E-way Bills</button>
             </div>
             <div id="ewb-output" class="result hidden"></div>
@@ -235,7 +275,6 @@
         <!-- Inward / Outward / Full-cycle -->
         <section id="tab-inventory" class="tab hidden">
           <h2>Inward / Outward / Full-cycle</h2>
-          <p class="lead">Inward brings stock in (PO → GRN → put-away or adjust). Outward sells it (Sale Order → allocate → invoice). Full-cycle does both, gated.</p>
           <div class="panel">
             <div class="row">
               <label class="check"><input type="radio" name="inv-op" value="inward" checked> Inward</label>
@@ -253,7 +292,6 @@
             </div>
             <div class="row">
               <button id="inv-run-btn" class="primary">Run</button>
-              <span class="hint">A retry with the same result is safe, steps are idempotent (never double-creates a PO/invoice).</span>
             </div>
             <div id="inv-output" class="result hidden"></div>
           </div>
@@ -262,7 +300,6 @@
         <!-- ASN Compile -->
         <section id="tab-asn" class="tab hidden">
           <h2>ASN / Packaging Compile</h2>
-          <p class="lead">Enter one SO. The platform finds the order across facilities, detects its marketplace automatically, and generates that marketplace's ASN file for this SO only.</p>
           <div class="panel">
             <label>Sale Order<input id="asn-so" placeholder="e.g. SO02696" autocomplete="off" /></label>
             <div class="row"><button id="asn-run-btn" class="primary">Compile ASN</button></div>
@@ -273,22 +310,20 @@
         <!-- Home Centre (GCC) — manual only -->
         <section id="tab-homecentre" class="tab hidden">
           <h2>Home Centre Sync</h2>
-          <p class="lead">GCC only. Pulls Home Centre (Vinculum) orders and punches a Unicommerce <b>B2C sale order</b> (create customer → SO). Confirm / ship / label on Vinculum is a separate step once capture is ready. <b>Manual only</b> — safe when there are zero orders (returns success, nothing to do).</p>
           <div class="panel">
-            <p class="meta" id="hc-hint">Use <b>Dry run</b> while testing. Live punch only when you uncheck dry run and Vinculum + UC are configured.</p>
             <label class="check"><input type="checkbox" id="hc-dry" checked /> Dry run (no UC create, no Vinculum writes)</label>
             <div class="row" style="margin-top:12px">
               <button id="hc-sync-btn" class="primary">Check / sync orders</button>
               <button id="hc-fulfill-btn" class="secondary">Fulfill dry-run</button>
             </div>
             <div id="hc-output" class="result hidden"></div>
+            <p class="meta hidden" id="hc-hint"></p>
           </div>
         </section>
 
         <!-- Reverse DC -->
         <section id="tab-reversedc" class="tab hidden">
           <h2>Reverse Delivery Challan</h2>
-          <p class="lead">Select the warehouse, enter the Bulk Return ID. We download the credit note, read every line item from it, and build a Delivery Challan — works even when each CN layout differs.</p>
           <div class="panel">
             <label>Warehouse / facility
               <select id="rdc-facility" class="textarea" style="height:auto;padding:8px 10px">
@@ -306,7 +341,6 @@
           </div>
           <div class="panel">
             <h3>Fallback: upload credit note PDF</h3>
-            <p class="meta">Only if UC download fails. Same editor on the uploaded CN PDF.</p>
             <label>Credit note PDF
               <input id="rdc-file" type="file" accept="application/pdf,.pdf" />
             </label>
@@ -320,8 +354,6 @@
         <!-- Sheet Update (A1) -->
         <section id="tab-sheet" class="tab hidden">
           <h2>Sheet Update</h2>
-          <p class="lead">First fill: every Waypoint order — any status, whatever view the export came from — checked against Master, and only the new ones go to today's date tab. Second fill adds Unicommerce invoice data to those rows. Type SO numbers below and either fill will pull the order straight from Unicommerce, warehouse included — that is how orders Waypoint has not published yet still reach the sheet.</p>
-          <p class="meta">Master is now an <b>IMPORTRANGE mirror</b> of the B2B View source, so it refreshes itself — nothing here needs to sync it, and nothing may write to it (writing into the formula would replace it with #REF! and stop the refresh). To get date-tab rows into Master, paste them into the source sheet and the mirror brings them back. The Push and Sync buttons below are kept only for a Master that is not a mirror; against a mirror they refuse and explain why.</p>
           <div id="sheet-link" class="panel hidden">
             <div class="row" style="justify-content:space-between;align-items:center">
               <span>Master working-copy sheet</span>
@@ -330,16 +362,14 @@
             <iframe id="sheet-preview-frame" class="sheet-preview" loading="lazy" referrerpolicy="no-referrer"></iframe>
           </div>
           <div class="panel">
-            <label for="sheet-sos">SO numbers (optional — both fills read this)</label>
+            <label for="sheet-sos">SO numbers (optional)</label>
             <textarea id="sheet-sos" rows="4" placeholder="SO12345&#10;OPT-SO-000670"></textarea>
-            <p class="meta">One SO per line (commas work too). On the <b>first fill</b> these are added on top of the Waypoint sweep, resolved from Unicommerce — marketplace, PO, quantity, value, destination and the pickup warehouse. On the <b>second fill</b> each one is topped up with its invoice, invoice qty, tracking, e-way bill and status; an SO on no date tab is created from Unicommerce first. Leave empty for the unattended behaviour: Waypoint sweep, and enrich every row that still has no invoice.</p>
             <div class="row">
               <button id="sheet-first-btn" class="primary">First fill (Waypoint + typed SOs → date tab)</button>
               <button id="sheet-second-btn" class="secondary">Second fill (UC invoice enrich)</button>
               <button id="sheet-push-btn" class="secondary">Push date tab to Master</button>
               <button id="sheet-sync-btn" class="secondary">Sync Master from source</button>
             </div>
-            <p class="meta">Use Sync when you want Master to match the main B2B View sheet row-for-row.</p>
             <div id="sheet-output" class="result hidden"></div>
           </div>
         </section>
@@ -347,7 +377,6 @@
         <!-- Packing Mail (A2) -->
         <section id="tab-packing" class="tab hidden">
           <h2>Packing Mail</h2>
-          <p class="lead">Paste SO numbers. Drafts are created in <b>your</b> Gmail — connect once below, then pick warehouses and recipients.</p>
           <div class="panel" id="packing-gmail-panel">
             <h3>Your Gmail</h3>
             <div class="meta" id="packing-gmail-meta">Checking connection…</div>
@@ -355,7 +384,6 @@
               <a id="packing-gmail-connect" href="/auth/google/connect" class="dl-btn">Connect my Gmail</a>
               <button id="packing-gmail-disconnect" class="secondary hidden" type="button">Disconnect</button>
             </div>
-            <p class="meta">Packing drafts and the invoice / e-way follow-up both land in your Drafts. Nothing is sent until you press send now (or Send in Gmail).</p>
           </div>
           <div class="panel">
             <label>Sale Orders (one per line)<textarea id="packing-sos" rows="4" class="textarea" placeholder="SO02741"></textarea></label>
@@ -367,7 +395,6 @@
               <button id="packing-btn" class="primary" disabled>2 · Create packing drafts (label + appointment)</button>
               <button id="packing-inveway-btn" class="secondary" disabled>3 · Create invoice &amp; e-way drafts (same thread)</button>
             </div>
-            <p class="meta">Recipients come from the warehouse-email Google Sheet (To / CC / Finance). Tick who should receive each warehouse's mail, then create the draft. Step 3 also creates a draft — it does not send.</p>
             <div id="packing-output" class="result hidden"></div>
           </div>
         </section>
@@ -375,31 +402,26 @@
         <!-- Extensions -->
         <section id="tab-extensions" class="tab hidden">
           <h2>Browser Extensions</h2>
-          <p class="lead">Some automations use a small Chrome extension. Download, install once, and follow the steps below.</p>
 
           <div class="panel">
             <h3>① Opptra Session Helper <span class="pill">recommended</span></h3>
-            <p class="meta">Captures your Unicommerce session after you log in, so the platform can keep it alive. You install it once; then whenever the session expires you just log into Unicommerce and click the helper.</p>
             <a class="dl-btn" href="/downloads/opptra-session-helper.zip" download>⤓ Download Session Helper (.zip)</a>
             <ol class="steps">
-              <li><b>Download</b> the .zip above and <b>unzip</b> it to a folder you'll keep (e.g. <code>~/opptra-session-helper</code>).</li>
-              <li>Open Chrome → go to <code>chrome://extensions</code>.</li>
-              <li>Turn on <b>Developer mode</b> (top-right toggle).</li>
-              <li>Click <b>Load unpacked</b> → select the unzipped folder.</li>
-              <li>Open the extension, paste your <b>Ingest Token</b> (get it from the Admin tab → “Session Helper token”) and the platform URL. Click <b>Save</b>.</li>
-              <li>When the platform says “Re-login needed”, click <b>Re-login to Unicommerce</b>, log in (do the CAPTCHA), then click the helper’s <b>Capture session</b>. Done, session goes ALIVE.</li>
+              <li><b>Download</b> and <b>unzip</b> to a folder you’ll keep.</li>
+              <li>Chrome → <code>chrome://extensions</code> → enable <b>Developer mode</b>.</li>
+              <li><b>Load unpacked</b> → select the unzipped folder.</li>
+              <li>Paste your <b>Ingest Token</b> (Admin → Session Helper token) and platform URL → <b>Save</b>.</li>
+              <li>When re-login is needed: log into Unicommerce, then helper → <b>Capture session</b>.</li>
             </ol>
           </div>
 
           <div class="panel">
             <h3>② Bulk Invoice / E-way Bill Downloader</h3>
-            <p class="meta">Select orders in Unicommerce and bulk-download invoice + e-way PDFs. Standalone, no token needed.</p>
             <a class="dl-btn" href="/downloads/bulk-download-extension.zip" download>⤓ Download Bulk Downloader (.zip)</a>
             <ol class="steps">
-              <li><b>Download</b> and <b>unzip</b> the .zip above.</li>
-              <li>Chrome → <code>chrome://extensions</code> → enable <b>Developer mode</b>.</li>
-              <li><b>Load unpacked</b> → pick the unzipped folder.</li>
-              <li>Open Unicommerce, go to the orders list, click the extension, choose what to download.</li>
+              <li><b>Download</b> and <b>unzip</b>.</li>
+              <li>Chrome → <code>chrome://extensions</code> → <b>Developer mode</b> → <b>Load unpacked</b>.</li>
+              <li>In Unicommerce orders list, use the extension to download.</li>
             </ol>
           </div>
         </section>
@@ -413,10 +435,9 @@
             <div class="meta" id="admin-session-meta">…</div>
             <div class="row">
               <button id="admin-relogin-btn" class="primary">Re-login to Unicommerce</button>
-              <span class="meta">Opens the Unicommerce login in a new tab. Log in (do the CAPTCHA), then capture the session with the helper extension, or paste it below.</span>
             </div>
             <details>
-              <summary class="summary-toggle">Manual paste (fallback, no extension)</summary>
+              <summary class="summary-toggle">Manual paste (fallback)</summary>
               <div class="row">
                 <input id="admin-cookie" placeholder="JSESSIONID value from DevTools → Application → Cookies" autocomplete="off" />
                 <button id="admin-cookie-btn" class="primary">Save session</button>
@@ -427,14 +448,12 @@
 
           <div class="panel" id="admin-google-panel">
             <h3>Shared Google Workspace (Sheets / Drive)</h3>
-            <p class="meta">Powers Sheet Update writes and shared warehouse-sheet reads. Separate from each user's Gmail connect on the Packing Mail tab.</p>
             <div class="meta" id="admin-google-meta">…</div>
             <div class="row"><a id="admin-google-connect" href="/auth/google/connect-shared" class="dl-btn">Connect shared Workspace</a></div>
           </div>
 
           <div class="panel">
             <h3>Session Helper token</h3>
-            <p class="meta">Create a token for the Session Helper extension (one per person/machine). Shown once, copy it immediately.</p>
             <div class="row"><button id="token-create-btn" class="secondary">Create token</button></div>
             <pre id="token-out" class="output hidden"></pre>
             <table id="tokens-table">
@@ -464,7 +483,6 @@
 
           <div class="panel">
             <h3>Audit log</h3>
-            <p class="lead">Security-relevant events, logins, role changes, session updates.</p>
             <table id="audit-table">
               <thead><tr><th>When</th><th>Actor</th><th>Event</th><th>Detail</th></tr></thead>
               <tbody></tbody>
@@ -478,19 +496,14 @@
   <!-- Request an automation -->
   <div id="request-modal" class="modal-backdrop hidden">
     <div class="modal">
-      <h3>Want a new automation?</h3>
-      <p>Tell us what you'd like to automate and the team will build it. The more detail the better:</p>
-      <ul>
-        <li>What do you do manually today, step by step?</li>
-        <li>How often, and roughly how long does it take?</li>
-        <li>Links to any sheets, portals, or examples.</li>
-      </ul>
+      <h3>Request an automation</h3>
+      <p>Describe what you want automated — steps, frequency, and any links or examples.</p>
       <a id="request-mailto" class="primary dl-btn" href="mailto:sc.automations@opptra.com?subject=Automation%20request&body=Hi%20team%2C%0A%0AWhat%20I%20want%20to%20automate%3A%0A%0ASteps%20I%20do%20manually%20today%3A%0A1.%0A2.%0A3.%0A%0AHow%20often%20I%20do%20this%3A%0A%0ALinks%20%2F%20examples%3A%0A">✉ Write to sc.automations@opptra.com</a>
-      <p class="meta">This opens your email app with a template ready to fill in.</p>
       <button id="request-close" class="secondary">Close</button>
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="validate.js?v=preflight-1"></script>
+  <script src="app.js?v=preflight-1"></script>
 </body>
 </html>
