@@ -11,7 +11,7 @@ import { createZeptoConnector } from '@opptra/connectors-zepto';
 import { createBlinkitConnector } from '@opptra/connectors-blinkit';
 import { createInstamartConnector } from '@opptra/connectors-instamart';
 import { createMeeshoConnector } from '@opptra/connectors-meesho';
-import { googleClients } from '@opptra/integrations-google';
+import { googleClients, sheetsApi, driveApi } from '@opptra/integrations-google';
 import { makeVinculumClient } from '@opptra/integrations-vinculum';
 import { fetchSOsFromNeon } from '@opptra/automation-sheet/waypointDb.js';
 import { sanitizeResult } from '@opptra/connectors-sdk';
@@ -148,10 +148,22 @@ export function buildToolSpecs(connectedLiveIds) {
     tools.push({ name: 'waypoint_list_orders', description: 'List recent Waypoint sale orders', parameters: { type: 'object', properties: { limit: { type: 'integer' } } } });
   }
   if (set.has('google-sheets')) {
-    tools.push({ name: 'sheets_get_range', description: 'Read Master sheet range', parameters: { type: 'object', properties: { range: { type: 'string' }, spreadsheetId: { type: 'string' } } } });
+    tools.push(
+      { name: 'sheets_list_spreadsheets', description: 'List recent Google Spreadsheets visible to the connected account', parameters: { type: 'object', properties: { pageSize: { type: 'integer' }, nameContains: { type: 'string' } } } },
+      { name: 'sheets_list_tabs', description: 'List tab names in a spreadsheet', parameters: { type: 'object', properties: { spreadsheetId: { type: 'string' } }, required: ['spreadsheetId'] } },
+      { name: 'sheets_get_range', description: 'Read values from a sheet range (A1 notation)', parameters: { type: 'object', properties: { spreadsheetId: { type: 'string' }, range: { type: 'string' } }, required: ['range'] } },
+      { name: 'sheets_update_range', description: 'Write/overwrite values into a sheet range (USER_ENTERED). values = 2D array of rows.', parameters: { type: 'object', properties: { spreadsheetId: { type: 'string' }, range: { type: 'string' }, values: { type: 'array' } }, required: ['range', 'values'] } },
+      { name: 'sheets_append_rows', description: 'Append rows to a sheet tab/range', parameters: { type: 'object', properties: { spreadsheetId: { type: 'string' }, range: { type: 'string' }, values: { type: 'array' } }, required: ['range', 'values'] } },
+      { name: 'sheets_copy_range', description: 'Copy values from one range to another (sheet→sheet). Same or different spreadsheet IDs.', parameters: { type: 'object', properties: { sourceSpreadsheetId: { type: 'string' }, sourceRange: { type: 'string' }, destSpreadsheetId: { type: 'string' }, destRange: { type: 'string' } }, required: ['sourceRange', 'destRange'] } },
+    );
   }
   if (set.has('google-drive')) {
-    tools.push({ name: 'drive_search', description: 'Search Google Drive files', parameters: { type: 'object', properties: { query: { type: 'string' }, pageSize: { type: 'integer' } } } });
+    tools.push(
+      { name: 'drive_search', description: 'Search Drive files by name/query', parameters: { type: 'object', properties: { query: { type: 'string' }, nameContains: { type: 'string' }, pageSize: { type: 'integer' } } } },
+      { name: 'drive_list_folder', description: 'List files in a Drive folder id', parameters: { type: 'object', properties: { folderId: { type: 'string' }, pageSize: { type: 'integer' } }, required: ['folderId'] } },
+      { name: 'drive_get_file_meta', description: 'Get Drive file metadata (id, name, mime, size, modified)', parameters: { type: 'object', properties: { fileId: { type: 'string' } }, required: ['fileId'] } },
+      { name: 'drive_read_text_file', description: 'Download a small text/csv/json Drive file and return a text preview (truncated)', parameters: { type: 'object', properties: { fileId: { type: 'string' }, maxChars: { type: 'integer' } }, required: ['fileId'] } },
+    );
   }
   if (set.has('homecentre')) {
     tools.push(
@@ -219,6 +231,14 @@ export function makeToolExecutor({ userEmail, connectedIds }) {
     return null;
   };
 
+  function clampRows(values) {
+    if (!Array.isArray(values)) return [];
+    return values.slice(0, 200).map((row) => {
+      if (!Array.isArray(row)) return [String(row ?? '')];
+      return row.slice(0, 50).map((c) => (c == null ? '' : String(c).slice(0, 500)));
+    });
+  }
+
   return async function executeTool(name, args = {}) {
     if (name.startsWith('unicommerce_')) {
       const blocked = need('unicommerce');
@@ -237,27 +257,111 @@ export function makeToolExecutor({ userEmail, connectedIds }) {
       const limit = Math.min(Number(args.limit) || 20, 50);
       return sanitizeResult({ ok: true, count: rows.length, orders: rows.slice(0, limit) });
     }
-    if (name === 'sheets_get_range') {
+    if (name.startsWith('sheets_') || name === 'sheets_get_range') {
       const blocked = need('google-sheets');
       if (blocked) return blocked;
       const g = await sharedGoogle();
       if (!g?.sheets) return { ok: false, error: 'Google Sheets not connected' };
-      const spreadsheetId = args.spreadsheetId || cfg.MASTER_SHEET_ID;
-      const range = args.range || 'Master!A1:G20';
-      const res = await g.sheets.spreadsheets.values.get({ spreadsheetId, range });
-      return sanitizeResult({ ok: true, range, values: (res.data.values || []).slice(0, 40) });
+      const sid = args.spreadsheetId || cfg.MASTER_SHEET_ID;
+
+      if (name === 'sheets_list_spreadsheets') {
+        if (!g.drive) return { ok: false, error: 'Drive client required to list spreadsheets — Connect Google Drive too' };
+        const nameQ = args.nameContains ? ` and name contains '${String(args.nameContains).replace(/'/g, "\\'")}'` : '';
+        const res = await g.drive.files.list({
+          q: `mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false${nameQ}`,
+          pageSize: Math.min(Number(args.pageSize) || 20, 50),
+          fields: 'files(id,name,modifiedTime)',
+          orderBy: 'modifiedTime desc',
+        });
+        return sanitizeResult({ ok: true, spreadsheets: res.data.files || [] });
+      }
+      if (name === 'sheets_list_tabs') {
+        const tabs = await sheetsApi.listTabs(g.sheets, args.spreadsheetId || sid);
+        return sanitizeResult({ ok: true, spreadsheetId: args.spreadsheetId || sid, tabs });
+      }
+      if (name === 'sheets_get_range') {
+        const range = args.range || 'Master!A1:G20';
+        const values = await sheetsApi.read(g.sheets, sid, range);
+        return sanitizeResult({ ok: true, spreadsheetId: sid, range, values: values.slice(0, 80) });
+      }
+      if (name === 'sheets_update_range') {
+        const values = clampRows(args.values);
+        if (!values.length) return { ok: false, error: 'values required (2D array)' };
+        await sheetsApi.update(g.sheets, sid, args.range, values);
+        return sanitizeResult({ ok: true, spreadsheetId: sid, range: args.range, rowsWritten: values.length });
+      }
+      if (name === 'sheets_append_rows') {
+        const values = clampRows(args.values);
+        if (!values.length) return { ok: false, error: 'values required (2D array)' };
+        await sheetsApi.append(g.sheets, sid, args.range, values);
+        return sanitizeResult({ ok: true, spreadsheetId: sid, range: args.range, rowsAppended: values.length });
+      }
+      if (name === 'sheets_copy_range') {
+        const srcId = args.sourceSpreadsheetId || sid;
+        const dstId = args.destSpreadsheetId || sid;
+        const values = await sheetsApi.read(g.sheets, srcId, args.sourceRange);
+        const clipped = clampRows(values);
+        if (!clipped.length) return { ok: false, error: 'source range empty' };
+        await sheetsApi.update(g.sheets, dstId, args.destRange, clipped);
+        return sanitizeResult({
+          ok: true, sourceSpreadsheetId: srcId, sourceRange: args.sourceRange,
+          destSpreadsheetId: dstId, destRange: args.destRange, rowsCopied: clipped.length,
+        });
+      }
     }
-    if (name === 'drive_search') {
+    if (name.startsWith('drive_')) {
       const blocked = need('google-drive');
       if (blocked) return blocked;
       const g = await sharedGoogle();
       if (!g?.drive) return { ok: false, error: 'Google Drive not connected' };
-      const res = await g.drive.files.list({
-        q: args.query || "mimeType != 'application/vnd.google-apps.folder'",
-        pageSize: Math.min(Number(args.pageSize) || 10, 25),
-        fields: 'files(id,name,mimeType,modifiedTime)',
-      });
-      return sanitizeResult({ ok: true, files: res.data.files || [] });
+
+      if (name === 'drive_search') {
+        let q = args.query || "mimeType != 'application/vnd.google-apps.folder' and trashed = false";
+        if (args.nameContains) q = `name contains '${String(args.nameContains).replace(/'/g, "\\'")}' and trashed = false`;
+        const res = await g.drive.files.list({
+          q,
+          pageSize: Math.min(Number(args.pageSize) || 15, 40),
+          fields: 'files(id,name,mimeType,modifiedTime,size)',
+          orderBy: 'modifiedTime desc',
+        });
+        return sanitizeResult({ ok: true, files: res.data.files || [] });
+      }
+      if (name === 'drive_list_folder') {
+        const files = await driveApi.listFolder(g.drive, args.folderId);
+        return sanitizeResult({ ok: true, folderId: args.folderId, files: files.slice(0, Math.min(Number(args.pageSize) || 50, 100)) });
+      }
+      if (name === 'drive_get_file_meta') {
+        const res = await g.drive.files.get({
+          fileId: args.fileId,
+          fields: 'id,name,mimeType,modifiedTime,size,parents,webViewLink',
+        });
+        return sanitizeResult({ ok: true, file: res.data });
+      }
+      if (name === 'drive_read_text_file') {
+        const meta = await g.drive.files.get({ fileId: args.fileId, fields: 'id,name,mimeType,size' });
+        const mime = meta.data.mimeType || '';
+        const maxChars = Math.min(Number(args.maxChars) || 8000, 20000);
+        // Google Docs/Sheets: export as text/csv
+        let buf;
+        if (mime === 'application/vnd.google-apps.document') {
+          const res = await g.drive.files.export({ fileId: args.fileId, mimeType: 'text/plain' }, { responseType: 'arraybuffer' });
+          buf = Buffer.from(res.data);
+        } else if (mime === 'application/vnd.google-apps.spreadsheet') {
+          const res = await g.drive.files.export({ fileId: args.fileId, mimeType: 'text/csv' }, { responseType: 'arraybuffer' });
+          buf = Buffer.from(res.data);
+        } else if (/^text\/|json|csv|xml/i.test(mime) || /\.(csv|txt|json|tsv)$/i.test(meta.data.name || '')) {
+          buf = await driveApi.getFileBytes(g.drive, args.fileId);
+        } else {
+          return { ok: false, error: `Cannot preview binary type ${mime}. Use drive_get_file_meta or open in Drive.` };
+        }
+        const text = buf.toString('utf8');
+        return sanitizeResult({
+          ok: true,
+          file: { id: meta.data.id, name: meta.data.name, mimeType: mime, size: meta.data.size },
+          text: text.length > maxChars ? `${text.slice(0, maxChars)}…[truncated]` : text,
+          truncated: text.length > maxChars,
+        });
+      }
     }
     if (name.startsWith('homecentre_')) {
       const blocked = need('homecentre');

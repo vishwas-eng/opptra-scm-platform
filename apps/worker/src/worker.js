@@ -172,6 +172,23 @@ if (cfg.SHEET_SYNC_MINUTES > 0) {
 // Home Centre is MANUAL ONLY for now (no orders yet / testing). Never auto-schedule.
 await queue.removeJobScheduler('homecentre-sync').catch(() => {});
 
+// Re-register active daily Agent playbooks after deploy/restart.
+try {
+  const { listActiveDailyPlaybooks } = await import('@opptra/core');
+  const active = await listActiveDailyPlaybooks();
+  for (const pb of active) {
+    const hour = Math.min(23, Math.max(0, Number(pb.hour_utc) || 3));
+    await queue.upsertJobScheduler(`agent-playbook-${pb.playbook_uid}`, { pattern: `0 ${hour} * * *` }, {
+      name: 'agent.playbook.run',
+      data: { playbookUid: pb.playbook_uid },
+      opts: { removeOnComplete: { count: 20 }, removeOnFail: { count: 20 } },
+    });
+  }
+  logger.info({ dailyPlaybooks: active.length }, 'agent playbook schedulers synced');
+} catch (err) {
+  logger.warn({ err: String(err.message || err) }, 'agent playbook scheduler sync skipped');
+}
+
 logger.info({ keepaliveEveryMin: cfg.UC_KEEPALIVE_MINUTES, hcManualOnly: true }, 'worker started');
 
 /* ------------------------------ shutdown ------------------------------ */

@@ -20,6 +20,10 @@ export {
   markConnectorAlive, markConnectorDead,
 } from './connectorVault.js';
 export {
+  createAgentPlaybook, listAgentPlaybooks, getAgentPlaybook,
+  updateAgentPlaybook, markPlaybookRun, listActiveDailyPlaybooks,
+} from './agentPlaybooks.js';
+export {
   validateReverseDcInput,
   validateEwaybillInput,
   validatePackingInput,

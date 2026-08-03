@@ -44,6 +44,17 @@ export async function enqueue(name, payload, opts = {}) {
   return q.add(name, payload, opts);
 }
 
+/** Register or update a BullMQ job scheduler (daily playbooks, etc.). */
+export async function upsertScheduler(schedulerId, repeat, jobTemplate) {
+  const q = automationQueue();
+  return q.upsertJobScheduler(schedulerId, repeat, jobTemplate);
+}
+
+export async function removeScheduler(schedulerId) {
+  const q = automationQueue();
+  return q.removeJobScheduler(schedulerId).catch(() => null);
+}
+
 export async function closeQueues() {
   await Promise.allSettled([_queue?.close(), _conn?.quit()]);
   _queue = null; _conn = null;

@@ -1325,7 +1325,7 @@
   /* ---------------- Agent · Beta (admin only) ---------------- */
   async function loadAgentTab() {
     if (me?.role !== 'admin') return;
-    await Promise.all([loadAgentConnectors(), loadAgentThreads(), loadAgentMeta()]);
+    await Promise.all([loadAgentConnectors(), loadAgentThreads(), loadAgentMeta(), loadAgentPlaybooks()]);
     if (agentThreadId) await loadAgentMessages(agentThreadId);
   }
 
@@ -1422,8 +1422,9 @@
     const box = $('agent-messages');
     if (!messages.length) {
       box.innerHTML = `<div class="agent-empty" id="agent-empty">
-        <h3>Ask Opptra Agent</h3>
-        <p>Try <code>/uc health</code>, <code>/uc facilities</code>, <code>/waypoint</code>, or <code>/help</code>.</p>
+        <h3>Automate your daily ops</h3>
+        <p>Connect <b>Sheets</b> &amp; <b>Drive</b>, then describe the work — sheet→sheet, Drive→sheet, UC into Master.</p>
+        <p class="agent-empty-hints">Try: <code>list my recent spreadsheets</code> · <code>/uc health</code></p>
       </div>`;
       return;
     }
@@ -1442,8 +1443,68 @@
 
   $('agent-new-chat')?.addEventListener('click', async () => {
     agentThreadId = null;
-    $('agent-messages').innerHTML = `<div class="agent-empty"><h3>Ask Opptra Agent</h3><p>Start a new conversation.</p></div>`;
+    $('agent-messages').innerHTML = `<div class="agent-empty"><h3>Automate your daily ops</h3><p>Connect Sheets &amp; Drive, then describe what to do.</p></div>`;
     await loadAgentThreads();
+  });
+
+  async function loadAgentPlaybooks() {
+    const box = $('agent-playbooks');
+    if (!box) return;
+    try {
+      const { playbooks } = await api('/api/agent/playbooks');
+      if (!playbooks?.length) {
+        box.innerHTML = '';
+        return;
+      }
+      box.innerHTML = playbooks.slice(0, 8).map((p) => {
+        const daily = p.schedule_kind === 'daily' && p.status === 'active';
+        const label = `${esc(p.title)} · ${daily ? 'daily' : p.status}`;
+        return `<span class="agent-playbook-chip ${daily ? 'active-daily' : ''}">${label}
+          <button type="button" data-run-pb="${esc(p.playbook_uid)}">Run</button>
+          ${p.status === 'active' ? `<button type="button" data-pause-pb="${esc(p.playbook_uid)}">Pause</button>` : `<button type="button" data-act-pb="${esc(p.playbook_uid)}">Activate</button>`}
+        </span>`;
+      }).join('');
+      box.querySelectorAll('[data-run-pb]').forEach((b) => b.addEventListener('click', async () => {
+        try {
+          await api('/api/agent/playbooks/' + b.dataset.runPb + '/run', { method: 'POST', body: {} });
+          toast('Playbook queued.', 'ok');
+        } catch (e) { toast(e.message, 'bad'); }
+      }));
+      box.querySelectorAll('[data-pause-pb]').forEach((b) => b.addEventListener('click', async () => {
+        try {
+          await api('/api/agent/playbooks/' + b.dataset.pausePb + '/pause', { method: 'POST', body: {} });
+          toast('Playbook paused.', 'ok');
+          await loadAgentPlaybooks();
+        } catch (e) { toast(e.message, 'bad'); }
+      }));
+      box.querySelectorAll('[data-act-pb]').forEach((b) => b.addEventListener('click', async () => {
+        try {
+          await api('/api/agent/playbooks/' + b.dataset.actPb + '/activate', { method: 'POST', body: {} });
+          toast('Daily automation activated (UTC hour from playbook).', 'ok');
+          await loadAgentPlaybooks();
+        } catch (e) { toast(e.message, 'bad'); }
+      }));
+    } catch { box.innerHTML = ''; }
+  }
+
+  $('agent-save-daily')?.addEventListener('click', async () => {
+    if (me?.role !== 'admin') return;
+    const title = prompt('Name this daily automation', 'Daily sheet sync') || '';
+    if (!title.trim()) return;
+    try {
+      const res = await api('/api/agent/playbooks', {
+        body: {
+          title: title.trim(),
+          threadId: agentThreadId || undefined,
+          scheduleKind: 'daily',
+          hourUtc: 3,
+          activate: true,
+          instruction: title.trim(),
+        },
+      });
+      toast(res.note || 'Daily automation saved.', 'ok', 6000);
+      await loadAgentPlaybooks();
+    } catch (e) { toast(e.message, 'bad', 8000); }
   });
 
   $('agent-composer')?.addEventListener('submit', async (e) => {

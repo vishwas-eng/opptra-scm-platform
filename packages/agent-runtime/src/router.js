@@ -48,6 +48,11 @@ const RULES = [
     args: () => ({ range: 'Master!A1:G20' }),
   },
   {
+    re: /list\s+(?:my\s+)?(?:recent\s+)?spreadsheets?|\/sheets?\s+list\b/i,
+    tool: 'sheets_list_spreadsheets',
+    args: () => ({ pageSize: 20 }),
+  },
+  {
     re: /(?:search|find|list)\s+(?:drive|files?)|\/drive\b/i,
     tool: 'drive_search',
     args: () => ({ query: "mimeType != 'application/vnd.google-apps.folder'", pageSize: 10 }),

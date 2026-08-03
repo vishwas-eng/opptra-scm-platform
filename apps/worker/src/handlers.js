@@ -311,22 +311,63 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       return result;
     },
 
-    // Home Centre: punch SO then attempt Vinculum fulfill.
-    'homecentre.syncAndFulfill': async ({ data: { runUid, input = {} } }) => {
-      if (runUid) await markRunning(runUid);
-      if (!homecentrePipeline) {
-        const result = { ok: true, empty: true, configured: false, message: 'Vinculum not configured — nothing to do' };
-        if (runUid) await finishRun(runUid, { ok: true, result });
-        return result;
+    // Agent Beta playbook replay (daily or manual). Runs saved tool steps via the same
+    // catalog executor the chat uses — Sheets/Drive/UC/Waypoint/Home Centre only.
+    'agent.playbook.run': async ({ data = {} }) => {
+      const playbookUid = data.playbookUid;
+      if (!playbookUid) return { ok: false, error: 'playbookUid required' };
+      const {
+        getAgentPlaybook, markPlaybookRun, listConnectorStates, createRun,
+      } = await import('@opptra/core');
+      const { makeToolExecutor, buildConnectorStatus } = await import('../../api/src/agent/catalog.js');
+
+      const pb = await getAgentPlaybook({ playbookUid });
+      if (!pb) return { ok: false, error: 'playbook not found' };
+      if (pb.status === 'archived') return { ok: false, error: 'playbook archived' };
+
+      const def = typeof pb.definition === 'string' ? JSON.parse(pb.definition) : (pb.definition || {});
+      const steps = Array.isArray(def.steps) ? def.steps.slice(0, 20) : [];
+      if (!steps.length) {
+        await markPlaybookRun(playbookUid, { ok: false, error: 'no steps' });
+        return { ok: false, error: 'playbook has no steps' };
       }
-      const result = await homecentrePipeline.syncAndFulfill({
-        dryRun: !!input.dryRun,
-        limit: input.limit || 50,
-        skipFulfill: input.skipFulfill !== false,
-        buyerByOrder: input.buyerByOrder || {},
+
+      const prefs = await listConnectorStates(pb.user_email);
+      const connectors = await buildConnectorStatus(prefs);
+      const connectedIds = connectors.filter((c) => c.connected && c.live).map((c) => c.id);
+      const executeTool = makeToolExecutor({ userEmail: pb.user_email, connectedIds });
+
+      const run = await createRun({
+        userEmail: pb.user_email || 'system',
+        automation: 'agent-playbook',
+        action: 'run',
+        input: { playbookUid, steps: steps.map((s) => s.tool) },
       });
-      if (runUid) await finishRun(runUid, { ok: result.ok !== false, result });
-      return result;
+      await markRunning(run.run_uid);
+
+      const results = [];
+      let ok = true;
+      for (const step of steps) {
+        const tool = String(step.tool || step.name || '').trim();
+        if (!tool) continue;
+        try {
+          const r = await executeTool(tool, step.args || {});
+          const stepOk = r?.ok !== false;
+          if (!stepOk) ok = false;
+          results.push({ tool, ok: stepOk, result: r });
+          if (!stepOk && step.stopOnError !== false) break;
+        } catch (err) {
+          ok = false;
+          results.push({ tool, ok: false, error: String(err.message || err) });
+          break;
+        }
+      }
+
+      const error = ok ? null : (results.find((r) => !r.ok)?.error || results.find((r) => !r.ok)?.result?.error || 'playbook step failed');
+      await finishRun(run.run_uid, { ok, result: { playbookUid, title: pb.title, results }, error });
+      await markPlaybookRun(playbookUid, { ok, error });
+      logger.info({ playbookUid, ok, steps: results.length }, 'agent playbook run finished');
+      return { ok, playbookUid, results };
     },
   };
 }

@@ -7,7 +7,7 @@
   <link rel="icon" href="/assets/opptra-logo-official.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=agent-beta-1" />
+  <link rel="stylesheet" href="styles.css?v=agent-beta-2" />
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -101,7 +101,7 @@
                 <h2>Connectors</h2>
                 <span class="pill beta-pill">Beta</span>
               </div>
-              <p class="agent-panel-lead">Connect live tools for chat. Marketplace channels are visible but coming soon.</p>
+              <p class="agent-panel-lead">Connect Sheets &amp; Drive for daily ops. Marketplace channels are visible but coming soon.</p>
               <div id="agent-connectors-list" class="agent-conn-grid"></div>
             </aside>
             <div class="agent-chat-panel">
@@ -111,19 +111,22 @@
                   <h2 id="agent-chat-title">Agent <span class="beta-inline">Beta</span></h2>
                 </div>
                 <div class="agent-chat-actions">
+                  <button type="button" id="agent-save-daily" class="secondary" title="Save last tool steps as a daily job">Automate daily</button>
                   <button type="button" id="agent-new-chat" class="secondary">New chat</button>
                   <span id="agent-llm-mode" class="meta"></span>
                 </div>
               </div>
               <div class="agent-threads" id="agent-threads"></div>
+              <div class="agent-playbooks" id="agent-playbooks"></div>
               <div class="agent-messages" id="agent-messages">
                 <div class="agent-empty" id="agent-empty">
-                  <h3>Ask Opptra Agent</h3>
-                  <p>Try <code>/uc health</code>, <code>/uc facilities</code>, <code>/waypoint</code>, or <code>/help</code>. Connectors must show Connected.</p>
+                  <h3>Automate your daily ops</h3>
+                  <p>Connect <b>Sheets</b> &amp; <b>Drive</b> (and UC / Waypoint / Home Centre), then describe the work — update one sheet from another, pull a Drive file into a range, sync UC into Master.</p>
+                  <p class="agent-empty-hints">Try: <code>list my recent spreadsheets</code> · <code>copy Master!A1:G20 into Archive!A1</code> · <code>/uc health</code></p>
                 </div>
               </div>
               <form class="agent-composer" id="agent-composer">
-                <textarea id="agent-input" rows="2" placeholder="Message Agent…" autocomplete="off"></textarea>
+                <textarea id="agent-input" rows="2" placeholder="Describe a daily Sheets / Drive / UC workflow…" autocomplete="off"></textarea>
                 <button type="submit" id="agent-send" class="primary">Send</button>
               </form>
             </div>

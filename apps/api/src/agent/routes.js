@@ -6,12 +6,14 @@ import {
   listConnectorStates, setConnectorEnabled,
   setConnectorCredential, clearConnectorCredential,
   getGoogleOAuthToken,
+  createAgentPlaybook, listAgentPlaybooks, getAgentPlaybook, updateAgentPlaybook,
 } from '@opptra/core';
 import { runAgentTurn, llmModeLabel } from '@opptra/agent-runtime';
 import {
   LIVE_CONNECTOR_IDS, isLiveConnector, buildConnectorStatus,
   buildToolSpecs, makeToolExecutor, listAllCapabilities, CONNECTOR_META,
 } from '../agent/catalog.js';
+import { enqueue, upsertScheduler, removeScheduler } from '../queue.js';
 
 function userBucket(req) {
   try {
@@ -29,6 +31,24 @@ const perUser = (max, timeWindow) => ({ rateLimit: { max, timeWindow, keyGenerat
 function titleFromMessage(msg) {
   const t = String(msg || '').trim().replace(/\s+/g, ' ');
   return (t.slice(0, 48) || 'New chat') + (t.length > 48 ? '…' : '');
+}
+
+async function syncPlaybookScheduler(pb) {
+  const schedulerId = `agent-playbook-${pb.playbook_uid}`;
+  if (pb.status === 'active' && pb.schedule_kind === 'daily') {
+    const hour = Math.min(23, Math.max(0, Number(pb.hour_utc) || 3));
+    await upsertScheduler(
+      schedulerId,
+      { pattern: `0 ${hour} * * *` },
+      {
+        name: 'agent.playbook.run',
+        data: { playbookUid: pb.playbook_uid },
+        opts: { removeOnComplete: { count: 20 }, removeOnFail: { count: 20 } },
+      },
+    );
+  } else {
+    await removeScheduler(schedulerId);
+  }
 }
 
 export default async function agentRoutes(app) {
@@ -260,6 +280,141 @@ export default async function agentRoutes(app) {
       mode: result.mode,
       message: assistant,
       connectedIds,
+      canSaveAutomation: !!(result.toolCalls?.length),
     };
+  });
+
+  // ── Daily automations / playbooks ─────────────────────────────────
+  app.get('/api/agent/playbooks', { preValidation: adminOnly }, async (req) => {
+    const playbooks = await listAgentPlaybooks({ userEmail: req.user.email });
+    return { beta: true, playbooks };
+  });
+
+  app.post('/api/agent/playbooks', {
+    preValidation: adminOnly,
+    config: perUser(20, '1 minute'),
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string', maxLength: 160 },
+          instruction: { type: 'string', maxLength: 4000 },
+          threadId: { type: 'string', maxLength: 80 },
+          scheduleKind: { type: 'string', enum: ['manual', 'daily'] },
+          hourUtc: { type: 'integer', minimum: 0, maximum: 23 },
+          activate: { type: 'boolean' },
+          steps: {
+            type: 'array',
+            maxItems: 20,
+            items: {
+              type: 'object',
+              required: ['tool'],
+              properties: {
+                tool: { type: 'string', maxLength: 80 },
+                args: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const body = req.body || {};
+    let steps = Array.isArray(body.steps) ? body.steps : [];
+
+    // Prefer steps from the latest assistant tool calls on the thread.
+    if ((!steps.length) && body.threadId) {
+      const thread = await getAgentThread({ threadUid: body.threadId, userEmail: req.user.email });
+      if (thread) {
+        const msgs = await listAgentMessages({ threadId: thread.id, limit: 50 });
+        const last = [...msgs].reverse().find((m) => m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length);
+        if (last) {
+          steps = last.tool_calls
+            .filter((t) => t && t.name && t.status !== 'error')
+            .map((t) => ({ tool: t.name, args: t.args || {} }));
+        }
+      }
+    }
+
+    if (!steps.length && !String(body.instruction || '').trim()) {
+      return reply.code(400).send({
+        error: 'Provide steps or run a chat that uses tools first, then Save as daily automation.',
+      });
+    }
+
+    const prefs = await listConnectorStates(req.user.email);
+    const connectors = await buildConnectorStatus(prefs);
+    const connectedIds = connectors.filter((c) => c.connected && c.live).map((c) => c.id);
+
+    const scheduleKind = body.scheduleKind === 'daily' ? 'daily' : 'manual';
+    const status = body.activate === false ? 'draft' : (scheduleKind === 'daily' ? 'active' : 'draft');
+    const instruction = String(body.instruction || '').trim()
+      || 'Replay saved Agent tool steps (from chat).';
+    const title = String(body.title || '').trim()
+      || (scheduleKind === 'daily' ? 'Daily automation' : 'Saved automation').slice(0, 160);
+
+    const pb = await createAgentPlaybook({
+      userEmail: req.user.email,
+      title,
+      instruction,
+      definition: {
+        connectors: connectedIds,
+        steps,
+        source: 'agent-chat',
+        beta: true,
+      },
+      status,
+      scheduleKind,
+      hourUtc: body.hourUtc ?? 3,
+      threadUid: body.threadId || null,
+    });
+    await syncPlaybookScheduler(pb);
+    await audit(req.user.email, 'agent-playbook-create', {
+      playbookUid: pb.playbook_uid, status: pb.status, scheduleKind: pb.schedule_kind, steps: steps.length,
+    });
+    return {
+      ok: true,
+      beta: true,
+      playbook: pb,
+      note: scheduleKind === 'daily' && status === 'active'
+        ? `Scheduled daily at ${pb.hour_utc}:00 UTC via BullMQ. Worker runs agent.playbook.run.`
+        : 'Saved as draft. Activate with scheduleKind=daily to run every day.',
+    };
+  });
+
+  app.post('/api/agent/playbooks/:uid/activate', {
+    preValidation: adminOnly,
+    config: perUser(20, '1 minute'),
+  }, async (req, reply) => {
+    const pb = await updateAgentPlaybook(req.params.uid, req.user.email, {
+      status: 'active',
+      scheduleKind: 'daily',
+      hourUtc: req.body?.hourUtc,
+    });
+    if (!pb) return reply.code(404).send({ error: 'playbook not found' });
+    await syncPlaybookScheduler(pb);
+    await audit(req.user.email, 'agent-playbook-activate', { playbookUid: pb.playbook_uid });
+    return { ok: true, playbook: pb };
+  });
+
+  app.post('/api/agent/playbooks/:uid/pause', {
+    preValidation: adminOnly,
+    config: perUser(20, '1 minute'),
+  }, async (req, reply) => {
+    const pb = await updateAgentPlaybook(req.params.uid, req.user.email, { status: 'paused' });
+    if (!pb) return reply.code(404).send({ error: 'playbook not found' });
+    await syncPlaybookScheduler(pb);
+    return { ok: true, playbook: pb };
+  });
+
+  app.post('/api/agent/playbooks/:uid/run', {
+    preValidation: adminOnly,
+    config: perUser(10, '1 minute'),
+  }, async (req, reply) => {
+    const pb = await getAgentPlaybook({ playbookUid: req.params.uid, userEmail: req.user.email });
+    if (!pb) return reply.code(404).send({ error: 'playbook not found' });
+    await enqueue('agent.playbook.run', { playbookUid: pb.playbook_uid, triggeredBy: req.user.email });
+    return { ok: true, queued: true, playbookUid: pb.playbook_uid };
   });
 }
