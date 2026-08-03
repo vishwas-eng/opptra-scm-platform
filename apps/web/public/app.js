@@ -6,6 +6,7 @@
     asn: 'ASN Compile', reversedc: 'Reverse DC', sheet: 'Sheet Update', packing: 'Packing Mail',
     homecentre: 'Home Centre Sync', extensions: 'Extensions', admin: 'Admin',
     agent: 'Agent · Beta',
+    connectors: 'Connectors',
   };
   let me = null;
   let pollTimer = null;
@@ -103,8 +104,15 @@
     const landTab = params.get('tab');
     if (googleConnect !== null) {
       history.replaceState(null, '', location.pathname);
-      if (googleConnect === 'ok') toast(landTab === 'packing' ? 'Your Gmail is connected for Packing Mail.' : 'Google Workspace connected.', 'ok');
-      else toast('Google Workspace connection failed: ' + (googleConnect || 'unknown error'), 'bad', 8000);
+      if (googleConnect === 'ok') {
+        if (landTab === 'packing') toast('Your Gmail is connected for Packing Mail.', 'ok');
+        else if (landTab === 'connectors' || landTab === 'agent') toast('Your Google account is connected for Sheets & Drive (Agent).', 'ok');
+        else toast('Google Workspace connected.', 'ok');
+        if (params.get('googleMismatch') === '1') {
+          toast('Note: you authorized as ' + (params.get('googleAccount') || 'another account') + ' — different from your Opptra login.', 'bad', 9000);
+        }
+      }
+      else toast('Google connection failed: ' + (googleConnect || 'unknown error'), 'bad', 8000);
       if (landTab) setTimeout(() => go(landTab), 0);
     }
   }
@@ -118,6 +126,7 @@
     if (me.role === 'admin') {
       $('admin-nav-btn').classList.remove('hidden');
       $('agent-nav-btn')?.classList.remove('hidden');
+      $('connectors-nav-btn')?.classList.remove('hidden');
     }
     // Role-aware chrome: admin-only surfaces (technical cards, raw details, the everyone
     // feed) show only for admins; users get their own activity in plain words.
@@ -137,9 +146,11 @@
 
   /* ---------------- sidebar routing ---------------- */
   function go(tab) {
-    if (tab === 'agent' && me?.role !== 'admin') {
-      toast('Agent is admin-only (Beta).', 'bad');
-      tab = 'dashboard';
+    if (tab === 'agent' || tab === 'connectors') {
+      if (me?.role !== 'admin') {
+        toast('Agent & Connectors are admin-only (Beta).', 'bad');
+        tab = 'dashboard';
+      }
     }
     document.querySelectorAll('#side-nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.tab').forEach((t) => t.classList.add('hidden'));
@@ -150,6 +161,7 @@
     if (tab === 'packing') loadPackingGmail();
     if (tab === 'reversedc') loadRdcFacilities();
     if (tab === 'agent') loadAgentTab();
+    if (tab === 'connectors') loadConnectorsPage();
   }
 
   let sheetLinkLoaded = false;
@@ -1325,7 +1337,7 @@
   /* ---------------- Agent · Beta (admin only) ---------------- */
   async function loadAgentTab() {
     if (me?.role !== 'admin') return;
-    await Promise.all([loadAgentConnectors(), loadAgentThreads(), loadAgentMeta(), loadAgentPlaybooks()]);
+    await Promise.all([loadAgentToolsSummary(), loadAgentThreads(), loadAgentMeta(), loadAgentPlaybooks()]);
     if (agentThreadId) await loadAgentMessages(agentThreadId);
   }
 
@@ -1336,56 +1348,115 @@
     } catch { /* ignore */ }
   }
 
-  async function loadAgentConnectors() {
-    const box = $('agent-connectors-list');
+  async function loadAgentToolsSummary() {
+    const box = $('agent-tools-summary');
     if (!box) return;
     try {
       const { connectors } = await api('/api/agent/connectors');
-      box.innerHTML = connectors.map((c) => {
-        const disabled = !c.live;
-        const status = disabled ? 'coming_soon' : (c.status || 'disconnected');
-        const statusLabel = disabled ? 'Coming soon' : (
-          status === 'connected' ? 'Connected' : status === 'ready' ? 'Ready' : 'Disconnected'
-        );
-        let btn = '';
-        if (disabled) {
-          btn = `<button type="button" class="agent-conn-btn" disabled>Connect</button>`;
+      const live = (connectors || []).filter((c) => c.live);
+      const connected = live.filter((c) => c.connected);
+      const labels = connected.map((c) => c.name).join(' · ') || 'None connected';
+      box.innerHTML = `<span class="tools-summary-label">Tools</span>
+        <span class="tools-summary-list">${esc(labels)}</span>
+        <button type="button" class="linkish" id="agent-summary-manage">Manage connectors</button>`;
+      $('agent-summary-manage')?.addEventListener('click', () => go('connectors'));
+    } catch {
+      box.innerHTML = `<button type="button" class="linkish" id="agent-summary-manage">Manage connectors</button>`;
+      $('agent-summary-manage')?.addEventListener('click', () => go('connectors'));
+    }
+  }
+
+  async function loadConnectorsPage() {
+    if (me?.role !== 'admin') return;
+    const liveBox = $('connectors-grid-live');
+    const soonBox = $('connectors-grid-soon');
+    const detail = $('connector-detail');
+    if (!liveBox || !soonBox) return;
+    try {
+      const { connectors } = await api('/api/agent/connectors');
+      const live = connectors.filter((c) => c.live);
+      const soon = connectors.filter((c) => !c.live);
+      const card = (c) => {
+        const status = c.status || 'disconnected';
+        const statusLabel = status === 'connected' ? 'Connected'
+          : status === 'coming_soon' ? 'Coming soon'
+          : status === 'needs_reconnect' ? 'Reconnect'
+          : status === 'ready' ? 'Ready' : 'Not connected';
+        return `<button type="button" class="conn-market-card ${c.live ? '' : 'soon'}" data-cid="${esc(c.id)}">
+          <div class="conn-market-icon">${esc(c.icon || '?')}</div>
+          <div class="conn-market-body">
+            <div class="conn-market-name">${esc(c.name)}</div>
+            <div class="conn-market-blurb">${esc(c.blurb || c.connectHint || '')}</div>
+          </div>
+          <span class="status-pill ${status}">${statusLabel}</span>
+        </button>`;
+      };
+      liveBox.innerHTML = live.map(card).join('');
+      soonBox.innerHTML = soon.map(card).join('');
+      const openDetail = (id) => {
+        const c = connectors.find((x) => x.id === id);
+        if (!c || !detail) return;
+        detail.classList.remove('hidden');
+        let actions = '';
+        if (!c.live) {
+          actions = `<p class="meta">Reverse-engineering in progress. Connect will unlock after HAR/API access.</p>`;
+        } else if (c.connectMode === 'google-user') {
+          if (c.connected) {
+            actions = `<button type="button" class="secondary" data-disc="${esc(c.id)}">Disconnect</button>
+              <a class="dl-btn" href="/auth/google/connect?return=connectors">Re-authorize Google</a>`;
+          } else {
+            actions = `<a class="primary dl-btn" href="${esc(c.oauthUrl || '/auth/google/connect?return=connectors')}">Connect Google</a>`;
+          }
         } else if (c.connected) {
-          btn = `<button type="button" class="agent-conn-btn" data-disc="${esc(c.id)}">Disconnect</button>`;
+          actions = `<button type="button" class="secondary" data-disc="${esc(c.id)}">Disconnect</button>`;
+        } else if (c.systemReady) {
+          actions = `<button type="button" class="primary" data-conn="${esc(c.id)}">Connect</button>`;
+        } else if (c.id === 'unicommerce') {
+          actions = `<p class="meta">${esc(c.connectHint)}</p><button type="button" class="secondary" data-tab-jump="admin">Open Admin</button>`;
         } else {
-          btn = `<button type="button" class="agent-conn-btn primary-mini" data-conn="${esc(c.id)}">Connect</button>`;
+          actions = `<p class="meta">${esc(c.connectHint)}</p>`;
         }
-        return `<div class="agent-conn-card ${disabled ? 'disabled' : ''}">
-          <div class="agent-conn-icon">${esc(c.icon || '?')}</div>
+        detail.innerHTML = `<div class="connector-detail-inner">
+          <div class="conn-market-icon lg">${esc(c.icon)}</div>
           <div>
-            <div class="agent-conn-name">${esc(c.name)}</div>
-            <div class="agent-conn-hint">${esc(c.connectHint || '')}</div>
+            <h3>${esc(c.name)}</h3>
+            <p>${esc(c.blurb || '')}</p>
+            <p class="meta">${esc(c.connectHint || '')}${c.detail?.googleEmail ? ' · ' + esc(c.detail.googleEmail) : ''}</p>
+            <div class="row mt-md">${actions}</div>
           </div>
-          <div class="agent-conn-actions">
-            <span class="status-pill ${status}">${statusLabel}</span>
-            ${btn}
-          </div>
+          <button type="button" class="secondary" id="connector-detail-close">Close</button>
         </div>`;
-      }).join('');
-      box.querySelectorAll('[data-conn]').forEach((b) => b.addEventListener('click', () => agentConnect(b.dataset.conn)));
-      box.querySelectorAll('[data-disc]').forEach((b) => b.addEventListener('click', () => agentDisconnect(b.dataset.disc)));
+        $('connector-detail-close')?.addEventListener('click', () => detail.classList.add('hidden'));
+        detail.querySelector('[data-tab-jump]')?.addEventListener('click', () => go('admin'));
+        detail.querySelectorAll('[data-conn]').forEach((b) => b.addEventListener('click', () => agentConnect(b.dataset.conn).then(loadConnectorsPage)));
+        detail.querySelectorAll('[data-disc]').forEach((b) => b.addEventListener('click', () => agentDisconnect(b.dataset.disc).then(loadConnectorsPage)));
+      };
+      [...liveBox.querySelectorAll('[data-cid]'), ...soonBox.querySelectorAll('[data-cid]')].forEach((b) => {
+        b.addEventListener('click', () => openDetail(b.dataset.cid));
+      });
     } catch (e) {
-      box.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+      liveBox.innerHTML = `<p class="error">${esc(e.message)}</p>`;
     }
   }
 
   async function agentConnect(id) {
     try {
       await api('/api/agent/connectors/' + encodeURIComponent(id) + '/connect', { method: 'POST', body: {} });
-      toast(id + ' connected for Agent.', 'ok');
-      await loadAgentConnectors();
-    } catch (e) { toast(e.message, 'bad'); }
+      toast(id + ' connected.', 'ok');
+      await loadAgentToolsSummary();
+    } catch (e) {
+      if (/oauth|Google account|Reconnect|Missing Google/i.test(e.message)) {
+        location.href = '/auth/google/connect?return=connectors';
+        return;
+      }
+      toast(e.message, 'bad');
+    }
   }
   async function agentDisconnect(id) {
     try {
       await api('/api/agent/connectors/' + encodeURIComponent(id) + '/disconnect', { method: 'POST', body: {} });
-      toast(id + ' disconnected from Agent.', 'ok');
-      await loadAgentConnectors();
+      toast(id + ' disconnected.', 'ok');
+      await loadAgentToolsSummary();
     } catch (e) { toast(e.message, 'bad'); }
   }
 
@@ -1441,9 +1512,14 @@
     box.scrollTop = box.scrollHeight;
   }
 
+  $('agent-manage-connectors')?.addEventListener('click', () => go('connectors'));
+  $('agent-empty-connectors')?.addEventListener('click', () => go('connectors'));
+  $('connectors-open-agent')?.addEventListener('click', () => go('agent'));
+
   $('agent-new-chat')?.addEventListener('click', async () => {
     agentThreadId = null;
-    $('agent-messages').innerHTML = `<div class="agent-empty"><h3>Automate your daily ops</h3><p>Connect Sheets &amp; Drive, then describe what to do.</p></div>`;
+    $('agent-messages').innerHTML = `<div class="agent-empty"><h3>Automate your daily ops</h3><p>Connect Sheets &amp; Drive, then describe what to do.</p><p class="agent-empty-hints"><button type="button" class="linkish" id="agent-empty-connectors">Manage connectors</button></p></div>`;
+    $('agent-empty-connectors')?.addEventListener('click', () => go('connectors'));
     await loadAgentThreads();
   });
 

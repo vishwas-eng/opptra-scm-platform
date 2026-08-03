@@ -7,6 +7,8 @@ export { memoStep, makeMemoStep } from './steps.js';
 export {
   getGoogleOAuthToken, setGoogleOAuthToken,
   getUserGoogleOAuthToken, setUserGoogleOAuthToken, clearUserGoogleOAuthToken,
+  markUserGoogleOAuthError, markUserGoogleOAuthOk,
+  userGoogleScopeStatus, AGENT_GOOGLE_SCOPE_NEEDLES,
 } from './googleOAuth.js';
 export { savePackingThread, latestPackingThread } from './packingThreads.js';
 export {

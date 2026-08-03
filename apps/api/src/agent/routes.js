@@ -5,7 +5,7 @@ import {
   addAgentMessage, listAgentMessages,
   listConnectorStates, setConnectorEnabled,
   setConnectorCredential, clearConnectorCredential,
-  getGoogleOAuthToken,
+  getUserGoogleOAuthToken, clearUserGoogleOAuthToken, userGoogleScopeStatus,
   createAgentPlaybook, listAgentPlaybooks, getAgentPlaybook, updateAgentPlaybook,
 } from '@opptra/core';
 import { runAgentTurn, llmModeLabel } from '@opptra/agent-runtime';
@@ -70,7 +70,7 @@ export default async function agentRoutes(app) {
   // ── Connectors panel ──────────────────────────────────────────────
   app.get('/api/agent/connectors', { preValidation: adminOnly }, async (req) => {
     const prefs = await listConnectorStates(req.user.email);
-    const connectors = await buildConnectorStatus(prefs);
+    const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
     return { beta: true, liveConnectors: LIVE_CONNECTOR_IDS, connectors };
   });
 
@@ -122,14 +122,24 @@ export default async function agentRoutes(app) {
     } else if (id === 'waypoint' && !cfg.WAYPOINT_DB_URL) {
       return reply.code(400).send({ error: 'WAYPOINT_DB_URL is not configured on the server.' });
     } else if ((id === 'google-sheets' || id === 'google-drive')) {
-      const g = await getGoogleOAuthToken();
-      const sa = !!(cfg.GOOGLE_SA_EMAIL && cfg.GOOGLE_DELEGATED_USER);
-      if (!g.refresh_token && !sa) {
+      const tok = await getUserGoogleOAuthToken(req.user.email);
+      const scopes = userGoogleScopeStatus(tok.scope);
+      if (!tok.refresh_token || !scopes.ok) {
         return reply.code(400).send({
-          error: 'Google Workspace not connected. Use Admin → Google shared connect first.',
-          connectUrl: '/auth/google/connect-shared',
+          error: !tok.refresh_token
+            ? 'Connect your personal Google account first.'
+            : `Missing Google scopes: ${scopes.missing.join(', ')}. Reconnect.`,
+          oauthUrl: '/auth/google/connect?return=connectors',
+          needsOAuth: true,
         });
       }
+      // One Google OAuth powers both Sheets + Drive — enable both prefs.
+      await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-sheets', enabled: true });
+      await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-drive', enabled: true });
+      await audit(req.user.email, 'agent-connector-connect', { connector: id, googleEmail: tok.google_email || tok.granted_by });
+      const prefs = await listConnectorStates(req.user.email);
+      const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
+      return { ok: true, connector: connectors.find((c) => c.id === id), connectors };
     } else if (id === 'homecentre' && !(cfg.VINCULUM_USER && cfg.VINCULUM_PASS)) {
       return reply.code(400).send({ error: 'VINCULUM_USER / VINCULUM_PASS not configured on the server.' });
     }
@@ -141,7 +151,7 @@ export default async function agentRoutes(app) {
     });
     await audit(req.user.email, 'agent-connector-connect', { connector: id });
     const prefs = await listConnectorStates(req.user.email);
-    const connectors = await buildConnectorStatus(prefs);
+    const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
     return { ok: true, state, connector: connectors.find((c) => c.id === id) };
   });
 
@@ -153,18 +163,28 @@ export default async function agentRoutes(app) {
     if (!isLiveConnector(id)) {
       return reply.code(403).send({ error: 'This connector is coming soon.', connector: id });
     }
+    if (id === 'google-sheets' || id === 'google-drive') {
+      // Disconnect Google for Agent: clear per-user OAuth (also affects Packing Mail Gmail).
+      const clearToken = req.body?.revokeGoogle !== false;
+      await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-sheets', enabled: false });
+      await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-drive', enabled: false });
+      if (clearToken) await clearUserGoogleOAuthToken(req.user.email);
+      await audit(req.user.email, 'agent-connector-disconnect', { connector: id, revokedToken: clearToken });
+      const prefs = await listConnectorStates(req.user.email);
+      const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
+      return { ok: true, connector: connectors.find((c) => c.id === id), connectors };
+    }
     const state = await setConnectorEnabled({
       userEmail: req.user.email,
       connectorId: id,
       enabled: false,
     });
-    // Clear optional vault secret for non-shared Google/UC (UC session is NOT cleared here)
-    if (id !== 'unicommerce' && id !== 'google-sheets' && id !== 'google-drive' && id !== 'waypoint' && id !== 'homecentre') {
+    if (id !== 'unicommerce' && id !== 'waypoint' && id !== 'homecentre') {
       await clearConnectorCredential(id, 'shared').catch(() => {});
     }
     await audit(req.user.email, 'agent-connector-disconnect', { connector: id });
     const prefs = await listConnectorStates(req.user.email);
-    const connectors = await buildConnectorStatus(prefs);
+    const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
     return { ok: true, state, connector: connectors.find((c) => c.id === id) };
   });
 
@@ -236,7 +256,7 @@ export default async function agentRoutes(app) {
     }
 
     const prefs = await listConnectorStates(req.user.email);
-    const connectors = await buildConnectorStatus(prefs);
+    const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
     const connectedIds = connectors.filter((c) => c.connected && c.live).map((c) => c.id);
 
     const historyRows = await listAgentMessages({ threadId: thread.id, limit: 30 });
@@ -344,7 +364,7 @@ export default async function agentRoutes(app) {
     }
 
     const prefs = await listConnectorStates(req.user.email);
-    const connectors = await buildConnectorStatus(prefs);
+    const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
     const connectedIds = connectors.filter((c) => c.connected && c.live).map((c) => c.id);
 
     const scheduleKind = body.scheduleKind === 'daily' ? 'daily' : 'manual';

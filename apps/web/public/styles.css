@@ -1662,3 +1662,80 @@ label.check {
 .agent-empty { max-width: 420px; }
 .agent-empty-hints { margin-top: 10px; font-size: 12px; }
 #agent-save-daily:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Clean Agent chat (no connector sidebar wall) */
+.agent-chat-solo {
+  max-width: 920px;
+  margin: 0 auto;
+  min-height: calc(100vh - 140px);
+}
+.agent-tools-summary {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  padding: 8px 18px; border-bottom: 1px solid rgba(255,140,80,0.10);
+  font-size: 12px; color: var(--muted);
+}
+.tools-summary-label {
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px;
+  color: var(--orange-deep);
+}
+.tools-summary-list { color: var(--ink-2); font-weight: 600; }
+button.linkish, .linkish {
+  border: 0; background: none; color: var(--orange-deep); font-weight: 600;
+  cursor: pointer; font-family: var(--font-ui); font-size: 12px; padding: 0;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+
+/* Connectors marketplace page */
+.connectors-page { max-width: 980px; }
+.connectors-page-head {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  margin-bottom: 22px;
+}
+.connectors-page-head h2 { margin: 4px 0 8px; font-size: 26px; }
+.connectors-page-head .lead { color: var(--muted); max-width: 520px; }
+.connectors-section-title {
+  font-family: var(--font-ui); font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-2);
+  margin: 18px 0 10px;
+}
+.connectors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.conn-market-card {
+  display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center;
+  text-align: left; padding: 14px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(255,140,80,0.16);
+  background: var(--glass);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  cursor: pointer; font-family: var(--font-ui);
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.conn-market-card:hover { border-color: var(--orange-ring); transform: translateY(-1px); }
+.conn-market-card.soon { opacity: 0.72; }
+.conn-market-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 600; font-size: 13px; color: #fff;
+  background: linear-gradient(145deg, var(--orange-h), var(--orange-deep));
+}
+.conn-market-card.soon .conn-market-icon { background: #8a8a8a; }
+.conn-market-icon.lg { width: 56px; height: 56px; font-size: 16px; }
+.conn-market-name { font-weight: 700; color: var(--ink); font-size: 14px; }
+.conn-market-blurb { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+.connector-detail {
+  margin-top: 20px; padding: 18px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(255,140,80,0.18);
+  background: rgba(255,255,255,0.72);
+  box-shadow: var(--glass-shadow);
+}
+.connector-detail-inner {
+  display: grid; grid-template-columns: 56px 1fr auto; gap: 16px; align-items: start;
+}
+.connector-detail-inner h3 { margin: 0 0 6px; }
+.status-pill.needs_reconnect { background: rgba(255,88,0,0.12); color: var(--orange-deep); }
+.mt-md { margin-top: 12px; }

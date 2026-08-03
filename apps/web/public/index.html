@@ -7,7 +7,7 @@
   <link rel="icon" href="/assets/opptra-logo-official.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=agent-beta-2" />
+  <link rel="stylesheet" href="styles.css?v=connectors-market-1" />
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -38,6 +38,7 @@
         <button data-tab="dashboard" class="active"><i>▪</i> Workspace</button>
         <div class="side-group">Agents</div>
         <button data-tab="agent" id="agent-nav-btn" class="hidden"><i>✦</i> Agent <span class="nav-beta">Beta</span></button>
+        <button data-tab="connectors" id="connectors-nav-btn" class="hidden"><i>⬡</i> Connectors</button>
         <button data-tab="asn"><i>▤</i> ASN Compile</button>
         <button data-tab="reversedc"><i>⤺</i> Reverse DC</button>
         <button data-tab="packing"><i>✉</i> Packing Mail</button>
@@ -93,43 +94,54 @@
       </div>
 
       <main>
-        <!-- Agent · Beta (admin only) -->
+        <!-- Agent · Beta (admin only) — clean chat, no connector wall -->
         <section id="tab-agent" class="tab hidden">
-          <div class="agent-shell">
-            <aside class="agent-connectors-panel" id="agent-connectors-panel">
-              <div class="agent-panel-head">
-                <h2>Connectors</h2>
-                <span class="pill beta-pill">Beta</span>
+          <div class="agent-chat-panel agent-chat-solo">
+            <div class="agent-chat-head">
+              <div>
+                <div class="workspace-eyebrow">Opptra SCM</div>
+                <h2 id="agent-chat-title">Agent <span class="beta-inline">Beta</span></h2>
               </div>
-              <p class="agent-panel-lead">Connect Sheets &amp; Drive for daily ops. Marketplace channels are visible but coming soon.</p>
-              <div id="agent-connectors-list" class="agent-conn-grid"></div>
-            </aside>
-            <div class="agent-chat-panel">
-              <div class="agent-chat-head">
-                <div>
-                  <div class="workspace-eyebrow">Opptra SCM</div>
-                  <h2 id="agent-chat-title">Agent <span class="beta-inline">Beta</span></h2>
-                </div>
-                <div class="agent-chat-actions">
-                  <button type="button" id="agent-save-daily" class="secondary" title="Save last tool steps as a daily job">Automate daily</button>
-                  <button type="button" id="agent-new-chat" class="secondary">New chat</button>
-                  <span id="agent-llm-mode" class="meta"></span>
-                </div>
+              <div class="agent-chat-actions">
+                <button type="button" id="agent-manage-connectors" class="secondary">Manage connectors</button>
+                <button type="button" id="agent-save-daily" class="secondary" title="Save last tool steps as a daily job">Automate daily</button>
+                <button type="button" id="agent-new-chat" class="secondary">New chat</button>
+                <span id="agent-llm-mode" class="meta"></span>
               </div>
-              <div class="agent-threads" id="agent-threads"></div>
-              <div class="agent-playbooks" id="agent-playbooks"></div>
-              <div class="agent-messages" id="agent-messages">
-                <div class="agent-empty" id="agent-empty">
-                  <h3>Automate your daily ops</h3>
-                  <p>Connect <b>Sheets</b> &amp; <b>Drive</b> (and UC / Waypoint / Home Centre), then describe the work — update one sheet from another, pull a Drive file into a range, sync UC into Master.</p>
-                  <p class="agent-empty-hints">Try: <code>list my recent spreadsheets</code> · <code>copy Master!A1:G20 into Archive!A1</code> · <code>/uc health</code></p>
-                </div>
-              </div>
-              <form class="agent-composer" id="agent-composer">
-                <textarea id="agent-input" rows="2" placeholder="Describe a daily Sheets / Drive / UC workflow…" autocomplete="off"></textarea>
-                <button type="submit" id="agent-send" class="primary">Send</button>
-              </form>
             </div>
+            <div class="agent-tools-summary" id="agent-tools-summary"></div>
+            <div class="agent-threads" id="agent-threads"></div>
+            <div class="agent-playbooks" id="agent-playbooks"></div>
+            <div class="agent-messages" id="agent-messages">
+              <div class="agent-empty" id="agent-empty">
+                <h3>Automate your daily ops</h3>
+                <p>Connect <b>Sheets</b> &amp; <b>Drive</b> with your Google account, then describe the work — sheet→sheet, Drive→sheet, UC into Master.</p>
+                <p class="agent-empty-hints"><button type="button" class="linkish" id="agent-empty-connectors">Manage connectors</button> · try <code>list my recent spreadsheets</code></p>
+              </div>
+            </div>
+            <form class="agent-composer" id="agent-composer">
+              <textarea id="agent-input" rows="2" placeholder="Describe a daily Sheets / Drive / UC workflow…" autocomplete="off"></textarea>
+              <button type="submit" id="agent-send" class="primary">Send</button>
+            </form>
+          </div>
+        </section>
+
+        <!-- Connectors marketplace (admin only) -->
+        <section id="tab-connectors" class="tab hidden">
+          <div class="connectors-page">
+            <div class="connectors-page-head">
+              <div>
+                <div class="workspace-eyebrow">Integrations</div>
+                <h2>Connectors <span class="beta-inline">Beta</span></h2>
+                <p class="lead">Connect the tools Opptra uses every day. Marketplace channels are listed as coming soon.</p>
+              </div>
+              <button type="button" id="connectors-open-agent" class="primary">Open Agent</button>
+            </div>
+            <h3 class="connectors-section-title">Live</h3>
+            <div class="connectors-grid" id="connectors-grid-live"></div>
+            <h3 class="connectors-section-title">Coming soon</h3>
+            <div class="connectors-grid connectors-grid-soon" id="connectors-grid-soon"></div>
+            <div id="connector-detail" class="connector-detail hidden"></div>
           </div>
         </section>
 
@@ -384,7 +396,7 @@
             <h3>Your Gmail</h3>
             <div class="meta" id="packing-gmail-meta">Checking connection…</div>
             <div class="row">
-              <a id="packing-gmail-connect" href="/auth/google/connect" class="dl-btn">Connect my Gmail</a>
+              <a id="packing-gmail-connect" href="/auth/google/connect?return=packing" class="dl-btn">Connect my Gmail</a>
               <button id="packing-gmail-disconnect" class="secondary hidden" type="button">Disconnect</button>
             </div>
           </div>
