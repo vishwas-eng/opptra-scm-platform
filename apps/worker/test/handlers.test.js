@@ -89,3 +89,69 @@ test('ewaybill.generate reads { runUid, input:{rows,dryRun} } and summarizes ok/
   assert.equal(r.failed, 0);
   assert.equal(finished[0].res.ok, true);
 });
+
+test('connector.unicommerce.invoke reads { runUid, input:{action,params} } and finishes the Run', async () => {
+  const finished = [];
+  const handlers = makeHandlers({
+    uc: { ping: async () => ({ alive: true }) },
+    logger: { info() {}, warn() {}, error() {} },
+    alert: async () => {},
+    runs: { markRunning: async () => {}, markPendingRetry: async () => {}, finishRun: async (u, r) => finished.push({ u, r }) },
+    pipelines: { returnPipeline: {}, inventoryPipeline: {}, ewaybillPipeline: {} },
+    reenqueue: async () => {},
+    unicommerceConnector: {
+      invoke: async (action, params) => ({ ok: true, action, echo: params }),
+    },
+  });
+  const r = await handlers['connector.unicommerce.invoke']({
+    data: { runUid: 'run-uc-1', input: { action: 'saleOrder.getSummary', params: { saleOrder: 'SO1' } } },
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.action, 'saleOrder.getSummary');
+  assert.equal(finished[0].u, 'run-uc-1');
+  assert.equal(finished[0].r.ok, true);
+});
+
+test('soft-fail packing results populate runs.error for Admin/KPI', async () => {
+  const { summarizeRunError, makeHandlers } = await import('../src/handlers.js');
+  assert.match(
+    summarizeRunError({
+      ok: false,
+      unresolved: [{ so: 'SO1', reason: 'no warehouse email for Opp_X' }],
+    }),
+    /SO1: no warehouse email/,
+  );
+  assert.match(
+    summarizeRunError({
+      ok: 0,
+      failed: 2,
+      results: [
+        { so: 'A', ok: false, error: 'distance empty' },
+        { so: 'B', ok: false, error: 'vehicle missing' },
+      ],
+    }),
+    /A: distance empty/,
+  );
+
+  const finished = [];
+  const handlers = makeHandlers({
+    uc: { ping: async () => ({}) },
+    logger: { info() {}, warn() {}, error() {} },
+    alert: async () => {},
+    runs: { markRunning: async () => {}, markPendingRetry: async () => {}, finishRun: async (u, r) => finished.push(r) },
+    pipelines: {
+      packingPipeline: {
+        previewGroups: async () => ({
+          ok: false,
+          groups: [],
+          unresolved: [{ so: 'SO9', reason: 'not found on the B2B sheet - run Sheet Update first' }],
+        }),
+      },
+      returnPipeline: {}, inventoryPipeline: {}, ewaybillPipeline: {},
+    },
+    reenqueue: async () => {},
+  });
+  await handlers['packing.preview']({ data: { runUid: 'r', input: { saleOrders: ['SO9'] } } });
+  assert.equal(finished[0].ok, false);
+  assert.match(finished[0].error, /SO9: not found on the B2B sheet/);
+});

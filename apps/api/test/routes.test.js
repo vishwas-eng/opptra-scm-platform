@@ -19,13 +19,21 @@ before(async () => {
 after(async () => { await app?.close(); });
 
 test('protected routes reject anonymous callers with 401 (before any DB access)', async () => {
-  const protectedGets = ['/api/me', '/api/runs', '/api/uc-session', '/api/admin/users', '/api/admin/analytics', '/api/admin/kpi'];
+  const protectedGets = [
+    '/api/me', '/api/runs', '/api/uc-session', '/api/admin/users', '/api/admin/analytics', '/api/admin/kpi',
+    '/api/connectors', '/api/connectors/unicommerce/capabilities', '/api/connectors/unicommerce/health',
+  ];
   for (const url of protectedGets) {
     const res = await app.inject({ method: 'GET', url });
     assert.equal(res.statusCode, 401, `${url} should be 401 when unauthenticated`);
   }
   const post = await app.inject({ method: 'POST', url: '/api/automations/return/process', payload: { saleOrder: 'SO1' } });
   assert.equal(post.statusCode, 401, 'return/process must require auth');
+  const invoke = await app.inject({
+    method: 'POST', url: '/api/connectors/unicommerce/invoke',
+    payload: { action: 'health.ping' },
+  });
+  assert.equal(invoke.statusCode, 401, 'connector invoke must require auth');
 });
 
 test('/api/ops/summary rejects missing or wrong ops token (before DB)', async () => {

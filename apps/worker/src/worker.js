@@ -9,6 +9,7 @@ import { Worker, Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { config, logger, migrate, closeDb, markRunning, markPendingRetry, finishRun, alert, memoStep, getGoogleOAuthToken, getUserGoogleOAuthToken, savePackingThread, latestPackingThread, query } from '@opptra/core';
 import { ucClient, SessionError, ConfigError } from '@opptra/uc-client';
+import { createUnicommerceConnector } from '@opptra/connectors-unicommerce';
 import { makeReturnPipeline } from '@opptra/automation-return';
 import { makeEwaybillPipeline } from '@opptra/automation-ewaybill';
 import { makeInventoryPipeline } from '@opptra/automation-inventory';
@@ -101,6 +102,8 @@ function packingPipelineFor(userEmail, googleForUser) {
   });
 }
 
+const unicommerceConnector = createUnicommerceConnector({ uc, logger });
+
 const handlers = makeHandlers({
   uc,
   logger,
@@ -109,6 +112,7 @@ const handlers = makeHandlers({
   packingGoogleFor,
   runUserEmail,
   packingPipelineFor,
+  unicommerceConnector,
   pipelines: {
     returnPipeline: makeReturnPipeline(uc, cfg),
     ewaybillPipeline: makeEwaybillPipeline(uc),

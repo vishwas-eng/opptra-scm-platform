@@ -48,6 +48,7 @@ export async function buildApp({ withStatic = true } = {}) {
   await app.register(import('./routes/admin.js'));
   await app.register(import('./routes/googleAuth.js'));
   await app.register(import('./routes/automations.js'));
+  await app.register(import('./routes/connectors.js'));
 
   if (withStatic) {
     await app.register(import('@fastify/static'), { root: path.join(here, '../../web/public'), prefix: '/' });

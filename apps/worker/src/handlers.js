@@ -9,7 +9,35 @@ import { SessionError } from '@opptra/uc-client';
 export const RETURN_MAX_PENDING_RETRIES = 40;   // resumable pipeline: ~40 × 90s ≈ 1h of patience
 export const RETURN_PENDING_RETRY_MS = 90_000;
 
-export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, packingGoogleFor, runUserEmail, packingPipelineFor }) {
+/** Pull a short human error out of soft-fail pipeline results so Admin / KPI show why. */
+export function summarizeRunError(result) {
+  if (!result || typeof result !== 'object') return null;
+  if (result.error) return String(result.error);
+  if (result.summary && result.ok === false) return String(result.summary);
+  const unresolved = result.unresolved;
+  if (Array.isArray(unresolved) && unresolved.length) {
+    const bits = unresolved.slice(0, 3).map((u) => {
+      if (typeof u === 'string') return u;
+      return u.reason ? `${u.so || '?'}: ${u.reason}` : String(u.so || u);
+    });
+    const more = unresolved.length > 3 ? ` (+${unresolved.length - 3} more)` : '';
+    return bits.join('; ') + more;
+  }
+  if (Array.isArray(result.results)) {
+    const fails = result.results.filter((r) => r && r.ok === false);
+    if (fails.length) {
+      const bits = fails.slice(0, 3).map((r) => `${r.so || '?'}: ${r.error || 'failed'}`);
+      const more = fails.length > 3 ? ` (+${fails.length - 3} more)` : '';
+      return bits.join('; ') + more;
+    }
+  }
+  if (typeof result.failed === 'number' && result.failed > 0 && typeof result.ok === 'number') {
+    return `${result.failed} of ${result.ok + result.failed} failed`;
+  }
+  return null;
+}
+
+export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, packingGoogleFor, runUserEmail, packingPipelineFor, unicommerceConnector }) {
   const { markRunning, markPendingRetry, finishRun } = runs;
   const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, packingPipeline, sheetPipeline, reverseDcPipeline, homecentrePipeline } = pipelines;
 
@@ -32,6 +60,34 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       return r;
     },
 
+    // Unicommerce connector invoke — capability layer on top of the shared UcClient.
+    // Does not replace automations; packing/sheet/e-way/etc. stay on their own jobs.
+    'connector.unicommerce.invoke': async ({ data: { runUid, input = {} } }) => {
+      await markRunning(runUid);
+      if (!unicommerceConnector) throw new Error('unicommerce connector not configured');
+      const action = String(input.action || '').trim();
+      try {
+        const result = await unicommerceConnector.invoke(action, input.params || {}, {
+          dryRun: !!input.dryRun,
+          runUid,
+        });
+        const ok = result?.ok !== false;
+        await finishRun(runUid, {
+          ok,
+          result,
+          error: ok ? null : (result?.error || summarizeRunError(result) || 'connector action failed'),
+        });
+        return result;
+      } catch (err) {
+        if (err instanceof SessionError) {
+          const result = { ok: false, action, error: 'session expired' };
+          await finishRun(runUid, { ok: false, result, error: result.error });
+          return result;
+        }
+        throw err;
+      }
+    },
+
     // E-way bill: generate for a batch of SO rows. Rows are independent - one bad row
     // (bad GSTIN, not invoiced) fails only itself. Session death stops the batch.
     'ewaybill.generate': async ({ data: { runUid, input } }) => {
@@ -52,7 +108,12 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       }
       const ok = results.filter((r) => r.ok).length;
       const failed = results.length - ok;
-      await finishRun(runUid, { ok: failed === 0, result: { results, ok, failed } });
+      const result = { results, ok, failed };
+      await finishRun(runUid, {
+        ok: failed === 0,
+        result,
+        error: failed ? summarizeRunError(result) : null,
+      });
       if (failed) await alert('ewaybill-failures', `E-way bill: ${failed} of ${results.length} failed`, { runUid });
       return { results, ok, failed };
     },
@@ -69,7 +130,11 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       if (!run) throw new Error(`unknown inventory op: ${input.op}`);
       const result = await run();
       const ok = ['INWARD_DONE', 'OUTWARD_DONE', 'FULLCYCLE_DONE'].includes(result.status);
-      await finishRun(runUid, { ok, result });
+      await finishRun(runUid, {
+        ok,
+        result,
+        error: ok ? null : (result.outwardError || result.error || result.status || 'inventory did not complete'),
+      });
       if (!ok) await alert('inventory-partial', `${input.op} did not fully complete`, { runUid, status: result.status, error: result.outwardError });
       return result;
     },
@@ -78,7 +143,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
     'asn.compile': async ({ data: { runUid, input } }) => {
       await markRunning(runUid);
       const result = await asnPipeline.compile(input.saleOrder, input.channel);
-      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || summarizeRunError(result) });
       return result;
     },
 
@@ -90,7 +155,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
         bulkReturnId: input.bulkReturnId,
         facility: input.facility,
       });
-      await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
+      await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || summarizeRunError(result) });
       return result;
     },
 
@@ -99,7 +164,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       await markRunning(runUid);
       if (!reverseDcPipeline) throw new Error('reverse DC pipeline not configured');
       const result = await reverseDcPipeline.listFacilities();
-      await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
+      await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || summarizeRunError(result) });
       return result;
     },
 
@@ -108,7 +173,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       await markRunning(runUid);
       const pipe = await packingPipe(runUid, userEmail);
       const result = await pipe.previewGroups(input.saleOrders || []);
-      await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
+      await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || summarizeRunError(result) });
       return result;
     },
 
@@ -117,7 +182,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       await markRunning(runUid);
       const pipe = await packingPipe(runUid, userEmail);
       const result = await pipe.createDrafts(input.saleOrders || [], { recipients: input.recipients || {} });
-      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || summarizeRunError(result) });
       return result;
     },
 
@@ -126,7 +191,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       await markRunning(runUid);
       const pipe = await packingPipe(runUid, userEmail);
       const result = await pipe.sendInvoiceEway(input.saleOrders || [], { recipients: input.recipients || {} });
-      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || summarizeRunError(result) });
       return result;
     },
 
@@ -135,7 +200,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       await markRunning(runUid);
       const pipe = await packingPipe(runUid, userEmail);
       const result = await pipe.sendDraft(input.draftId);
-      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || summarizeRunError(result) });
       return result;
     },
 
@@ -145,7 +210,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       const fn = { 'first-fill': sheetPipeline.firstFill, 'second-fill': sheetPipeline.secondFill, push: sheetPipeline.push, 'sync-source': sheetPipeline.syncFromSource }[input.action];
       if (!fn) throw new Error(`unknown sheet action: ${input.action}`);
       const result = await fn(input); // both fills read input.saleOrders; push/sync ignore it
-      await finishRun(runUid, { ok: result.ok, result, error: result.error || null });
+      await finishRun(runUid, { ok: result.ok, result, error: result.error || summarizeRunError(result) });
       return result;
     },
 
