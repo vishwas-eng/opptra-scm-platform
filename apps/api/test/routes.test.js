@@ -89,6 +89,24 @@ test('/api/ops/summary rejects missing or wrong ops token (before DB)', async ()
   assert.equal(badHdr.statusCode, 401);
 });
 
+test('/api/capture/* refuses anonymous callers (no token, no session)', async () => {
+  const list = await app.inject({ method: 'GET', url: '/api/capture/sessions' });
+  assert.equal(list.statusCode, 401);
+  const start = await app.inject({
+    method: 'POST', url: '/api/capture/sessions', payload: { connectorId: 'nykaa' },
+  });
+  assert.equal(start.statusCode, 401);
+  // A presented token must be VERIFIED against the DB, so in this DB-less harness the
+  // token path 500s rather than 401s (same as /api/ops/summary above). What matters is
+  // that it never succeeds and never silently falls through to session auth.
+  const bad = await app.inject({
+    method: 'POST', url: '/api/capture/sessions',
+    headers: { authorization: 'Bearer not-a-real-token' },
+    payload: { connectorId: 'nykaa' },
+  });
+  assert.ok(bad.statusCode >= 400, 'an unknown access token must never be accepted');
+});
+
 test('/api/mcp/* rejects missing token with 401 (before any DB access)', async () => {
   const list = await app.inject({ method: 'GET', url: '/api/mcp/tools' });
   assert.equal(list.statusCode, 401);

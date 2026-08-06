@@ -14,6 +14,7 @@
     "@opptra/agent-runtime": "*",
     "@opptra/automation-reversedc": "*",
     "@opptra/automation-sheet": "*",
+    "@opptra/capture": "*",
     "@opptra/connectors-6thstreet": "*",
     "@opptra/connectors-amazon": "*",
     "@opptra/connectors-flipkart": "*",

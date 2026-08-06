@@ -3,43 +3,73 @@
 <head>
   <meta charset="utf-8" />
   <style>
-    body { font: 13px/1.4 system-ui, sans-serif; margin: 12px; width: 300px; color: #141414; }
-    h1 { font-size: 14px; margin: 0 0 8px; }
+    body { font: 13px/1.4 system-ui, sans-serif; margin: 12px; width: 320px; color: #141414; }
+    h1 { font-size: 14px; margin: 0 0 2px; }
+    .sub { font-size: 11px; color: #777; margin: 0 0 10px; }
     label { display: block; margin: 8px 0 4px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #666; }
     input, select { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; }
     .row { display: flex; gap: 6px; margin-top: 10px; }
     button { flex: 1; padding: 8px; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    button:disabled { opacity: .45; cursor: default; }
     #save { background: #f0f0f0; }
-    #open-uc { background: #FFE4D4; color: #141414; }
-    #capture { background: #FF5800; color: #fff; }
-    .msg { margin-top: 10px; font-size: 12px; }
+    #uc-capture { background: #FFE4D4; color: #141414; }
+    #start { background: #FF5800; color: #fff; }
+    #stop { background: #141414; color: #fff; }
+    .msg { margin-top: 10px; font-size: 12px; white-space: pre-wrap; }
     .msg.ok { color: #1a7f37; }
     .msg.err { color: #c45a46; }
     .hint { font-size: 11px; color: #777; margin-top: 8px; }
+    .tabs { display: flex; gap: 4px; margin: 4px 0 8px; }
+    .tabs button { background: #f4f4f4; font-size: 12px; padding: 6px; }
+    .tabs button.on { background: #141414; color: #fff; }
+    .panel { display: none; }
+    .panel.on { display: block; }
+    .stats { margin-top: 8px; font-size: 11px; color: #555; font-variant-numeric: tabular-nums; }
+    .rec { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #FF5800; margin-right: 5px; }
   </style>
 </head>
 <body>
-  <h1>Opptra Session Helper</h1>
+  <h1>Opptra Connector Capture</h1>
+  <p class="sub">Log in yourself. We record the traffic and build the connector.</p>
+
   <label>Platform URL</label>
   <input id="platform" placeholder="https://scm.opptra.com" value="https://scm.opptra.com" />
-  <label>Ingest token</label>
-  <input id="token" type="password" placeholder="from Admin → ingest token" />
-  <label>Instance</label>
-  <select id="instance">
-    <option value="india">india · oppdoor</option>
-    <option value="staging">staging · oppdoorstg</option>
-    <option value="uae">uae · opptrauae</option>
-    <option value="ksa">ksa · opptraksa</option>
-  </select>
-  <div class="row">
-    <button id="save" type="button">Save</button>
-    <button id="open-uc" type="button">Open UC</button>
+  <label>Access token</label>
+  <input id="token" type="password" placeholder="Admin → Access tokens" />
+  <div class="row"><button id="save" type="button">Save settings</button></div>
+
+  <div class="tabs">
+    <button id="tab-capture-btn" type="button" class="on">Capture a portal</button>
+    <button id="tab-uc-btn" type="button">Unicommerce</button>
   </div>
-  <div class="row">
-    <button id="capture" type="button">Capture session</button>
+
+  <div id="tab-capture" class="panel on">
+    <label>Channel</label>
+    <select id="connector"></select>
+    <div class="row">
+      <button id="start" type="button">Start &amp; open portal</button>
+      <button id="stop" type="button" disabled>Stop &amp; build</button>
+    </div>
+    <div id="stats" class="stats"></div>
+    <p class="hint">Start, log in, then click through Orders / Inventory / a shipment once each. Stop when done. Passwords are never recorded; the session is sealed server-side.</p>
   </div>
+
+  <div id="tab-uc" class="panel">
+    <label>Instance</label>
+    <select id="instance">
+      <option value="india">india · oppdoor</option>
+      <option value="staging">staging · oppdoorstg</option>
+      <option value="uae">uae · opptrauae</option>
+      <option value="ksa">ksa · opptraksa</option>
+    </select>
+    <div class="row">
+      <button id="open-uc" type="button">Open UC</button>
+      <button id="uc-capture" type="button">Capture session</button>
+    </div>
+    <p class="hint">Reads only the JSESSIONID cookie for the selected company. One session ≠ all instances — capture each tenant you need.</p>
+  </div>
+
   <div id="msg" class="msg"></div>
-  <p class="hint">You log in yourself (CAPTCHA ok). We only read the JSESSIONID cookie for the selected company and send it to SCM. One session ≠ all instances — capture each tenant you need.</p>
   <script src="popup.js"></script>
 </body>
 </html>

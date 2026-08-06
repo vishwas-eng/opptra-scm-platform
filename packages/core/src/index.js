@@ -23,6 +23,10 @@ export {
 } from './connectorVault.js';
 export { sealSecret, openSecret, isSealed } from './secretBox.js';
 export {
+  createCaptureSession, appendCaptureEntries, finishCaptureSession,
+  listCaptureSessions, getCaptureSession, deleteCaptureSession,
+} from './captures.js';
+export {
   createAgentPlaybook, listAgentPlaybooks, getAgentPlaybook,
   updateAgentPlaybook, markPlaybookRun, listActiveDailyPlaybooks,
   playbookCron, normalizeTimezone, playbookOwnerActive,

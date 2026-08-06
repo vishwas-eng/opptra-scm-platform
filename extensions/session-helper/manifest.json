@@ -1,19 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Opptra Session Helper",
-  "version": "1.1.0",
-  "description": "After you log into Unicommerce (india/staging/uae/ksa), capture JSESSIONID into Opptra SCM. No password handling.",
-  "permissions": ["cookies", "storage", "tabs"],
-  "host_permissions": [
-    "https://oppdoor.unicommerce.co.in/*",
-    "https://oppdoorstg.unicommerce.com/*",
-    "https://opptrauae.unicommerce.com/*",
-    "https://opptraksa.unicommerce.com/*",
-    "https://scm.opptra.com/*",
-    "http://localhost/*"
-  ],
+  "name": "Opptra Connector Capture",
+  "version": "2.0.0",
+  "description": "Log into a seller portal once; Opptra records the session traffic and builds the connector. Also captures Unicommerce JSESSIONID. No password handling.",
+  "permissions": ["cookies", "storage", "tabs", "webRequest"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js", "type": "module" },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Opptra Session Helper"
+    "default_title": "Opptra Connector Capture"
   }
 }
