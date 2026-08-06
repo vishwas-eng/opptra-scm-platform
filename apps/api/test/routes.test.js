@@ -24,6 +24,7 @@ test('protected routes reject anonymous callers with 401 (before any DB access)'
     '/api/connectors', '/api/connectors/unicommerce/capabilities', '/api/connectors/unicommerce/health',
     '/api/automations/homecentre/status', '/api/automations/6thstreet/status',
     '/api/agent/meta', '/api/agent/connectors', '/api/agent/threads',
+    '/api/admin/amazon/status', '/auth/amazon/connect', '/auth/amazon/callback',
   ];
   for (const url of protectedGets) {
     const res = await app.inject({ method: 'GET', url });

@@ -1,41 +1,78 @@
-import { createRegistry, createConnectorShell } from '@opptra/connectors-sdk';
+import { createRegistry, createConnectorShell, connectorError, CONNECTOR_ERROR_CODES } from '@opptra/connectors-sdk';
+import {
+  AMAZON_MARKETPLACES, SP_API_ENDPOINT, normalizeMarketplace, makeAccessTokenSource,
+} from './lwa.js';
 
 export const CONNECTOR_ID = 'amazon';
 export const CONNECTOR_NAME = 'Amazon Seller Central';
+export { AMAZON_MARKETPLACES, normalizeMarketplace, buildConsentUrl, exchangeAuthCode } from './lwa.js';
 
-const MARKETPLACE_IN = 'A21TJRUUN4KGV';
+const MARKETPLACE_PARAM = {
+  type: 'string',
+  enum: Object.keys(AMAZON_MARKETPLACES),
+  description: 'in (India, default) | ae (UAE) | sa (KSA)',
+};
 
 /**
- * Amazon connector — dual auth:
- *  - official: SP-API LWA (AMAZON_SP_* env) when configured
- *  - RE/session: cookie paste into connector_credentials vault (needs HAR for XHR)
+ * Amazon connector — official SP-API, authorized once per marketplace.
+ *
+ * Refresh-token resolution per marketplace, in order:
+ *   1. the connector vault (one-time OAuth connect flow — /auth/amazon/connect)
+ *   2. AMAZON_SP_REFRESH_TOKEN env (legacy single-marketplace escape hatch, 'in' only)
+ *
+ * @param {{
+ *   cfg?: object,                                       // config() slice (AMAZON_SP_*)
+ *   getRefreshToken?: (marketplace: string) => Promise<string>, // vault lookup
+ *   httpFetch?: typeof fetch,
+ * }} opts
  */
-export function createAmazonConnector({ cfg = {}, getSecret, httpFetch = fetch } = {}) {
+export function createAmazonConnector({ cfg = {}, getRefreshToken, httpFetch = fetch } = {}) {
   const registry = createRegistry();
+  const hasLwaApp = !!(cfg.AMAZON_SP_CLIENT_ID && cfg.AMAZON_SP_CLIENT_SECRET);
 
-  const hasSpApi = !!(cfg.AMAZON_SP_CLIENT_ID && cfg.AMAZON_SP_CLIENT_SECRET && cfg.AMAZON_SP_REFRESH_TOKEN);
+  const accessTokenFor = makeAccessTokenSource({
+    clientId: cfg.AMAZON_SP_CLIENT_ID,
+    clientSecret: cfg.AMAZON_SP_CLIENT_SECRET,
+    httpFetch,
+  });
 
-  async function lwaAccessToken() {
-    const res = await httpFetch('https://api.amazon.com/auth/o2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: cfg.AMAZON_SP_REFRESH_TOKEN,
-        client_id: cfg.AMAZON_SP_CLIENT_ID,
-        client_secret: cfg.AMAZON_SP_CLIENT_SECRET,
-      }),
-    });
-    if (!res.ok) throw new Error(`Amazon LWA token failed (${res.status})`);
-    const data = await res.json();
-    return data.access_token;
+  async function refreshTokenFor(marketplace) {
+    if (getRefreshToken) {
+      const fromVault = await getRefreshToken(marketplace);
+      if (fromVault) return fromVault;
+    }
+    if (marketplace === 'in' && cfg.AMAZON_SP_REFRESH_TOKEN) return cfg.AMAZON_SP_REFRESH_TOKEN;
+    return '';
   }
 
-  async function spGet(path, query = {}) {
-    const token = await lwaAccessToken();
-    const base = (cfg.AMAZON_SP_ENDPOINT || 'https://sellingpartnerapi-eu.amazon.com').replace(/\/+$/, '');
+  /** Resolve auth or explain exactly what is missing — never a vague failure. */
+  async function requireAuth(marketplace) {
+    if (!hasLwaApp) {
+      return { error: connectorError(CONNECTOR_ERROR_CODES.AUTH_REQUIRED,
+        'Amazon SP-API app not configured on the server (AMAZON_SP_CLIENT_ID / AMAZON_SP_CLIENT_SECRET).') };
+    }
+    const refreshToken = await refreshTokenFor(marketplace);
+    if (!refreshToken) {
+      return { error: connectorError(CONNECTOR_ERROR_CODES.AUTH_REQUIRED,
+        `Amazon ${AMAZON_MARKETPLACES[marketplace].label} is not connected yet — use Connect on the Connectors page (one-time Seller Central authorization).`,
+        { marketplace, connectUrl: `/auth/amazon/connect?marketplace=${marketplace}` }) };
+    }
+    return { refreshToken };
+  }
+
+  async function spGet(marketplace, path, query = {}) {
+    const auth = await requireAuth(marketplace);
+    if (auth.error) return auth.error;
+    let token;
+    try {
+      token = await accessTokenFor(auth.refreshToken);
+    } catch (err) {
+      return connectorError(CONNECTOR_ERROR_CODES.AUTH_EXPIRED,
+        `Amazon token refresh failed for ${marketplace}: ${err.message}. Re-connect the marketplace.`,
+        { marketplace });
+    }
     const qs = new URLSearchParams(query).toString();
-    const url = `${base}${path}${qs ? `?${qs}` : ''}`;
+    const url = `${(cfg.AMAZON_SP_ENDPOINT || SP_API_ENDPOINT).replace(/\/+$/, '')}${path}${qs ? `?${qs}` : ''}`;
     const res = await httpFetch(url, {
       headers: {
         'x-amz-access-token': token,
@@ -46,53 +83,51 @@ export function createAmazonConnector({ cfg = {}, getSecret, httpFetch = fetch }
     const text = await res.text();
     let body = null;
     try { body = text ? JSON.parse(text) : null; } catch { body = { raw: text.slice(0, 500) }; }
-    if (!res.ok) return { ok: false, status: res.status, error: body?.errors || body || text.slice(0, 200) };
-    return { ok: true, data: body };
+    if (res.status === 429) {
+      return connectorError(CONNECTOR_ERROR_CODES.RATE_LIMITED, 'Amazon SP-API throttled the call', { marketplace });
+    }
+    if (!res.ok) {
+      return connectorError(CONNECTOR_ERROR_CODES.UPSTREAM_ERROR,
+        `Amazon SP-API ${res.status} on ${path}`,
+        { marketplace, status: res.status, detail: body?.errors || body });
+    }
+    return { ok: true, marketplace, marketplaceId: AMAZON_MARKETPLACES[marketplace].marketplaceId, data: body };
   }
 
   registry.register({
     id: 'health.ping',
     title: 'Amazon health',
     mutates: false,
-    backend: hasSpApi ? 'official' : 're',
-    description: hasSpApi ? 'SP-API Sellers API getMarketplaceParticipations' : 'Session vault probe (needs cookie + HAR)',
-    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
-    awaitingHar: !hasSpApi,
-    handler: async () => {
-      if (hasSpApi) {
-        const r = await spGet('/sellers/v1/marketplaceParticipations');
-        return { ...r, backend: 'official', marketplaceId: cfg.AMAZON_SP_MARKETPLACE_ID || MARKETPLACE_IN };
-      }
-      const sec = getSecret ? await getSecret() : null;
-      if (!sec?.secret) return { ok: false, awaitingHar: true, error: 'Connect Amazon: paste Seller Central session cookie, or set AMAZON_SP_* env for SP-API.' };
-      return { ok: false, awaitingHar: true, hasSession: true, error: 'Session stored but Seller Central XHR paths need a sanitized HAR (orders/inventory). See docs/connectors/amazon.md' };
-    },
+    backend: 'official',
+    description: 'SP-API Sellers getMarketplaceParticipations for one marketplace (in | ae | sa)',
+    inputSchema: { type: 'object', additionalProperties: false, properties: { marketplace: MARKETPLACE_PARAM } },
+    handler: async (params) => spGet(normalizeMarketplace(params.marketplace), '/sellers/v1/marketplaceParticipations'),
   });
 
   registry.register({
     id: 'orders.search',
     title: 'Search orders',
     mutates: false,
-    backend: hasSpApi ? 'official' : 're',
-    awaitingHar: !hasSpApi,
-    description: hasSpApi ? 'SP-API GET /orders/v0/orders (India marketplace)' : 'RE: Seller Central orders XHR (HAR required)',
+    backend: 'official',
+    description: 'SP-API GET /orders/v0/orders for one marketplace (in | ae | sa)',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        createdAfter: { type: 'string', description: 'ISO8601' },
+        marketplace: MARKETPLACE_PARAM,
+        createdAfter: { type: 'string', description: 'ISO8601 (default: last 7 days)' },
+        orderStatuses: { type: 'array', items: { type: 'string' }, maxItems: 10 },
         maxResults: { type: 'integer', minimum: 1, maximum: 100 },
       },
     },
     handler: async (params) => {
-      if (!hasSpApi) {
-        return { ok: false, awaitingHar: true, error: 'Amazon orders.search needs SP-API creds or Seller Central HAR.' };
-      }
+      const marketplace = normalizeMarketplace(params.marketplace);
       const createdAfter = params.createdAfter || new Date(Date.now() - 7 * 864e5).toISOString();
-      return spGet('/orders/v0/orders', {
-        MarketplaceIds: cfg.AMAZON_SP_MARKETPLACE_ID || MARKETPLACE_IN,
+      return spGet(marketplace, '/orders/v0/orders', {
+        MarketplaceIds: AMAZON_MARKETPLACES[marketplace].marketplaceId,
         CreatedAfter: createdAfter,
         MaxResultsPerPage: String(Math.min(params.maxResults || 20, 100)),
+        ...(params.orderStatuses?.length ? { OrderStatuses: params.orderStatuses.join(',') } : {}),
       });
     },
   });
@@ -101,17 +136,21 @@ export function createAmazonConnector({ cfg = {}, getSecret, httpFetch = fetch }
     id: 'inventory.get',
     title: 'FBA inventory summary',
     mutates: false,
-    backend: hasSpApi ? 'official' : 're',
-    awaitingHar: !hasSpApi,
-    description: 'SP-API fbaInventory when official; else HAR',
-    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
-    handler: async () => {
-      if (!hasSpApi) return { ok: false, awaitingHar: true, error: 'Needs SP-API or inventory HAR.' };
-      return spGet('/fba/inventory/v1/summaries', {
+    backend: 'official',
+    description: 'SP-API fbaInventory summaries for one marketplace (in | ae | sa)',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: { marketplace: MARKETPLACE_PARAM },
+    },
+    handler: async (params) => {
+      const marketplace = normalizeMarketplace(params.marketplace);
+      const { marketplaceId } = AMAZON_MARKETPLACES[marketplace];
+      return spGet(marketplace, '/fba/inventory/v1/summaries', {
         details: 'true',
         granularityType: 'Marketplace',
-        granularityId: cfg.AMAZON_SP_MARKETPLACE_ID || MARKETPLACE_IN,
-        marketplaceIds: cfg.AMAZON_SP_MARKETPLACE_ID || MARKETPLACE_IN,
+        granularityId: marketplaceId,
+        marketplaceIds: marketplaceId,
       });
     },
   });
@@ -119,11 +158,16 @@ export function createAmazonConnector({ cfg = {}, getSecret, httpFetch = fetch }
   return createConnectorShell({
     id: CONNECTOR_ID,
     name: CONNECTOR_NAME,
-    auth: { kind: 'dual', primary: hasSpApi ? 'oauth2' : 'session', officialFutureSwap: !hasSpApi },
+    auth: { kind: 'oauth2', primary: 'oauth2', officialFutureSwap: false },
     registry,
     health: async () => {
-      const r = await registry.getAction('health.ping').handler({}, {});
-      return { ok: !!r.ok, connector: CONNECTOR_ID, detail: r };
+      const detail = {};
+      for (const marketplace of Object.keys(AMAZON_MARKETPLACES)) {
+        const auth = await requireAuth(marketplace);
+        detail[marketplace] = auth.error ? { connected: false, code: auth.error.code } : { connected: true };
+      }
+      const anyConnected = Object.values(detail).some((d) => d.connected);
+      return { ok: anyConnected, connector: CONNECTOR_ID, marketplaces: detail };
     },
   });
 }

@@ -199,6 +199,10 @@ const Env = z.object({
   AMAZON_SP_CLIENT_ID: z.string().default(''),
   AMAZON_SP_CLIENT_SECRET: z.string().default(''),
   AMAZON_SP_REFRESH_TOKEN: z.string().default(''),
+  // SP-API application id (Seller Central → Develop Apps) for the one-time OAuth
+  // connect flow (/auth/amazon/connect). BETA=true while the app is still in draft.
+  AMAZON_APP_ID: z.string().default(''),
+  AMAZON_APP_BETA: zbool(true),
   AMAZON_SP_MARKETPLACE_ID: z.string().default('A21TJRUUN4KGV'), // amazon.in
   AMAZON_SP_ENDPOINT: z.string().default('https://sellingpartnerapi-eu.amazon.com'),
 

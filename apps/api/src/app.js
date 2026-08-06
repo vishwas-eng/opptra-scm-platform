@@ -52,6 +52,7 @@ export async function buildApp({ withStatic = true } = {}) {
   await app.register(import('./routes/ops.js'));
   await app.register(import('./routes/admin.js'));
   await app.register(import('./routes/googleAuth.js'));
+  await app.register(import('./routes/amazonAuth.js'));
   await app.register(import('./routes/automations.js'));
   await app.register(import('./routes/connectors.js'));
   await app.register(import('./routes/mcp.js'));
