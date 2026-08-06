@@ -50,7 +50,7 @@ function useOAuthReturn() {
 
     if (google === 'ok') {
       const mismatch = q.get('googleMismatch');
-      if (mismatch) bad(`Connected as ${q.get('googleAccount') || 'another account'} — that differs from your login.`);
+      if (mismatch) bad(`Connected as ${q.get('googleAccount') || 'another account'}, that differs from your login.`);
       else ok('Google connected.');
     } else if (google) {
       bad(`Google connect failed: ${google}`);
@@ -89,6 +89,7 @@ export default function App() {
           <Route path="/eway-bill" element={<EwayBill />} />
           <Route path="/home-centre" element={<HomeCentre />} />
           <Route path="/channels" element={<Channels />} />
+          <Route path="/channels/:focus" element={<Channels />} />
           <Route path="/returns" element={<Returns />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/schedules" element={<Schedules />} />

@@ -89,7 +89,7 @@ export async function listEnabledChannelSchedules() {
 
 /**
  * BullMQ repeatable-job spec for a schedule row.
- * Returns the cron in the row's own timezone — never converted to UTC, because a
+ * Returns the cron in the row's own timezone, never converted to UTC, because a
  * half-hour-offset zone (IST) cannot be expressed as a whole UTC hour.
  */
 export function scheduleCron(row) {

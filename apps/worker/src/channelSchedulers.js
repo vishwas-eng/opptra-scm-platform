@@ -13,7 +13,7 @@ const JOB_FOR = {
   '6thstreet': { inventory: 'street6.inventory', orders: 'street6.packEmail' },
 };
 
-/** Schedulers this module owns — never touch anything else registered on the queue. */
+/** Schedulers this module owns, never touch anything else registered on the queue. */
 const OWNED_PREFIX = 'channel:';
 
 export async function reconcileChannelSchedules(queue) {
@@ -23,7 +23,7 @@ export async function reconcileChannelSchedules(queue) {
   for (const row of wanted) {
     const jobName = JOB_FOR[row.connector_id]?.[row.operation];
     if (!jobName) {
-      logger.warn({ row }, 'channel schedule references an unknown operation — skipped');
+      logger.warn({ row }, 'channel schedule references an unknown operation, skipped');
       continue;
     }
     const key = scheduleKey(row);

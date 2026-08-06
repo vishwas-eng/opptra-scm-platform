@@ -33,7 +33,7 @@ export class UcClient {
     this.limiter = new RateLimiter({ rps: rps ?? 4, burst: burst ?? 8 });
     this.#http = makeHttp({ fetchImpl, limiter: this.limiter });
     this.bearer = new BearerManager({ http: this.#http, baseUrl: this.base, user, pass });
-    // Env JSESSIONID override is India-only — never seed UAE/staging from UC_JSESSIONID_OVERRIDE.
+    // Env JSESSIONID override is India-only, never seed UAE/staging from UC_JSESSIONID_OVERRIDE.
     const cookieOverride = instanceId === 'india' ? overrideCookie : '';
     this.session = new SessionManager({
       overrideCookie: cookieOverride,

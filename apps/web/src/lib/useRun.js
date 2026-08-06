@@ -5,8 +5,7 @@ import { fileToObjectUrl } from './format.js';
 /**
  * Run one automation and track it to completion.
  *
- * Every automation screen has the same lifecycle — validate, submit, poll, render —
- * so it lives here once. `progress` carries the intermediate run row, which is what
+ * Every automation screen has the same lifecycle, validate, submit, poll, render, * so it lives here once. `progress` carries the intermediate run row, which is what
  * lets a screen say "retrying" instead of showing a spinner that looks like a hang.
  */
 export function useRun() {
@@ -64,7 +63,7 @@ export function useRun() {
 /**
  * Turn a `{ filename, contentType, base64 }` payload into an object URL, revoking the
  * previous one whenever the file changes and on unmount. Skipping the revoke leaks the
- * whole blob for the life of the tab — and these are multi-megabyte PDFs.
+ * whole blob for the life of the tab, and these are multi-megabyte PDFs.
  */
 export function useObjectUrl(file) {
   const [url, setUrl] = useState(null);

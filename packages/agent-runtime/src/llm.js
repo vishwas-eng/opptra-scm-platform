@@ -1,7 +1,7 @@
 // LLM provider abstraction. Prefer real LLM when AGENT_LLM_* / OPENAI_ / ANTHROPIC_ key exists.
 // Cost-aware: short system prompt, truncated tool results, low max_tokens.
 
-const DEFAULT_SYSTEM = `You are Opptra SCM Agent — an ops automation helper (Beta).
+const DEFAULT_SYSTEM = `You are Opptra SCM Agent, an ops automation helper (Beta).
 Opptra's daily work runs on Google Sheets, Drive, and email, plus Unicommerce / Waypoint / Home Centre.
 Help users: read/write sheets, copy sheet→sheet, find Drive files, pull UC/Waypoint data into sheets.
 Use only connected tools. If Sheets/Drive aren't connected, tell them to Connect first.

@@ -1,4 +1,4 @@
-<title>Opptra — The Supply-Chain Agent Workspace</title>
+<title>Opptra, The Supply-Chain Agent Workspace</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   :root {
@@ -6,7 +6,7 @@
     --bg: #faf8f5; --surface: #ffffff; --raised: #fffdfb;
     --ink: #1c1a17; --body: #45403a; --muted: #7a736a; --line: #e7e1d8;
     --sidebar: #171512;
-    /* state chips — deliberately NOT green (kept muted, brand-adjacent) */
+    /* state chips, deliberately NOT green (kept muted, brand-adjacent) */
     --have: #1f6f4a; --have-bg: #e8f3ec;
     --part: #9a6a15; --part-bg: #f8efd9;
     --build: #b5480e; --build-bg: #fbe9dd;
@@ -142,7 +142,7 @@
     <div class="rule"></div>
     <div class="eyebrow">Opptra · Product Strategy · v0.1 · 31 Jul 2026</div>
     <h1>The supply-chain <span class="u">agent workspace</span>.</h1>
-    <p class="lede">Today an ops person clicks a button and one hard-wired automation runs. Next, any supply-chain user assembles their own agents from a library of connectors — Amazon, Flipkart, Unicommerce, Sheets, WhatsApp, couriers — and lets them run the daily work, with a human approving anything that touches money or a customer.</p>
+    <p class="lede">Today an ops person clicks a button and one hard-wired automation runs. Next, any supply-chain user assembles their own agents from a library of connectors, Amazon, Flipkart, Unicommerce, Sheets, WhatsApp, couriers, and lets them run the daily work, with a human approving anything that touches money or a customer.</p>
     <div class="meta"><span>Not another Zapier.</span> <span>The vertical agent platform for marketplace operations.</span> <span>Dogfood Opptra first, sell it second.</span></div>
   </div>
 </header>
@@ -152,7 +152,7 @@
     <div class="wrap thesis-grid">
       <div><div class="eyebrow">The thesis</div></div>
       <div>
-        <p class="thesis">Horizontal agents own generic office work. None of them speak supply chain — GRNs, e-way GSTINs, how a Zepto B2B order cancels differently from a Myntra one. <strong>That domain knowledge is the moat, and we already have it in code.</strong></p>
+        <p class="thesis">Horizontal agents own generic office work. None of them speak supply chain, GRNs, e-way GSTINs, how a Zepto B2B order cancels differently from a Myntra one. <strong>That domain knowledge is the moat, and we already have it in code.</strong></p>
       </div>
     </div>
   </section>
@@ -160,11 +160,11 @@
   <section>
     <div class="wrap">
       <div class="eyebrow">Why now, honestly</div>
-      <h2>A real, forming market — and a narrow way in</h2>
-      <p class="lead">Agentic commerce is projected at ~$1T of US retail by 2030, 90+ startups are building, and three protocols (Anthropic's <strong>MCP</strong>, Google's A2A, OpenAI/Stripe's ACP) are settling into the connector standard. The horizontal winners — Zapier Agents, Lindy, Gumloop, n8n — cover 7,000 generic apps and zero supply-chain depth.</p>
+      <h2>A real, forming market, and a narrow way in</h2>
+      <p class="lead">Agentic commerce is projected at ~$1T of US retail by 2030, 90+ startups are building, and three protocols (Anthropic's <strong>MCP</strong>, Google's A2A, OpenAI/Stripe's ACP) are settling into the connector standard. The horizontal winners, Zapier Agents, Lindy, Gumloop, n8n, cover 7,000 generic apps and zero supply-chain depth.</p>
       <div class="cards">
         <div class="card"><h3>The moat is vertical</h3><p>Marketplace + UC + courier + WhatsApp connectors, and the playbooks that use them, are ours to build and nobody else's priority.</p></div>
-        <div class="card"><h3>The real cost is access, not code</h3><p>Amazon SP-API, Flipkart, WhatsApp all need seller accounts, developer registration, ID verification — weeks of paperwork per connector. We sequence around it.</p></div>
+        <div class="card"><h3>The real cost is access, not code</h3><p>Amazon SP-API, Flipkart, WhatsApp all need seller accounts, developer registration, ID verification, weeks of paperwork per connector. We sequence around it.</p></div>
         <div class="card"><h3>The MVP is narrow &amp; deep</h3><p>3–4 connectors + 5 killer playbooks that save a real team hours a day, proven on our own floor before we widen. Not "an AGI that fixes everything" on day one.</p></div>
       </div>
     </div>
@@ -174,7 +174,7 @@
     <div class="wrap">
       <div class="eyebrow">The surprising part</div>
       <h2>The platform is already hiding in the repo</h2>
-      <p class="lead">A survey of <code>opptra-scm-platform</code> shows the hard parts are built — just not named as a platform. The one genuine gap: <strong>there is no LLM anywhere yet</strong>, and connectors are hard-wired into job handlers instead of being a discoverable, composable library. That gap <em>is</em> the build. Everything below is refactoring, not rewriting.</p>
+      <p class="lead">A survey of <code>opptra-scm-platform</code> shows the hard parts are built, just not named as a platform. The one genuine gap: <strong>there is no LLM anywhere yet</strong>, and connectors are hard-wired into job handlers instead of being a discoverable, composable library. That gap <em>is</em> the build. Everything below is refactoring, not rewriting.</p>
       <div class="tbl-scroll">
         <table>
           <thead><tr><th>Agent-platform primitive</th><th>Already exists as</th><th>Status</th></tr></thead>
@@ -186,7 +186,7 @@
             <tr><td class="k">Agent executor</td><td>BullMQ worker, 17 job types, resumable long-runs<div class="sub">apps/worker</div></td><td><span class="chip have">have</span></td></tr>
             <tr><td class="k">Human-in-the-loop</td><td>Draft-first mail, dry-run e-way, pending-retry parking<div class="sub">automation-packing / -ewaybill</div></td><td><span class="chip have">have</span></td></tr>
             <tr><td class="k">Run ledger + audit + KPI</td><td>runs / audit_log tables, KPI endpoint, Slack alerts<div class="sub">core</div></td><td><span class="chip have">have</span></td></tr>
-            <tr><td class="k">Idempotency</td><td>step_ledger — a step never double-fires on retry<div class="sub">migration 003</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Idempotency</td><td>step_ledger, a step never double-fires on retry<div class="sub">migration 003</div></td><td><span class="chip have">have</span></td></tr>
             <tr><td class="k">RBAC + machine auth</td><td>admin/ops/viewer + ops-agent token API<div class="sub">plugins/auth · routes/ops</div></td><td><span class="chip have">have</span></td></tr>
             <tr><td class="k">Connector registry</td><td>connectors hard-wired in handlers, not composable</td><td><span class="chip build">build</span></td></tr>
             <tr><td class="k">LLM planner / agent loop</td><td>no anthropic/openai anywhere in the tree</td><td><span class="chip build">build</span></td></tr>
@@ -200,7 +200,7 @@
   <section>
     <div class="wrap">
       <div class="eyebrow">Architecture</div>
-      <h2>Five layers — three already standing</h2>
+      <h2>Five layers, three already standing</h2>
       <div class="stack">
         <div class="layer">
           <div class="n">5</div>
@@ -212,7 +212,7 @@
         </div>
         <div class="layer">
           <div class="n">3</div>
-          <div class="lbody"><h3>Connector layer — the moat <span class="tag b">SDK + build</span></h3><p>One uniform Connector shape: auth + typed actions + triggers + an LLM tool-manifest. Native: UC, Google, Vinculum (have) · Amazon, Flipkart, WhatsApp, Slack, couriers (build) · long-tail via MCP / Composio / Nango.</p></div>
+          <div class="lbody"><h3>Connector layer, the moat <span class="tag b">SDK + build</span></h3><p>One uniform Connector shape: auth + typed actions + triggers + an LLM tool-manifest. Native: UC, Google, Vinculum (have) · Amazon, Flipkart, WhatsApp, Slack, couriers (build) · long-tail via MCP / Composio / Nango.</p></div>
         </div>
         <div class="layer done">
           <div class="n">2</div>
@@ -223,7 +223,7 @@
           <div class="lbody"><h3>Core platform <span class="tag h">have</span></h3><p>Fastify API · BullMQ · Postgres · Redis · RBAC · audit · one GCP VM. Running in production today.</p></div>
         </div>
       </div>
-      <p style="margin-top:18px;font-size:14px">The pivotal new abstraction is the <strong>Connector SDK</strong>: every connector — ours or third-party — implements <code>{ auth, actions[], triggers[], toolManifest() }</code>. An action's input schema <em>is</em> its LLM tool-use schema, so <strong>adding a connector automatically gives every agent new abilities</strong> with zero runtime changes. Expose our own connectors <em>as</em> MCP servers, too — that makes Opptra callable from Claude and any external agent.</p>
+      <p style="margin-top:18px;font-size:14px">The pivotal new abstraction is the <strong>Connector SDK</strong>: every connector, ours or third-party, implements <code>{ auth, actions[], triggers[], toolManifest() }</code>. An action's input schema <em>is</em> its LLM tool-use schema, so <strong>adding a connector automatically gives every agent new abilities</strong> with zero runtime changes. Expose our own connectors <em>as</em> MCP servers, too, that makes Opptra callable from Claude and any external agent.</p>
     </div>
   </section>
 
@@ -235,11 +235,11 @@
         <table>
           <thead><tr><th>Connector</th><th>Access reality</th><th>Phase</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td class="k">Unicommerce</td><td>owned bot account</td><td class="val">—</td><td><span class="chip have">have</span></td></tr>
-            <tr><td class="k">Google Sheets / Drive / Gmail</td><td>per-user OAuth, live</td><td class="val">—</td><td><span class="chip have">have</span></td></tr>
-            <tr><td class="k">Waypoint (Neon Postgres)</td><td>direct DB read</td><td class="val">—</td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Unicommerce</td><td>owned bot account</td><td class="val">-</td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Google Sheets / Drive / Gmail</td><td>per-user OAuth, live</td><td class="val">-</td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Waypoint (Neon Postgres)</td><td>direct DB read</td><td class="val">-</td><td><span class="chip have">have</span></td></tr>
             <tr><td class="k">Vinculum / Home Centre</td><td>code done, creds invalid</td><td class="val">fix</td><td><span class="chip part">partial</span></td></tr>
-            <tr><td class="k">Slack (inbound bot)</td><td>easy — Events API</td><td class="val">1</td><td><span class="chip build">build</span></td></tr>
+            <tr><td class="k">Slack (inbound bot)</td><td>easy, Events API</td><td class="val">1</td><td><span class="chip build">build</span></td></tr>
             <tr><td class="k">WhatsApp Business</td><td>Meta acct + ~₹0.13/utility msg, no monthly floor</td><td class="val">1–2</td><td><span class="chip build">build</span></td></tr>
             <tr><td class="k">Shiprocket / Delhivery</td><td>seller signup; 17 couriers under one API</td><td class="val">2</td><td><span class="chip build">build</span></td></tr>
             <tr><td class="k">Amazon SP-API</td><td>Pro seller + dev reg + ID verify (~weeks)</td><td class="val">2</td><td><span class="chip build">build</span></td></tr>
@@ -256,15 +256,15 @@
   <section>
     <div class="wrap">
       <div class="eyebrow">The product, concretely</div>
-      <h2>Playbooks that save hours — ship these, not "a chat box"</h2>
+      <h2>Playbooks that save hours, ship these, not "a chat box"</h2>
       <p class="lead">An agent workspace is worthless without killer default agents. Each is a composition of connectors, shipped as a clone-and-tweak template. The builder is the wrapper; the playbooks are the product.</p>
       <div class="cards">
         <div class="card"><h3>Packing Autopilot</h3><p>Each morning: pull today's CREATED SOs, draft per-warehouse packing mail with label + appointment, wait for approval, send, then follow up with invoice + e-way in the same thread.</p><div class="who">UC · Sheets · Drive · Gmail/WhatsApp · <span style="color:var(--have)">most built</span></div></div>
-        <div class="card"><h3>Stock Sync Guardian</h3><p>Watch marketplace inventory against Unicommerce; when they drift, flag it — or auto-correct with a human approval.</p><div class="who">Amazon/Flipkart · UC · Slack</div></div>
-        <div class="card"><h3>Exception Autopilot</h3><p>A live feed of stuck SOs, appointment-expiry cancellations, short-GRN, failed e-way — each with a one-click playbook to resolve it.</p><div class="who">UC · Waypoint · Slack/WhatsApp</div></div>
+        <div class="card"><h3>Stock Sync Guardian</h3><p>Watch marketplace inventory against Unicommerce; when they drift, flag it, or auto-correct with a human approval.</p><div class="who">Amazon/Flipkart · UC · Slack</div></div>
+        <div class="card"><h3>Exception Autopilot</h3><p>A live feed of stuck SOs, appointment-expiry cancellations, short-GRN, failed e-way, each with a one-click playbook to resolve it.</p><div class="who">UC · Waypoint · Slack/WhatsApp</div></div>
         <div class="card"><h3>Appointment &amp; Label Chaser</h3><p>Pull appointment letters and labels from Drive/Amazon by date, attach them, nudge warehouses on WhatsApp.</p><div class="who">Drive · Amazon · WhatsApp</div></div>
-        <div class="card"><h3>Daily Ops Digest</h3><p>One message each morning: what shipped, what's stuck, what needs a human — on WhatsApp or Slack.</p><div class="who">UC · Waypoint · Slack/WhatsApp</div></div>
-        <div class="card"><h3>Report Puller</h3><p>Scheduled inventory / batch pulls to Sheets or GCS. The FMCG version already runs in Python — fold it in.</p><div class="who">UC · Sheets/GCS · <span style="color:var(--have)">have (Python)</span></div></div>
+        <div class="card"><h3>Daily Ops Digest</h3><p>One message each morning: what shipped, what's stuck, what needs a human, on WhatsApp or Slack.</p><div class="who">UC · Waypoint · Slack/WhatsApp</div></div>
+        <div class="card"><h3>Report Puller</h3><p>Scheduled inventory / batch pulls to Sheets or GCS. The FMCG version already runs in Python, fold it in.</p><div class="who">UC · Sheets/GCS · <span style="color:var(--have)">have (Python)</span></div></div>
       </div>
     </div>
   </section>
@@ -272,19 +272,19 @@
   <section>
     <div class="wrap">
       <div class="eyebrow">Delivery</div>
-      <h2>Four phases — each leaves a working, dogfooded system</h2>
+      <h2>Four phases, each leaves a working, dogfooded system</h2>
       <div class="phases">
         <div class="phase">
           <div class="ph"><div class="p">Phase 0</div><div class="t">2–3 weeks</div></div>
-          <div class="pbody"><h3>Name the platform</h3><p>Refactor <code>automation-*</code> into the Connector SDK; build the registry + <code>toolManifest()</code>; generalize the vault; add <code>workspace_id</code> (defaulted). First LLM agent loop behind a flag, driving only existing UC/Google actions. Mostly renaming and wiring — low risk, high leverage. No new external access needed.</p></div>
+          <div class="pbody"><h3>Name the platform</h3><p>Refactor <code>automation-*</code> into the Connector SDK; build the registry + <code>toolManifest()</code>; generalize the vault; add <code>workspace_id</code> (defaulted). First LLM agent loop behind a flag, driving only existing UC/Google actions. Mostly renaming and wiring, low risk, high leverage. No new external access needed.</p></div>
         </div>
         <div class="phase">
           <div class="ph"><div class="p">Phase 1</div><div class="t">3–4 weeks</div></div>
-          <div class="pbody"><h3>First outside connectors + approvals UI</h3><p>Slack inbound bot + WhatsApp (start the Meta paperwork day one). Run inbox with approve/reject. Ship Packing Autopilot and Daily Ops Digest on our own floor. Begin Amazon/Flipkart developer registration now — long lead time.</p></div>
+          <div class="pbody"><h3>First outside connectors + approvals UI</h3><p>Slack inbound bot + WhatsApp (start the Meta paperwork day one). Run inbox with approve/reject. Ship Packing Autopilot and Daily Ops Digest on our own floor. Begin Amazon/Flipkart developer registration now, long lead time.</p></div>
         </div>
         <div class="phase">
           <div class="ph"><div class="p">Phase 2</div><div class="t">6–8 weeks</div></div>
-          <div class="pbody"><h3>Marketplace connectors + Exception Autopilot</h3><p>Amazon SP-API + Flipkart (as approvals land) + Shiprocket/Delhivery. Ship Stock Sync Guardian and Exception Autopilot. The "wow" moment — agents that reason across systems.</p></div>
+          <div class="pbody"><h3>Marketplace connectors + Exception Autopilot</h3><p>Amazon SP-API + Flipkart (as approvals land) + Shiprocket/Delhivery. Ship Stock Sync Guardian and Exception Autopilot. The "wow" moment, agents that reason across systems.</p></div>
         </div>
         <div class="phase">
           <div class="ph"><div class="p">Phase 3</div><div class="t">ongoing</div></div>
@@ -299,17 +299,17 @@
       <div class="eyebrow">Over to you</div>
       <h2>Decisions that unblock the build</h2>
       <ol class="dec">
-        <li><p><span class="q">Which LLM &amp; budget posture?</span> Recommend Claude — we already run on it, and it's native to tool-use + MCP. Agent loops multiply per-run cost, so the existing cost discipline applies double.</p></li>
-        <li><p><span class="q">Amazon or Flipkart first after Slack/WhatsApp?</span> Whichever seller account we control most cleanly — and <strong>start that developer registration this week</strong>, because it's weeks of lead time regardless of engineering.</p></li>
+        <li><p><span class="q">Which LLM &amp; budget posture?</span> Recommend Claude, we already run on it, and it's native to tool-use + MCP. Agent loops multiply per-run cost, so the existing cost discipline applies double.</p></li>
+        <li><p><span class="q">Amazon or Flipkart first after Slack/WhatsApp?</span> Whichever seller account we control most cleanly, and <strong>start that developer registration this week</strong>, because it's weeks of lead time regardless of engineering.</p></li>
         <li><p><span class="q">How long internal-only before the first external customer?</span> Recommend proving three playbooks on Opptra for ~6–8 weeks first.</p></li>
         <li><p><span class="q">Buy or build the long tail?</span> Recommend Composio to start (fast, cheap), keeping the door open to Nango once volume justifies owning the stack.</p></li>
-        <li><p><span class="q">Expose our connectors as public MCP servers?</span> Recommend yes, eventually — it turns Opptra into something callable from Claude and any agent: a distribution channel, not just a product.</p></li>
+        <li><p><span class="q">Expose our connectors as public MCP servers?</span> Recommend yes, eventually, it turns Opptra into something callable from Claude and any agent: a distribution channel, not just a product.</p></li>
       </ol>
     </div>
   </section>
 
   <div class="wrap foot">
-    Opptra · Supply-Chain Agent Workspace · plan for review. Companion doc: <code>docs/AGENT-PLATFORM-PLAN.md</code> in the repo. Nothing here breaks what runs in production today — every phase is additive, and the first agent drives automations we've already proven.
+    Opptra · Supply-Chain Agent Workspace · plan for review. Companion doc: <code>docs/AGENT-PLATFORM-PLAN.md</code> in the repo. Nothing here breaks what runs in production today, every phase is additive, and the first agent drives automations we've already proven.
   </div>
 </main>
 

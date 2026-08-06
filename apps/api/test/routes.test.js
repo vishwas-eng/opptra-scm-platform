@@ -44,8 +44,8 @@ test('protected routes reject anonymous callers with 401 (before any DB access)'
   assert.equal(agentChat.statusCode, 401, 'agent chat must require auth');
 });
 
-// Agent Beta is admin-only. Every route under /api/agent/* — including the ones added
-// later for resources and playbooks — must refuse anonymous callers. A route shipped
+// Agent Beta is admin-only. Every route under /api/agent/*, including the ones added
+// later for resources and playbooks, must refuse anonymous callers. A route shipped
 // without a preValidation guard would answer 404/500 here instead of 401.
 test('ADMIN-ONLY: every /api/agent/* route and connector mutation rejects anonymous', async () => {
   const cases = [
@@ -123,7 +123,7 @@ test('/api/mcp/* rejects missing token with 401 (before any DB access)', async (
 
 test('/api/ops/summary accepts Bearer or X-Ops-Token (auth gate only; DB may 500 in this harness)', async () => {
   // With a valid token, preValidation passes. This harness has no real DB, so the
-  // handler may 500 — that still proves the machine-auth gate opened (not 401).
+  // handler may 500, that still proves the machine-auth gate opened (not 401).
   for (const headers of [
     { authorization: 'Bearer ops-test-token-0123456789abcdef01234567' },
     { 'x-ops-token': 'ops-test-token-0123456789abcdef01234567' },

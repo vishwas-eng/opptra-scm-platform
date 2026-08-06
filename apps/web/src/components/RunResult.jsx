@@ -62,7 +62,7 @@ export function FileResult({ file, label }) {
   );
 }
 
-/** Raw payload, admin-only — operators should never need to read JSON. */
+/** Raw payload, admin-only, operators should never need to read JSON. */
 export function RawDetails({ data }) {
   const { isAdmin } = useAuth();
   if (!isAdmin || !data) return null;
@@ -92,7 +92,7 @@ export function RunSurface({ busy, progress, error, result, children, idle }) {
             <strong>{progress?.status === 'pending_retry' ? 'Retrying automatically' : 'Working…'}</strong>
             <p className="meta">
               {progress?.status === 'pending_retry'
-                ? 'This is taking longer than usual — the job is being retried, no action needed.'
+                ? 'This is taking longer than usual, the job is being retried, no action needed.'
                 : 'This can take a minute for large orders.'}
             </p>
             {progress?.result?.steps && <StepChips steps={progress.result.steps} />}

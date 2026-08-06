@@ -1,8 +1,8 @@
-// Bound connector resources — specific Sheets / Drive items for Agent tools.
+// Bound connector resources, specific Sheets / Drive items for Agent tools.
 //
 // Failures carry `code` + `retryable` matching @opptra/connectors-sdk's taxonomy
 // (NOT_BOUND / INVALID_INPUT). The codes are literals rather than an import because core
-// must not depend on the connector SDK — but they ARE part of that contract: these are
+// must not depend on the connector SDK, but they ARE part of that contract: these are
 // the most common agent failures, and callers branch on `code`, not on the prose.
 import { randomUUID } from 'node:crypto';
 import { query } from './db.js';
@@ -121,7 +121,7 @@ export async function resolveBoundResource({
     if (!r) {
       return {
         ok: false, code: 'NOT_BOUND', retryable: false,
-        error: 'Unknown resourceUid — bind it on Connectors first.', bindRequired: true,
+        error: 'Unknown resourceUid, bind it on Connectors first.', bindRequired: true,
       };
     }
     if (connectorId && r.connectorId !== connectorId) {

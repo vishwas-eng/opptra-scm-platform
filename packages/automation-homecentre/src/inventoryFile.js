@@ -28,7 +28,7 @@ export function resolveUcSkuForHcRow(hcRow, skuMap = {}) {
   const mrkt = String(hcRow?.mrktSku || '').trim();
   if (sellerSku && skuMap[sellerSku]) return String(skuMap[sellerSku]);
   if (mrkt && skuMap[mrkt]) return String(skuMap[mrkt]);
-  // Archive LAND* codes are order SKUs — not inventory list keys; identity only when listed.
+  // Archive LAND* codes are order SKUs, not inventory list keys; identity only when listed.
   if (sellerSku && skuMap[sellerSku] === undefined) return sellerSku;
   return sellerSku || mrkt;
 }
@@ -98,8 +98,7 @@ export function mergeSellerInventoryRows(hcSkus = [], ucQtyBySku = {}, opts = {}
 /**
  * Structural + match-rate gate for Vinculum inventory upload.
  * Live upload must have matchRate === 1 (catalog identity) and zero validation errors.
- * Inventory-row absence at a facility is OK (qty 0) and is not what matchRate means here —
- * callers pass catalogMatchRate when gating live writes.
+ * Inventory-row absence at a facility is OK (qty 0) and is not what matchRate means here, * callers pass catalogMatchRate when gating live writes.
  */
 export function validateInventoryFill(rows = [], opts = {}) {
   const errors = [];

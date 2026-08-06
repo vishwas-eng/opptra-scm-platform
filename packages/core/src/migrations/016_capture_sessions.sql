@@ -1,7 +1,7 @@
 -- Connector capture sessions: a recorded seller-portal login, turned into a blueprint.
 --
 -- Entries are stored REDACTED (packages/capture/src/redact.js). Live session material
--- is never kept here — it is sealed into connector_credentials at upload time and the
+-- is never kept here, it is sealed into connector_credentials at upload time and the
 -- copy in the capture is blanked, so this table can be read by an operator or an agent
 -- without handing out a working session.
 

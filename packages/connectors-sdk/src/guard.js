@@ -1,8 +1,7 @@
-// PortalGuard — the safety governor every reverse-engineered connector calls through.
+// PortalGuard, the safety governor every reverse-engineered connector calls through.
 //
 // Official APIs publish their limits and expect automation. Seller portals publish
-// nothing and are watched by anti-bot systems, so the risk is not "a request fails" —
-// it is "the account gets flagged". This module makes our traffic look like a careful
+// nothing and are watched by anti-bot systems, so the risk is not "a request fails", // it is "the account gets flagged". This module makes our traffic look like a careful
 // human operator and, crucially, makes it STOP on the first sign of trouble instead of
 // hammering into a block.
 //
@@ -11,11 +10,11 @@
 //      single cookie is the loudest possible bot signal.
 //   2. Paced with jitter. A fixed interval is itself a fingerprint; real clicking is
 //      irregular, so the delay is randomized within a band.
-//   3. Obey the server. 429/503 with Retry-After waits exactly that long — arguing with
+//   3. Obey the server. 429/503 with Retry-After waits exactly that long, arguing with
 //      an explicit backoff instruction is how soft limits become hard bans.
 //   4. Back off exponentially on repeated failure, with jitter to avoid lock-step retry.
 //   5. Trip a circuit breaker on block signals (403, CAPTCHA, login redirect). Once
-//      open, we make NO further calls until a human looks — the single most important
+//      open, we make NO further calls until a human looks, the single most important
 //      rule, because retrying into a block is what converts it to a ban.
 //   6. Spend a daily budget. A runaway loop can otherwise issue 100k requests overnight.
 //
@@ -26,12 +25,12 @@ import { CONNECTOR_ERROR_CODES, connectorError } from './errors.js';
 export const DEFAULT_POLICY = Object.freeze({
   minDelayMs: 900,        // floor between two requests to one portal
   jitterMs: 700,          // random extra, so the cadence is never metronomic
-  maxConcurrent: 1,       // serial per portal — never parallelize one session
+  maxConcurrent: 1,       // serial per portal, never parallelize one session
   maxRetries: 2,          // per call, on transient failures only
   // Backoff follows the AWS SDK model: full jitter over an exponential window, capped
   // at 20s, with a LONGER base for throttling than for transient faults. A 429 means
   // the service actively rejected us, so waiting 50ms and trying again is worse than
-  // useless — it deepens the throttle.
+  // useless, it deepens the throttle.
   transientBaseMs: 50,
   throttleBaseMs: 1000,
   backoffMaxMs: 20_000,
@@ -63,7 +62,7 @@ const CAPTCHA_MARKERS = [
 
 /**
  * Classify a response. Returns a BLOCK_SIGNAL or null.
- * `body` is a short prefix of the response text — never the whole payload.
+ * `body` is a short prefix of the response text, never the whole payload.
  */
 export function detectBlock({ status, headers = {}, body = '', finalUrl = '', requestUrl = '' } = {}) {
   if (status === 429) return BLOCK_SIGNALS.RATE_LIMITED;
@@ -117,7 +116,7 @@ class Breaker {
     this.consecutive = 0;
   }
 
-  /** Only a human clears the breaker — an automatic half-open retry is how a soft
+  /** Only a human clears the breaker, an automatic half-open retry is how a soft
    *  block becomes a permanent one. */
   reset() {
     this.consecutive = 0;
@@ -171,7 +170,7 @@ export function createPortalGuard({
 
   /**
    * Full jitter over an exponential window: delay = random(0,1) × min(cap, base × 2^n).
-   * Full jitter — not "half the window plus jitter" — is what actually breaks up a
+   * Full jitter, not "half the window plus jitter", is what actually breaks up a
    * thundering herd, because two clients that failed at the same instant can land
    * anywhere in the window rather than clustering in its upper half.
    */
@@ -183,7 +182,7 @@ export function createPortalGuard({
 
   /**
    * Retry quota. Retrying costs tokens; a success refunds one. When the bucket empties
-   * we stop retrying entirely and fail fast — during a real outage, our retries are
+   * we stop retrying entirely and fail fast, during a real outage, our retries are
    * part of the problem, and backing off helps the portal recover.
    */
   function spendRetryToken(kind) {
@@ -225,7 +224,7 @@ export function createPortalGuard({
         try {
           res = await fetchOnce();
         } catch (err) {
-          // Transport failure (DNS, socket). Retry — this is not a block signal.
+          // Transport failure (DNS, socket). Retry, this is not a block signal.
           if (attempt === p.maxRetries || !spendRetryToken('transient')) {
             return connectorError(CONNECTOR_ERROR_CODES.UPSTREAM_ERROR,
               `${portal}: ${String(err.message || err)}`, { portal, retryable: true });
@@ -258,7 +257,7 @@ export function createPortalGuard({
         }
 
         if (signal) {
-          // 403 / CAPTCHA / login-redirect: STOP. Do not retry — retrying into a
+          // 403 / CAPTCHA / login-redirect: STOP. Do not retry, retrying into a
           // challenge is precisely what escalates a soft block into a ban.
           breaker.recordBlock(signal, now());
           onAlert?.({ portal, signal, label: meta.label, breakerOpen: breaker.open });

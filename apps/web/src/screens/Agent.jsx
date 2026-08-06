@@ -149,7 +149,7 @@ export default function Agent() {
 
         <div className="agent-tools-strip">
           {connected.length === 0 ? (
-            <span className="meta">No connectors on — <Link to="/connectors">connect one</Link> to give the agent tools.</span>
+            <span className="meta">No connectors on, <Link to="/connectors">connect one</Link> to give the agent tools.</span>
           ) : connected.map((c) => (
             <span key={c.id} className="tools-chip">
               <img src={`/assets/connectors/${c.id}.svg`} alt="" width="14" height="14" onError={(e) => { e.currentTarget.style.display = 'none'; }} />

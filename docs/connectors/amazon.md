@@ -5,7 +5,7 @@
 ## Auth
 | Path | Detail |
 |---|---|
-| **Official (preferred when keys exist)** | SP-API LWA: `AMAZON_SP_CLIENT_ID`, `AMAZON_SP_CLIENT_SECRET`, `AMAZON_SP_REFRESH_TOKEN`. Marketplace `A21TJRUUN4KGV` (amazon.in). Endpoint `https://sellingpartnerapi-eu.amazon.com` (IN is EU region). No SigV4 required for many calls since 2023 — `x-amz-access-token` header. |
+| **Official (preferred when keys exist)** | SP-API LWA: `AMAZON_SP_CLIENT_ID`, `AMAZON_SP_CLIENT_SECRET`, `AMAZON_SP_REFRESH_TOKEN`. Marketplace `A21TJRUUN4KGV` (amazon.in). Endpoint `https://sellingpartnerapi-eu.amazon.com` (IN is EU region). No SigV4 required for many calls since 2023, `x-amz-access-token` header. |
 | **RE / session (primary until SP-API app approved)** | Seller Central cookie jar (`sellercentral.amazon.in`). Needs sanitized HAR for orders / FBA inventory / labels / returns XHR. |
 
 ## Actions (package `@opptra/connectors-amazon`)

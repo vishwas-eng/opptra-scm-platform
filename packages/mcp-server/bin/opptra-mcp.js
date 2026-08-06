@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Opptra SCM MCP server — stdio transport.
+// Opptra SCM MCP server, stdio transport.
 //
 //   claude mcp add opptra -- node packages/mcp-server/bin/opptra-mcp.js \
 //     --url https://scm.opptra.com --token <personal-access-token>
 //
 // Or via env: OPPTRA_URL / OPPTRA_TOKEN. Tokens come from Admin → Access tokens.
 // Messages are newline-delimited JSON-RPC 2.0 (the MCP stdio framing). Logs go to
-// stderr only — a single stray stdout write corrupts the protocol stream.
+// stderr only, a single stray stdout write corrupts the protocol stream.
 import { createInterface } from 'node:readline';
 import { createMcpHandler } from '../src/handler.js';
 

@@ -51,7 +51,7 @@ function makeApiInvokeUc(userEmail) {
 }
 
 /**
- * Let the agent start a channel job and schedule it — the bridge between "tell the
+ * Let the agent start a channel job and schedule it, the bridge between "tell the
  * agent what you want" and the Channels screen. It goes through the same queue and the
  * same Run row as the button, so an agent-started sync is attributed and audited
  * identically to a human-started one.
@@ -109,7 +109,7 @@ export function makeToolExecutor({ userEmail, connectedIds }) {
   });
 }
 
-/** Capability catalog for docs/debug — includes disabled connectors' planned actions. */
+/** Capability catalog for docs/debug, includes disabled connectors' planned actions. */
 export function listAllCapabilities() {
   const cfg = config();
   const caps = [];

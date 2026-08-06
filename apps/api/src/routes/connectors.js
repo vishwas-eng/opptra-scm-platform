@@ -66,7 +66,7 @@ export default async function connectorRoutes(app) {
     capabilities: catalog.listCapabilities(),
   }));
 
-  // Vault metadata only — live ping is POST invoke { action: 'health.ping' }.
+  // Vault metadata only, live ping is POST invoke { action: 'health.ping' }.
   app.get('/api/connectors/unicommerce/health', { preValidation: opsOnly }, async () => {
     const session = await sessionVaultMeta();
     return {

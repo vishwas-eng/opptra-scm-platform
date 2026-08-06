@@ -14,7 +14,7 @@ Companion to `docs/CONNECTOR-MASTER-PLAN.md` and `docs/REVERSE-ENGINEERING-PLAYB
 
 Shared machinery: `@opptra/agent-connectors` (tool specs + executor + status, used by API chat AND worker playbooks), `@opptra/connectors-sdk` (`connectorError` taxonomy: `AUTH_REQUIRED / AUTH_EXPIRED / SCOPE_MISSING / PERMISSION_DENIED / NOT_BOUND / NOT_FOUND / INVALID_INPUT / RATE_LIMITED / UPSTREAM_ERROR / TIMEOUT / COMING_SOON / NOT_CONNECTED / UNKNOWN_ACTION / AWAITING_HAR`, with `retryable` semantics).
 
-## Agent panel (Beta) — live vs coming soon
+## Agent panel (Beta), live vs coming soon
 
 **LIVE** (Connect enabled, agent tools work when connected):
 - Unicommerce

@@ -38,7 +38,7 @@ export function decryptRefreshToken(stored) {
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
   } catch {
-    throw new Error('Failed to decrypt Google refresh token — reconnect Google on Connectors');
+    throw new Error('Failed to decrypt Google refresh token, reconnect Google on Connectors');
   }
 }
 

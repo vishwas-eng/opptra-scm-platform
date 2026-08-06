@@ -1,5 +1,5 @@
--- Daily playbooks could only fire on a whole UTC hour, so "every day 9:00 IST" — the
--- literal thing ops ask for — was unrepresentable (IST is UTC+5:30, i.e. 03:30 UTC).
+-- Daily playbooks could only fire on a whole UTC hour, so "every day 9:00 IST", the
+-- literal thing ops ask for, was unrepresentable (IST is UTC+5:30, i.e. 03:30 UTC).
 -- Store the wall-clock time the operator picked plus its IANA zone, and let BullMQ's
 -- scheduler do the conversion (cron pattern + tz).
 --

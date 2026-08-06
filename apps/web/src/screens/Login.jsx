@@ -7,7 +7,7 @@ import './login.css';
 
 // Google Identity Services can fail to arrive for reasons the user can act on (ad
 // blocker, offline, corporate proxy). Left alone it just renders nothing, so the page
-// looks broken with no explanation — hence the watchdog.
+// looks broken with no explanation, hence the watchdog.
 const GIS_WATCHDOG_MS = 6000;
 
 export default function Login() {
@@ -92,8 +92,7 @@ export default function Login() {
         <img className="login-logo" src="/assets/opptra-logo-white.svg" alt="Opptra" width="132" />
         <h1>Supply chain, <span>on autopilot</span></h1>
         <p>
-          One workspace for every marketplace, every warehouse and every daily job —
-          with an agent that can run them for you.
+          One workspace for every marketplace, every warehouse and every daily job, with an agent that can run them for you.
         </p>
 
         <div className="login-actions">

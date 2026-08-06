@@ -1,11 +1,11 @@
-// MCP bridge endpoints — the server side of packages/mcp-server (Claude Code / Cursor).
+// MCP bridge endpoints, the server side of packages/mcp-server (Claude Code / Cursor).
 //
 // The editor-side bridge is a thin stdio↔HTTPS shim; ALL brains stay here: connector
 // registry, session vault, worker queue, rate limits, sanitizeResult, runs/audit. An MCP
 // client therefore has exactly the same power and the same attribution as the same user
-// in the web app's Agent chat — never more.
+// in the web app's Agent chat, never more.
 //
-// Auth: personal access token from the Admin tab (ingest_tokens — hashed at rest,
+// Auth: personal access token from the Admin tab (ingest_tokens, hashed at rest,
 // revocable, per-user). Bearer or X-Opptra-Token header.
 import { createHash } from 'node:crypto';
 import { query, audit } from '@opptra/core';

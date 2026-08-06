@@ -4,17 +4,17 @@
 
 ## Capture checklist
 
-Follow **`HAR-CAPTURE-CHECKLIST.md`** — it is the full handoff contract (4 flows, sanitization rules, what makes a capture sufficient). Send the HAR privately, never via git or `#scm-ops`.
+Follow **`HAR-CAPTURE-CHECKLIST.md`**, it is the full handoff contract (4 flows, sanitization rules, what makes a capture sufficient). Send the HAR privately, never via git or `#scm-ops`.
 
 ## Scaffold state (package `@opptra/connectors-nykaa`)
 
 | Action | Backend | Ready? |
 |---|---|---|
-| `health.ping` | session/RE | **awaiting HAR** — refuses with `{ code: 'AWAITING_HAR' }` |
+| `health.ping` | session/RE | **awaiting HAR**, refuses with `{ code: 'AWAITING_HAR' }` |
 | `orders.search` | session/RE | awaiting HAR |
 | `inventory.get` | session/RE | awaiting HAR |
 
-Connector is disabled in the UI; `POST /api/agent/connectors/nykaa/connect` returns 403 and no Agent tool is exposed. It flips to Live only after a real session test against the real portal — never because the scaffold exists.
+Connector is disabled in the UI; `POST /api/agent/connectors/nykaa/connect` returns 403 and no Agent tool is exposed. It flips to Live only after a real session test against the real portal, never because the scaffold exists.
 
 ## To be filled from the capture
 

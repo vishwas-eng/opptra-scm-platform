@@ -19,13 +19,13 @@ const ajv = new Ajv({ allErrors: true, coerceTypes: false, strict: false });
  * Create an isolated action registry.
  *
  * `inputSchema` is ENFORCED, not documentation. Callers reach actions through an HTTP
- * route (or MCP tools/call) whose own body schema can only say `params: object` — it
+ * route (or MCP tools/call) whose own body schema can only say `params: object`, it
  * cannot know which action is being invoked when it compiles. Without per-action
  * validation here, a 50 000-entry `skus` array goes straight to the vendor on the
  * tenant's credential, and an arbitrary `facility` re-pins the session-global facility
  * for every job that follows.
  *
- * Schemas compile at registration, so an unparseable schema fails at boot — never by
+ * Schemas compile at registration, so an unparseable schema fails at boot, never by
  * silently skipping validation on a live call.
  */
 export function createRegistry() {
@@ -150,7 +150,7 @@ function scrubString(s) {
  * Three jobs, in order:
  *  1. redact secret-looking KEYS and secret-looking VALUES,
  *  2. cap array lengths so one huge list cannot blow the context,
- *  3. keep the whole thing under maxChars — by shrinking the biggest arrays, NOT by
+ *  3. keep the whole thing under maxChars, by shrinking the biggest arrays, NOT by
  *     replacing the result with an opaque preview blob. The old behaviour threw away
  *     `ok` / `code` / `error` on any result over 4 KB, so a 50-row Waypoint answer came
  *     back as `{truncated, preview}` and every `r.ok !== false` check silently passed on
@@ -201,7 +201,7 @@ export function sanitizeResult(obj, opts = {}) {
       cleaned.droppedItems = Object.fromEntries(
         shrunk.map((k) => [k, { returned: cleaned[k].length, total: originalLengths[k] }]),
       );
-      cleaned.truncationNote = 'result shortened to fit the agent context — re-run with a narrower range/filter for the rest';
+      cleaned.truncationNote = 'result shortened to fit the agent context, re-run with a narrower range/filter for the rest';
       // A sibling scalar that still reports the FULL length (count/total/limit) would tell
       // the model it has 50 rows while only 25 survive, and it would reason over rows that
       // are not in front of it. Correct any counter that matched a shrunk array.

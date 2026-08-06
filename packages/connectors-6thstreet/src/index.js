@@ -4,7 +4,7 @@ export const CONNECTOR_ID = '6thstreet';
 export const CONNECTOR_NAME = '6th Street';
 
 /**
- * 6th Street connector — RE/session primary (seller portal + IBM OMS behind VPN).
+ * 6th Street connector, RE/session primary (seller portal + IBM OMS behind VPN).
  * PRIMARY: picklist + invoice + label → email (pipeline).
  * SECONDARY: UC → portal inventory push.
  * Selling price: invoice only (enforced in automation-6thstreet).
@@ -73,7 +73,7 @@ export function createSixthStreetConnector({ cfg = {}, getSecret, httpFetch = fe
           label: 'Filename often SAC########.pdf; embeds order id + COD total',
           packEmailNames: '{orderId}_picklist.xlsx | {orderId}_invoice.pdf | {orderId}_label.pdf',
         },
-        note: 'Seller-portal APIs reversed (inventory/price). Picklist/invoice/label = IBM OMS behind private VPN 10.61.1.11 — need public Forti hostname or Path B HAR. See docs/connectors/6thstreet-API-REVERSE.md',
+        note: 'Seller-portal APIs reversed (inventory/price). Picklist/invoice/label = IBM OMS behind private VPN 10.61.1.11, need public Forti hostname or Path B HAR. See docs/connectors/6thstreet-API-REVERSE.md',
       };
       if (params?.probe) {
         out.probes = {
@@ -92,9 +92,9 @@ export function createSixthStreetConnector({ cfg = {}, getSecret, httpFetch = fe
   });
 
   for (const [id, title, desc] of [
-    ['picklist.download', 'Download pick list', 'Excel pick list from portal/OMS — HAR required'],
-    ['invoice.download', 'Download invoice', 'Invoice PDF (selling price source) — HAR required'],
-    ['label.download', 'Download shipping label', 'Label PDF at pack — HAR required'],
+    ['picklist.download', 'Download pick list', 'Excel pick list from portal/OMS, HAR required'],
+    ['invoice.download', 'Download invoice', 'Invoice PDF (selling price source), HAR required'],
+    ['label.download', 'Download shipping label', 'Label PDF at pack, HAR required'],
   ]) {
     registry.register({
       id,

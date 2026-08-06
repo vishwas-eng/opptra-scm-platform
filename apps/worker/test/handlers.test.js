@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { makeHandlers } from '../src/handlers.js';
 
 // Build handlers with fakes. This exercises the SAME job.data shape the API enqueues
-// ({ runUid, input }) against the SAME destructuring the worker uses — the exact
+// ({ runUid, input }) against the SAME destructuring the worker uses, the exact
 // contract that C1 broke (inventory.run read input.form when the API sent it flat).
 function harness() {
   const finished = [];
@@ -115,7 +115,7 @@ test('connector.unicommerce.invoke reads { runUid, input:{action,params} } and f
 // The worker must never reach across into apps/api source. It used to import
 // apps/api/src/agent/catalog.js for playbook replay, which dragged in the API's BullMQ
 // producer: a playbook step calling Unicommerce would ENQUEUE a job and then wait for it
-// while holding the only slot of the concurrency-1 worker — a guaranteed deadlock until
+// while holding the only slot of the concurrency-1 worker, a guaranteed deadlock until
 // the 90s poll timed out. Shared code now lives in @opptra/agent-connectors.
 test('ARCHITECTURE: worker never imports apps/api source (playbook deadlock regression)', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
@@ -125,7 +125,7 @@ test('ARCHITECTURE: worker never imports apps/api source (playbook deadlock regr
   for (const file of readdirSync(srcDir).filter((f) => f.endsWith('.js'))) {
     const source = readFileSync(path.join(srcDir, file), 'utf8');
     assert.equal(/apps\/api|\.\.\/\.\.\/api\//.test(source), false,
-      `${file} imports API app source — move the shared code into a package instead`);
+      `${file} imports API app source, move the shared code into a package instead`);
   }
 });
 
@@ -146,7 +146,7 @@ test('agent.playbook.run calls the UC connector DIRECTLY, never through the queu
     },
   });
 
-  // No playbookUid short-circuits before any DB access — enough to prove the handler
+  // No playbookUid short-circuits before any DB access, enough to prove the handler
   // exists and refuses cleanly; the direct-invoke wiring is asserted below by source.
   const bad = await handlers['agent.playbook.run']({ data: {} });
   assert.equal(bad.ok, false);

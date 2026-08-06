@@ -51,7 +51,7 @@ function GmailPanel({ status, onDisconnect, busy }) {
       {status.accountMismatch && (
         <p className="field-error">
           Gmail is connected as {status.googleEmail}, which is not the account you signed in
-          with — drafts will land in that mailbox.
+          with, drafts will land in that mailbox.
         </p>
       )}
       {status.needsReconnect && missing.length > 0 && (
@@ -108,7 +108,7 @@ function DraftCard({ draft, state, onSend }) {
           {draft.sos?.length || 0} order{draft.sos?.length === 1 ? '' : 's'} · {draft.attachmentCount || 0} attachment{draft.attachmentCount === 1 ? '' : 's'}
         </span>
       </header>
-      <p className="meta">To: {(draft.to || []).join(', ') || '—'}</p>
+      <p className="meta">To: {(draft.to || []).join(', ') || '-'}</p>
       {draft.cc?.length > 0 && <p className="meta">CC: {draft.cc.join(', ')}</p>}
       <div className="pk-draft-actions">
         {draft.viewUrl && (
@@ -205,7 +205,7 @@ export default function Packing() {
     preview.start('/api/automations/packing/preview', { saleOrders });
   };
 
-  /** Finance is an extra CC, not a field of its own — the API only knows to/cc. */
+  /** Finance is an extra CC, not a field of its own, the API only knows to/cc. */
   const buildRecipients = () => {
     const recipients = {};
     for (const [warehouse, pick] of Object.entries(picked)) {
@@ -284,7 +284,7 @@ export default function Packing() {
           >
             3 · Invoice + E-way drafts
           </Button>
-          {!hasPreview && <span className="meta">Preview first — the drafts go out to whoever is ticked below.</span>}
+          {!hasPreview && <span className="meta">Preview first, the drafts go out to whoever is ticked below.</span>}
         </div>
       </Panel>
 

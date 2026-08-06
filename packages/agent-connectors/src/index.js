@@ -1,7 +1,7 @@
-// @opptra/agent-connectors — the ONE source of truth for Agent connector metadata,
+// @opptra/agent-connectors, the ONE source of truth for Agent connector metadata,
 // tool specs, tool execution and status assembly. Both hosts import from here:
-//   apps/api    (chat, connectors panel)  — invokeUc = enqueue + poll Run
-//   apps/worker (playbook replay)         — invokeUc = direct connector call
+//   apps/api    (chat, connectors panel), invokeUc = enqueue + poll Run
+//   apps/worker (playbook replay), invokeUc = direct connector call
 // Keeping this in a package (not inside apps/api) means the worker no longer reaches
 // across app boundaries into API source files.
 export {

@@ -1,13 +1,13 @@
-// Report / export-job actions — the exact 4-step contract proven in production by
+// Report / export-job actions, the exact 4-step contract proven in production by
 // uc-fmcg-daily-reports (config → create → poll list → download):
 //   1. GET  /data/tasks/export/config/get?exportConfigName=<name>   → columns + filters
 //   2. POST /data/tasks/export/job/create                            → { exportJobId }
-//      NOTE: the field really is spelled `exportColums` — Unicommerce's own typo, and
+//      NOTE: the field really is spelled `exportColums`, Unicommerce's own typo, and
 //      the required spelling. Do not "fix" it.
 //   3. GET  /data/user/exportJobs                                    → poll by id
 //   4. GET  <exportFilePath> with the session cookie                 → CSV bytes
 //
-// A successful job with exportCount 0 has NO exportFilePath — that is an empty report,
+// A successful job with exportCount 0 has NO exportFilePath, that is an empty report,
 // not a failure. All endpoints are facility-scoped session calls.
 
 const EXPORT_JOB_TERMINAL_OK = new Set(['COMPLETE', 'COMPLETED', 'SUCCESS']);
@@ -19,7 +19,7 @@ export function registerReportActions(register) {
     title: 'List export report types',
     mutates: false,
     backend: 're',
-    description: 'GET /data/tasks/export/configs — every export job type this tenant can run (names are tenant-specific; probe before hardcoding).',
+    description: 'GET /data/tasks/export/configs, every export job type this tenant can run (names are tenant-specific; probe before hardcoding).',
     inputSchema: { type: 'object', additionalProperties: false, properties: { facility: { type: 'string', maxLength: 60 } } },
     handler: async (uc, params) => {
       const opts = params.facility ? { facility: params.facility } : {};
@@ -30,7 +30,7 @@ export function registerReportActions(register) {
         ok: true,
         count: found ? configs.length : 0,
         configs: found ? configs : [],
-        // Key names only when the probe misses — never the raw body (secret/PII risk).
+        // Key names only when the probe misses, never the raw body (secret/PII risk).
         ...(found ? {} : { responseKeys: d && typeof d === 'object' ? Object.keys(d).slice(0, 25) : [] }),
       };
     },
@@ -41,7 +41,7 @@ export function registerReportActions(register) {
     title: 'Get export report config',
     mutates: false,
     backend: 're',
-    description: 'GET /data/tasks/export/config/get?exportConfigName=<name> — column ids + filter ids for one report type (e.g. "DATATABLE SEARCH INVENTORY").',
+    description: 'GET /data/tasks/export/config/get?exportConfigName=<name>, column ids + filter ids for one report type (e.g. "DATATABLE SEARCH INVENTORY").',
     inputSchema: {
       type: 'object',
       required: ['name'],
@@ -75,7 +75,7 @@ export function registerReportActions(register) {
     title: 'Create export job',
     mutates: true, // creates a server-side job; dry-run previews the exact body instead
     backend: 're',
-    description: 'POST /data/tasks/export/job/create — ONETIME export. Columns default to every exportable column from the config. dateFilterId + fromMs/toMs add one date-range filter.',
+    description: 'POST /data/tasks/export/job/create, ONETIME export. Columns default to every exportable column from the config. dateFilterId + fromMs/toMs add one date-range filter.',
     inputSchema: {
       type: 'object',
       required: ['name'],
@@ -83,7 +83,7 @@ export function registerReportActions(register) {
       properties: {
         name: { type: 'string', minLength: 2, maxLength: 120, description: 'exportJobTypeName, e.g. "DATATABLE SEARCH INVENTORY"' },
         columns: { type: 'array', maxItems: 200, items: { type: 'string', maxLength: 80 } },
-        dateFilterId: { type: 'string', maxLength: 60, description: 'e.g. createdIn / addedOn — from reports.exportConfigGet' },
+        dateFilterId: { type: 'string', maxLength: 60, description: 'e.g. createdIn / addedOn, from reports.exportConfigGet' },
         fromMs: { type: 'integer', description: 'epoch ms lower bound (needs dateFilterId)' },
         toMs: { type: 'integer', description: 'epoch ms upper bound (needs dateFilterId)' },
         reportName: { type: 'string', maxLength: 120 },
@@ -120,7 +120,7 @@ export function registerReportActions(register) {
 
       const body = {
         exportJobTypeName: name,
-        exportColums: columns, // sic — see file header
+        exportColums: columns, // sic, see file header
         exportFilters,
         notificationEmail: '',
         frequency: 'ONETIME',
@@ -143,7 +143,7 @@ export function registerReportActions(register) {
     title: 'List export jobs',
     mutates: false,
     backend: 're',
-    description: 'GET /data/user/exportJobs — current user\'s export jobs with status + download path. Terminal OK: COMPLETE/COMPLETED/SUCCESS; fail: FAILED/ERROR/CANCELLED.',
+    description: 'GET /data/user/exportJobs, current user\'s export jobs with status + download path. Terminal OK: COMPLETE/COMPLETED/SUCCESS; fail: FAILED/ERROR/CANCELLED.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,

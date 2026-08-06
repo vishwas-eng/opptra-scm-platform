@@ -1,4 +1,4 @@
-<title>Opptra SCM Platform — GCP Infrastructure</title>
+<title>Opptra SCM Platform, GCP Infrastructure</title>
 <style>
   :root {
     --navy: #131A48; --navy-2: #232c63; --orange: #FF5800; --orange-soft: #ffe9df;
@@ -74,13 +74,13 @@
   <header class="top">
     <div class="eyebrow">Opptra SCM Platform</div>
     <h1>One VM. One static IP. Nothing else on Google Cloud.</h1>
-    <p class="lead">The whole backend — API, worker, database, queue, TLS — runs as five containers on a single Compute Engine instance. Google Cloud's job is narrow: hold that box, and give it one fixed address Unicommerce can whitelist.</p>
+    <p class="lead">The whole backend, API, worker, database, queue, TLS, runs as five containers on a single Compute Engine instance. Google Cloud's job is narrow: hold that box, and give it one fixed address Unicommerce can whitelist.</p>
     <div class="cost-badge"><span class="amt">₹2,500–3,500</span><span class="per">/ month, all-in</span></div>
   </header>
 
   <section id="diagram">
     <h2>Infrastructure</h2>
-    <p class="sec-lead">Three nested boundaries: the public internet, the Google Cloud project, and the VM's private Docker network. Only Caddy is reachable from outside — Postgres and Redis never leave the box.</p>
+    <p class="sec-lead">Three nested boundaries: the public internet, the Google Cloud project, and the VM's private Docker network. Only Caddy is reachable from outside, Postgres and Redis never leave the box.</p>
     <div class="canvas">
 <pre class="mermaid">
 %%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800','clusterBkg':'#f6f5f1','clusterBorder':'#c9cddb'}}}%%
@@ -124,10 +124,10 @@ flowchart TB
 </pre>
     </div>
     <div class="legend">
-      <div class="lg"><span class="dot orange"></span><div><b>Static IP</b><p>The one resource everything hinges on — the address Unicommerce whitelists.</p></div></div>
-      <div class="lg"><span class="dot gcp"></span><div><b>Public-facing container</b><p>Caddy, API, worker — reachable inside the VM's network, only Caddy from outside.</p></div></div>
-      <div class="lg"><span class="dot int"></span><div><b>Internal-only store</b><p>Postgres, Redis — no published port, never touch the internet.</p></div></div>
-      <div class="lg"><span class="dot ext"></span><div><b>Outside the project</b><p>Users, Unicommerce, Google Workspace — everything the platform talks to.</p></div></div>
+      <div class="lg"><span class="dot orange"></span><div><b>Static IP</b><p>The one resource everything hinges on, the address Unicommerce whitelists.</p></div></div>
+      <div class="lg"><span class="dot gcp"></span><div><b>Public-facing container</b><p>Caddy, API, worker, reachable inside the VM's network, only Caddy from outside.</p></div></div>
+      <div class="lg"><span class="dot int"></span><div><b>Internal-only store</b><p>Postgres, Redis, no published port, never touch the internet.</p></div></div>
+      <div class="lg"><span class="dot ext"></span><div><b>Outside the project</b><p>Users, Unicommerce, Google Workspace, everything the platform talks to.</p></div></div>
     </div>
   </section>
 
@@ -139,7 +139,7 @@ flowchart TB
       <tbody>
         <tr><td>API enabled</td><td><code>compute.googleapis.com</code></td><td>The only Google API this project uses.</td></tr>
         <tr><td>VM</td><td><code>e2-medium</code> · 2 vCPU · 4 GB RAM · Debian 12 · 50 GB balanced disk</td><td>Runs all five containers; no GPU, no managed DB needed at this scale.</td></tr>
-        <tr><td>Static IP</td><td>1 reserved external address</td><td>What gets sent to Unicommerce for whitelisting — must never change.</td></tr>
+        <tr><td>Static IP</td><td>1 reserved external address</td><td>What gets sent to Unicommerce for whitelisting, must never change.</td></tr>
         <tr><td>Firewall rule</td><td>Allow <code>tcp:80</code>, <code>tcp:443</code> only</td><td>Everything else stays closed; SSH via IAP/allowlist, not a public port.</td></tr>
         <tr><td>Region</td><td><code>asia-south1</code> (Mumbai)</td><td>Lowest latency to Unicommerce and NIC; data stays in India.</td></tr>
       </tbody>
@@ -154,7 +154,7 @@ flowchart TB
       <tbody>
         <tr><td>caddy</td><td>caddy:2-alpine</td><td>TLS termination (auto-HTTPS), the only public door.</td></tr>
         <tr><td>api</td><td>built from source</td><td>Auth, validation, serves the web app, enqueues jobs. Never calls Unicommerce.</td></tr>
-        <tr><td>worker</td><td>built from source</td><td>The only process that talks to Unicommerce and Google — runs every automation.</td></tr>
+        <tr><td>worker</td><td>built from source</td><td>The only process that talks to Unicommerce and Google, runs every automation.</td></tr>
         <tr><td>postgres</td><td>postgres:16-alpine</td><td>Runs, audit log, users, the session row. Internal network only.</td></tr>
         <tr><td>redis</td><td>redis:7-alpine</td><td>Job queue (BullMQ). Internal network only.</td></tr>
       </tbody>
@@ -166,11 +166,11 @@ flowchart TB
     <p class="sec-lead">Each thing this design leaves out was a real option, considered and set aside for a specific reason.</p>
     <div class="rationale">
       <div class="rq"><div class="q">Why not Cloud SQL / Memorystore for Postgres and Redis?</div><div class="a">At ~10 users and a handful of automations, self-hosted Postgres and Redis on the same box are simpler and cheaper. Backups are a nightly <code style="font-family:var(--mono)">pg_dump</code> cron rather than a managed line item.</div></div>
-      <div class="rq"><div class="q">Why not Cloud Run?</div><div class="a">Cloud Run needs a VPC connector plus Cloud NAT just to get a static outbound IP — and a static IP is mandatory for the Unicommerce whitelist regardless. That's extra cost and moving parts for no benefit over one VM.</div></div>
-      <div class="rq"><div class="q">Why not a load balancer or Kubernetes?</div><div class="a">Exactly one worker process is allowed to own the Unicommerce session at a time — that's a correctness rule, not a scaling limit. There's nothing to horizontally scale yet.</div></div>
-      <div class="rq"><div class="q">What changes if this outgrows the box?</div><div class="a">Bump the machine type. The static IP, the containers, and the architecture stay identical — no rebuild.</div></div>
+      <div class="rq"><div class="q">Why not Cloud Run?</div><div class="a">Cloud Run needs a VPC connector plus Cloud NAT just to get a static outbound IP, and a static IP is mandatory for the Unicommerce whitelist regardless. That's extra cost and moving parts for no benefit over one VM.</div></div>
+      <div class="rq"><div class="q">Why not a load balancer or Kubernetes?</div><div class="a">Exactly one worker process is allowed to own the Unicommerce session at a time, that's a correctness rule, not a scaling limit. There's nothing to horizontally scale yet.</div></div>
+      <div class="rq"><div class="q">What changes if this outgrows the box?</div><div class="a">Bump the machine type. The static IP, the containers, and the architecture stay identical, no rebuild.</div></div>
     </div>
   </section>
 
-  <footer>Opptra SCM Platform — GCP infrastructure reference. Companion to the full system-design diagram (automation flows, auth, session lifecycle).</footer>
+  <footer>Opptra SCM Platform, GCP infrastructure reference. Companion to the full system-design diagram (automation flows, auth, session lifecycle).</footer>
 </div>

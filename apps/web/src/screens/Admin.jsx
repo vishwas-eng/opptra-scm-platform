@@ -40,7 +40,7 @@ function AccessTokens() {
     <Panel title="Access tokens">
       <p className="lead">
         One token per machine. These authenticate the Capture extension and any MCP
-        client (Claude Code, Cursor) as their owner — every call they make is audited
+        client (Claude Code, Cursor) as their owner, every call they make is audited
         under that person&apos;s name.
       </p>
 
@@ -53,7 +53,7 @@ function AccessTokens() {
 
       {fresh && (
         <div className="token-reveal">
-          <p className="meta">Copy this now — it is never shown again.</p>
+          <p className="meta">Copy this now, it is never shown again.</p>
           <pre className="output">{fresh}</pre>
         </div>
       )}
@@ -107,7 +107,7 @@ function Users() {
       <DataTable
         columns={[
           { key: 'email', label: 'Email' },
-          { key: 'name', label: 'Name', render: (u) => u.name || '—' },
+          { key: 'name', label: 'Name', render: (u) => u.name || '-' },
           {
             key: 'role',
             label: 'Role',

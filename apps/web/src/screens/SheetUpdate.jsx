@@ -24,7 +24,7 @@ const DETAIL_COLUMNS = [
 ];
 
 /**
- * The two fills report different fields — the first what UC resolved, the second the
+ * The two fills report different fields, the first what UC resolved, the second the
  * invoice join. Showing the union would be a wall of empty cells, so the columns follow
  * whatever the run actually populated.
  */
@@ -98,7 +98,7 @@ export default function SheetUpdate() {
         <Field
           label="SO / GP numbers"
           wide
-          hint="Optional — separated by spaces, commas or new lines"
+          hint="Optional, separated by spaces, commas or new lines"
           error={invalid}
         >
           <Textarea
@@ -129,7 +129,7 @@ export default function SheetUpdate() {
           progress={progress}
           error={error}
           result={result}
-          idle={<EmptyState title="No sheet run yet" icon="▦">Pick a step above — each one is safe to re-run.</EmptyState>}
+          idle={<EmptyState title="No sheet run yet" icon="▦">Pick a step above, each one is safe to re-run.</EmptyState>}
         >
           <ResultHead
             ok={r.ok}

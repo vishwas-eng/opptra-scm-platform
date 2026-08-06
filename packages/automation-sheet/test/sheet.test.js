@@ -451,8 +451,7 @@ test('second-fill: repairs a date tab whose header row was damaged', async () =>
   const { secondFill } = makeSheetPipeline(uc, CFG, google);
   const r = await secondFill({ saleOrders: ['SO02780'] });
   assert.equal(r.ok, true, r.error || r.summary);
-  // Either repaired the base tab or opened _1 after treating base as occupied —
-  // either way headers must be real SO/GP headers.
+  // Either repaired the base tab or opened _1 after treating base as occupied, // either way headers must be real SO/GP headers.
   const writtenTab = r.counts.createdTab || tab;
   assert.deepEqual(state.sheets[writtenTab][1], HEADERS, 'headers restored from Master');
   assert.ok(state.sheets[writtenTab].some((row, i) => i >= 2 && row[SO_COL] === 'SO02780'));

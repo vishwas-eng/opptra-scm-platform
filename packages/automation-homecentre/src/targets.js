@@ -14,7 +14,7 @@ function truthy(v) {
  * Parse HC_SKU_MAP_JSON.
  *
  * A malformed map used to be swallowed into `{}`, which is indistinguishable from "no
- * map configured" — so a typo in the env silently degraded every order to the identity
+ * map configured", so a typo in the env silently degraded every order to the identity
  * mapping (or, on staging, to the `optest` fallback) and the sync still reported
  * success. A bad map is a configuration error and must be loud.
  */
@@ -25,7 +25,7 @@ export function parseSkuMap(raw) {
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    throw new Error(`HC_SKU_MAP_JSON is not valid JSON (${err.message}). Fix it or unset it — an unparseable map would silently map every SKU to itself.`);
+    throw new Error(`HC_SKU_MAP_JSON is not valid JSON (${err.message}). Fix it or unset it, an unparseable map would silently map every SKU to itself.`);
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('HC_SKU_MAP_JSON must be a JSON object of {"hcSku":"ucSku"} pairs.');
@@ -49,7 +49,7 @@ export function resolveHcMode(cfg, input = {}) {
   // UAE/production SO create only when HC_LIVE + orders target uae + not dry-run.
   const allowUaeSoWrite = !dryRun && live && ordersTarget === 'uae';
   const allowOrderWrite = allowStagingSoWrite || allowUaeSoWrite;
-  // Vinculum inventory upload is always a marketplace write — HC_LIVE only.
+  // Vinculum inventory upload is always a marketplace write, HC_LIVE only.
   const allowVinculumInventoryWrite = !dryRun && live;
 
   let modeLabel = 'dry-run';
@@ -95,7 +95,7 @@ export function stagingUcConfig(cfg) {
 }
 
 export function uaeUcConfig(cfg) {
-  // Dedicated UAE bot — never fall back to India UC_USER / sc.automations.
+  // Dedicated UAE bot, never fall back to India UC_USER / sc.automations.
   // Inventory for OppDoor HC seller SKUs lives at facility `opptrauae` (not OPP_RFS_FZ_UAE).
   // Prefer HC_UC_UAE_INV_FACILITY for inventory sync; session may still use OPP_RFS_FZ_UAE.
   return {
@@ -119,7 +119,7 @@ export function uaeUcConfig(cfg) {
 }
 
 export function ksaUcConfig(cfg) {
-  // Dedicated KSA bot — never India UC_USER.
+  // Dedicated KSA bot, never India UC_USER.
   return {
     label: 'ksa',
     baseUrl: pick(cfg, ['HC_UC_KSA_BASE_URL'], 'https://opptraksa.unicommerce.com'),
@@ -142,8 +142,47 @@ export function ordersUcConfig(cfg) {
   return mode.ordersTarget === 'uae' ? uaeUcConfig(cfg) : stagingUcConfig(cfg);
 }
 
-export function inventoryUcConfig(cfg) {
-  return uaeUcConfig(cfg);
+/**
+ * UC tenant that holds the stock for a Home Centre region.
+ *
+ * This used to be hardwired to UAE, which made KSA impossible: it would have read UAE
+ * stock and pushed it to the KSA storefront. Home Centre runs the two as separate
+ * marketplaces, and each one's inventory lives in its own UC instance.
+ */
+export function inventoryUcConfig(cfg, region = 'uae') {
+  return normalizeHcRegion(region) === 'ksa' ? ksaUcConfig(cfg) : uaeUcConfig(cfg);
+}
+
+export const HC_REGIONS = Object.freeze(['uae', 'ksa']);
+
+export function normalizeHcRegion(region) {
+  const r = String(region || 'uae').trim().toLowerCase();
+  return HC_REGIONS.includes(r) ? r : 'uae';
+}
+
+/**
+ * Vinculum seller login for a region.
+ *
+ * Both regions live on the SAME Vinculum portal URL; only the seller account differs.
+ * Per-region credentials fall back to the shared pair so an existing single-region
+ * deployment keeps working unchanged.
+ */
+export function vinculumCredsFor(cfg, region = 'uae') {
+  const r = normalizeHcRegion(region);
+  const suffix = r.toUpperCase();
+  const user = pick(cfg, [`VINCULUM_${suffix}_USER`, 'VINCULUM_USER'], '');
+  const pass = pick(cfg, [`VINCULUM_${suffix}_PASS`, 'VINCULUM_PASS'], '');
+  return {
+    region: r,
+    baseUrl: cfg.VINCULUM_BASE_URL || 'https://landmarkgroup.vinsupplier.com/eRetailWeb',
+    user,
+    pass,
+    // The seller SKU grid is filtered by vendor code, which IS the login id unless
+    // overridden. Getting this wrong returns another seller's catalogue.
+    vendorCode: pick(cfg, [`HC_VINCULUM_${suffix}_VENDOR_CODE`, 'HC_VINCULUM_VENDOR_CODE'], '') || user,
+    sellerCode: pick(cfg, [`HC_SELLER_CODE_${suffix}`], ''),
+    configured: !!(user && pass),
+  };
 }
 
 /** Build a dedicated UcClient for a HC target (does not touch the India bot singleton). */

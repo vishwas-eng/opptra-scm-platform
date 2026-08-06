@@ -23,7 +23,7 @@ function headerArrayToObject(list = []) {
 
 /**
  * HAR keeps cookies in dedicated arrays as well as in headers, and Chrome's
- * "Save as HAR (sanitized)" strips the headers but can leave the arrays — so a capture
+ * "Save as HAR (sanitized)" strips the headers but can leave the arrays, so a capture
  * with no Cookie header is not necessarily a capture with no session. Fold the arrays
  * back into header form so one code path downstream sees everything.
  */

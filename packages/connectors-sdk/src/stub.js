@@ -1,6 +1,6 @@
 // Factory for not-yet-cracked channel connectors. A stub earns its place by making the
 // roadmap visible (Connectors page) and by holding a pasted session in the vault so the
-// reverse-engineering pass starts from a live cookie — every action stays behind
+// reverse-engineering pass starts from a live cookie, every action stays behind
 // awaitingHar until a sanitized HAR proves the real endpoints.
 //
 // This replaces five copy-pasted 52-line packages that differed only in id/name/blurb.
@@ -28,7 +28,7 @@ export function createStubConnector({ id, name, portalHint, docSlug, actions, ge
     mutates: false,
     backend: 're',
     awaitingHar: true,
-    description: `Session vault probe — ping URL pending HAR (${portalHint})`,
+    description: `Session vault probe, ping URL pending HAR (${portalHint})`,
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     handler: async () => {
       const sec = getSecret ? await getSecret() : null;
@@ -46,7 +46,7 @@ export function createStubConnector({ id, name, portalHint, docSlug, actions, ge
       mutates: false,
       backend: 're',
       awaitingHar: true,
-      description: `${name} ${action} — HAR required`,
+      description: `${name} ${action}, HAR required`,
       inputSchema: { type: 'object', additionalProperties: false, properties: {} },
       handler: async () => ({ ok: false, awaitingHar: true, error: `${name} ${action} awaiting sanitized HAR.` }),
     });

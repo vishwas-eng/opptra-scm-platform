@@ -190,7 +190,7 @@ export default async function automationRoutes(app) {
       },
     },
   }, async (req, reply) => {
-    // Business rules (GSTIN, Road→vehicle, per-row messages) — even on dry-run.
+    // Business rules (GSTIN, Road→vehicle, per-row messages), even on dry-run.
     const checked = validateEwaybillInput(req.body);
     if (!checked.ok) return rejectInvalid(reply, checked);
     const input = { dryRun: checked.dryRun, rows: checked.rows };
@@ -473,7 +473,7 @@ export default async function automationRoutes(app) {
     },
   }, async (req, reply) => {
     // Scope to the caller, exactly like GET /api/runs does for the list. A run's
-    // `result` holds whatever the automation produced — for Agent playbooks that is the
+    // `result` holds whatever the automation produced, for Agent playbooks that is the
     // contents of the owner's bound spreadsheets and Drive files, and for connector
     // invokes it is full UC order/invoice payloads. A runUid leaking into Slack (alerts
     // carry it) must not turn into another user's data for any signed-in account.
@@ -525,7 +525,7 @@ export default async function automationRoutes(app) {
         facility: c.HC_UC_STAGING_FACILITY,
         channel: c.HC_UC_STAGING_CHANNEL,
         customer: c.HC_UC_STAGING_CUSTOMER || c.HC_CUSTOMER_CODE,
-        // Staging personal/bot only — never India UC_USER / sc.automations.
+        // Staging personal/bot only, never India UC_USER / sc.automations.
         configured: !!(c.HC_UC_STAGING_USER && c.HC_UC_STAGING_PASS),
       },
       uae: {
@@ -533,7 +533,7 @@ export default async function automationRoutes(app) {
         facility: c.HC_UC_UAE_FACILITY,
         channel: c.HC_UC_UAE_CHANNEL,
         customer: c.HC_UC_UAE_CUSTOMER || c.HC_CUSTOMER_CODE,
-        // Dedicated UAE bot only — never India UC_USER / sc.automations.
+        // Dedicated UAE bot only, never India UC_USER / sc.automations.
         configured: !!(c.HC_UC_UAE_USER || c.UC_UAE_USER)
           && !!(c.HC_UC_UAE_PASS || c.UC_UAE_PASS),
       },
@@ -541,7 +541,7 @@ export default async function automationRoutes(app) {
         instance_id: 'ksa',
         baseUrl: c.HC_UC_KSA_BASE_URL,
         facility: c.HC_UC_KSA_FACILITY,
-        // Dedicated KSA bot only — never India UC_USER / sc.automations / HC_UC_USER.
+        // Dedicated KSA bot only, never India UC_USER / sc.automations / HC_UC_USER.
         configured: !!(c.HC_UC_KSA_USER || c.UC_KSA_USER)
           && !!(c.HC_UC_KSA_PASS || c.UC_KSA_PASS),
       },

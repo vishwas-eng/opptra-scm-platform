@@ -1,4 +1,4 @@
-<title>Opptra SCM Platform — System Design</title>
+<title>Opptra SCM Platform, System Design</title>
 <style>
   :root {
     --navy: #131A48; --navy-2: #232c63; --orange: #FF5800; --orange-soft: #ffe9df;
@@ -46,7 +46,7 @@
   h2 .n { font-family: var(--mono); font-size: 13px; color: var(--orange); font-weight: 700; }
   .sec-lead { color: var(--muted); max-width: 70ch; margin: 0 0 18px; }
 
-  /* blueprint canvas — kept paper-light in both themes for diagram legibility */
+  /* blueprint canvas, kept paper-light in both themes for diagram legibility */
   .canvas { background: #fbfaf7; border: 1px solid var(--line); border-radius: 14px; padding: 26px 22px; overflow-x: auto;
     background-image: radial-gradient(#e7e5df 1px, transparent 1px); background-size: 22px 22px; box-shadow: 0 1px 2px rgba(19,26,72,.05); }
   :root[data-theme="dark"] .canvas, .canvas { }
@@ -141,8 +141,8 @@ flowchart LR
 </pre>
       </div>
       <div class="legend">
-        <div class="lg"><h4><span class="dot nav"></span>API — accept &amp; enqueue</h4><p>Auth, validation, run records. Never calls Unicommerce directly.</p></div>
-        <div class="lg"><h4><span class="dot nav"></span>Worker — the doer</h4><p>Concurrency 1. Owns the UC session, runs every automation pipeline.</p></div>
+        <div class="lg"><h4><span class="dot nav"></span>API, accept &amp; enqueue</h4><p>Auth, validation, run records. Never calls Unicommerce directly.</p></div>
+        <div class="lg"><h4><span class="dot nav"></span>Worker, the doer</h4><p>Concurrency 1. Owns the UC session, runs every automation pipeline.</p></div>
         <div class="lg"><h4><span class="dot int"></span>Postgres &amp; Redis</h4><p>Runs, audit, users, the session row; the job queue. Bound to localhost.</p></div>
         <div class="lg"><h4><span class="dot org"></span>External</h4><p>Unicommerce (live), Google Workspace (packing/sheet), Vinculum (planned).</p></div>
       </div>
@@ -175,7 +175,7 @@ flowchart TB
 </pre>
       </div>
       <div class="cols">
-        <div class="note"><b>Attribution on a shared account.</b> Everyone shares one Unicommerce bot login, but every click creates a <span class="k">runs</span> row — who, what, which SO, result. The Dashboard answers “who ran what” without anyone guessing.</div>
+        <div class="note"><b>Attribution on a shared account.</b> Everyone shares one Unicommerce bot login, but every click creates a <span class="k">runs</span> row, who, what, which SO, result. The Dashboard answers “who ran what” without anyone guessing.</div>
         <div class="note"><b>Role checks re-read the database</b> on every request, so deactivating or demoting a user takes effect immediately, not when their 12-hour token expires.</div>
       </div>
     </section>
@@ -207,7 +207,7 @@ sequenceDiagram
 </pre>
       </div>
       <div class="cols">
-        <div class="note"><b>Session death is narrowly defined:</b> only <span class="k">401</span>, a login redirect, or <span class="k">USER_NOT_LOGGED_IN</span>. A <span class="k">403</span> or <span class="k">successful:false</span> is a business response, never “dead” — a hard-won lesson kept as a test.</div>
+        <div class="note"><b>Session death is narrowly defined:</b> only <span class="k">401</span>, a login redirect, or <span class="k">USER_NOT_LOGGED_IN</span>. A <span class="k">403</span> or <span class="k">successful:false</span> is a business response, never “dead”, a hard-won lesson kept as a test.</div>
         <div class="note"><b>Temporary by design.</b> Paste is the bridge until Unicommerce whitelists our account; then the backend scripts login itself and the paste step disappears. The static IP is what makes the whitelist hold.</div>
       </div>
     </section>
@@ -238,7 +238,7 @@ sequenceDiagram
   API-->>UI: result → render card
 </pre>
       </div>
-      <div class="note"><b>One contract everywhere:</b> jobs are always <span class="k">{ runUid, input }</span>. That shape is unit-tested against the worker, so a mismatch can’t reach production (it once did — now it can’t).</div>
+      <div class="note"><b>One contract everywhere:</b> jobs are always <span class="k">{ runUid, input }</span>. That shape is unit-tested against the worker, so a mismatch can’t reach production (it once did, now it can’t).</div>
     </section>
 
     <!-- 5 · MODULES -->
@@ -318,7 +318,7 @@ flowchart LR
 
     <section id="reversedc">
       <h2><span class="n">B</span> Reverse DC</h2>
-      <p class="sec-lead">The user uploads the original credit-note PDF. We edit that same document — no new template, no Unicommerce session needed.</p>
+      <p class="sec-lead">The user uploads the original credit-note PDF. We edit that same document, no new template, no Unicommerce session needed.</p>
       <div class="canvas">
 <pre class="mermaid">
 %%{init:{'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui','primaryColor':'#eef1f8','primaryBorderColor':'#131A48','primaryTextColor':'#131A48','lineColor':'#FF5800'}}}%%
@@ -335,7 +335,7 @@ flowchart LR
   classDef out fill:#ffe9df,stroke:#FF5800,color:#8a2f00;
 </pre>
       </div>
-      <div class="note"><b>Pure transform.</b> Because it works on the uploaded file, Reverse DC runs even when Unicommerce is down — no session, no facility hop.</div>
+      <div class="note"><b>Pure transform.</b> Because it works on the uploaded file, Reverse DC runs even when Unicommerce is down, no session, no facility hop.</div>
     </section>
 
     <section id="packing">
@@ -356,7 +356,7 @@ flowchart LR
   classDef out fill:#e7f4ec,stroke:#2f855a,color:#1e5636;
 </pre>
       </div>
-      <div class="note"><b>Sends from our account,</b> not the user's — a Google service account with delegation. Nobody connects their personal Gmail.</div>
+      <div class="note"><b>Sends from our account,</b> not the user's, a Google service account with delegation. Nobody connects their personal Gmail.</div>
     </section>
 
     <section id="sheet">
@@ -403,7 +403,7 @@ flowchart TB
 </pre>
       </div>
       <div class="cols">
-        <div class="note"><b>One-click deploy.</b> <span class="k">./deploy/one-click-gcp.sh</span> reserves the IP, opens the firewall, creates the VM, installs Docker, and runs <span class="k">docker compose up</span> — idempotent, safe to re-run.</div>
+        <div class="note"><b>One-click deploy.</b> <span class="k">./deploy/one-click-gcp.sh</span> reserves the IP, opens the firewall, creates the VM, installs Docker, and runs <span class="k">docker compose up</span>, idempotent, safe to re-run.</div>
         <div class="note"><b>Sizing.</b> e2-medium (2 vCPU / 4 GB) handles ~10 users and the scheduled jobs. No GPU. ~₹2.5–3.5k / month all-in.</div>
       </div>
     </section>
@@ -414,11 +414,11 @@ flowchart TB
       <p class="sec-lead">The properties that keep it steady in production, not just working in a demo.</p>
       <div class="legend">
         <div class="lg"><h4><span class="dot org"></span>Global rate limiting</h4><p>One token bucket paces every Unicommerce call across all automations; HTTP 429 is honored with back-off. It can't trip the throttle.</p></div>
-        <div class="lg"><h4><span class="dot org"></span>Durable idempotency</h4><p>Multi-step flows memoize each step per request in Postgres — a retry resumes and never double-creates a PO, invoice, or allocation.</p></div>
+        <div class="lg"><h4><span class="dot org"></span>Durable idempotency</h4><p>Multi-step flows memoize each step per request in Postgres, a retry resumes and never double-creates a PO, invoice, or allocation.</p></div>
         <div class="lg"><h4><span class="dot nav"></span>Single session owner</h4><p>Only the worker (concurrency 1) touches Unicommerce, so facility context and the cookie are never raced.</p></div>
         <div class="lg"><h4><span class="dot nav"></span>Fail loud</h4><p>Dead session, stuck job, or generation failure raises a deduped alert; the Dashboard shows session and run health.</p></div>
         <div class="lg"><h4><span class="dot int"></span>Full attribution</h4><p>Every action is a run row; security events are an append-only audit log.</p></div>
-        <div class="lg"><h4><span class="dot int"></span>Tested</h4><p>Unit tests cover session semantics, rate limiting, idempotency, and each pipeline — green on every change.</p></div>
+        <div class="lg"><h4><span class="dot int"></span>Tested</h4><p>Unit tests cover session semantics, rate limiting, idempotency, and each pipeline, green on every change.</p></div>
       </div>
     </section>
 

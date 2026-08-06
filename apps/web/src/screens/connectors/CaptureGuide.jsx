@@ -49,7 +49,7 @@ export default function CaptureGuide({ connector }) {
           your access token (Admin → Access tokens).
         </li>
         <li>Pick <strong>{connector.name}</strong> in the extension and press Start.</li>
-        <li>Log in to the portal as you normally would — passwords are never recorded.</li>
+        <li>Log in to the portal as you normally would, passwords are never recorded.</li>
         <li>Visit Orders, Inventory and one shipment once each. Two minutes is enough.</li>
         <li>Press Stop. The platform seals the session and maps the endpoints.</li>
       </ol>
@@ -66,9 +66,9 @@ export default function CaptureGuide({ connector }) {
           columns={[
             { key: 'when', label: 'When', render: (r) => fmtRelative(r.created_at) },
             { key: 'entries', label: 'Requests', render: (r) => r.entry_count },
-            { key: 'endpoints', label: 'Endpoints', render: (r) => r.summary?.endpoints ?? '—' },
-            { key: 'host', label: 'API host', render: (r) => r.summary?.primaryHost || '—' },
-            { key: 'session', label: 'Session', render: (r) => (r.session_saved ? 'sealed' : '—') },
+            { key: 'endpoints', label: 'Endpoints', render: (r) => r.summary?.endpoints ?? '-' },
+            { key: 'host', label: 'API host', render: (r) => r.summary?.primaryHost || '-' },
+            { key: 'session', label: 'Session', render: (r) => (r.session_saved ? 'sealed' : '-') },
             { key: 'status', label: 'Status', render: (r) => r.status },
           ]}
           rows={captures}

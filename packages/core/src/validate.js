@@ -221,7 +221,7 @@ export function validateEwaybillInput({ rows, dryRun } = {}) {
     const n = fieldErrors.length;
     const summary = n === 1
       ? fieldErrors[0].message
-      : `${n} row(s) have invalid input — ${fieldErrors[0].message}`;
+      : `${n} row(s) have invalid input, ${fieldErrors[0].message}`;
     return fail(summary, fieldErrors);
   }
   return { ok: true, rows: cleaned, dryRun: !!dryRun };
@@ -229,7 +229,7 @@ export function validateEwaybillInput({ rows, dryRun } = {}) {
 
 /**
  * Packing mail: SO list must be present and well-formed.
- * Warehouse-email directory check needs Google Sheets (worker) — not hard-blocked here.
+ * Warehouse-email directory check needs Google Sheets (worker), not hard-blocked here.
  */
 export function validatePackingInput({ saleOrders } = {}) {
   return validateIdList(saleOrders, {

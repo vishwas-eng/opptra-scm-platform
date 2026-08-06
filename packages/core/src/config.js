@@ -3,7 +3,7 @@
 import { z } from 'zod';
 
 // Strict boolean from an env string. z.coerce.boolean() is Boolean(str), so "false"/"0"
-// wrongly become true — a dangerous trap for flags like UC_RETURN_FILL_POOL (it would
+// wrongly become true, a dangerous trap for flags like UC_RETURN_FILL_POOL (it would
 // fire fabricated AWB pool numbers into production). Unset/empty uses the default.
 const zbool = (def) => z.string().optional().transform((v) =>
   (v === undefined || v === '' ? def : /^(1|true|yes|on)$/i.test(String(v).trim())));
@@ -20,8 +20,8 @@ const Env = z.object({
   UC_BASE_URL: z.string().url(),
   // India bot ONLY (sc.automations@opptra.com). Never used for UAE/KSA/staging.
   // GCC identities (DLs): UAE scuae.automations@opptra.com, KSA scksa.automations@opptra.com.
-  // FZE scfze.automations@opptra.com planned — no config keys until UC host known.
-  // DL alone cannot OAuth to UC — need UC user with that username or session paste.
+  // FZE scfze.automations@opptra.com planned, no config keys until UC host known.
+  // DL alone cannot OAuth to UC, need UC user with that username or session paste.
   UC_USER: z.string().default(''),
   UC_PASS: z.string().default(''),
   // Dedicated UAE / KSA bots (scuae / scksa DLs). Never fall back to UC_USER.
@@ -74,7 +74,7 @@ const Env = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 chars'),
   // Data-encryption key for secrets at rest (connector vault, UC session cookies).
   // 32 bytes, base64 or hex. Optional: when empty the key is derived from JWT_SECRET,
-  // so encryption is always on — but set it in prod so the two can rotate independently.
+  // so encryption is always on, but set it in prod so the two can rotate independently.
   VAULT_KEY: z.string().default(''),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
 
@@ -119,12 +119,19 @@ const Env = z.object({
   VINCULUM_BASE_URL: z.string().default('https://landmarkgroup.vinsupplier.com/eRetailWeb'),
   VINCULUM_USER: z.string().default(''),
   VINCULUM_PASS: z.string().default(''),
+  // Home Centre UAE and KSA are separate seller accounts on the SAME Vinculum portal.
+  // Only the login differs. These fall back to VINCULUM_USER/PASS above, so a
+  // single-region deployment keeps working unchanged.
+  VINCULUM_UAE_USER: z.string().default(''),
+  VINCULUM_UAE_PASS: z.string().default(''),
+  VINCULUM_KSA_USER: z.string().default(''),
+  VINCULUM_KSA_PASS: z.string().default(''),
   // JSON map of named fulfill steps once HAR-captured (confirm/invoice/ship/label).
   VINCULUM_FULFILL_ACTIONS_JSON: z.string().default(''),
   // How often to poll HC orders + inventory (minutes). 0 = disabled schedule.
   HC_SYNC_MINUTES: z.coerce.number().int().min(0).max(1440).default(0),
   HC_OWNER_EMAIL: z.string().default('ratikanta@opptra.com'),
-  // Safety gates — production marketplace writes + UAE SO require HC_LIVE=true.
+  // Safety gates, production marketplace writes + UAE SO require HC_LIVE=true.
   HC_LIVE: zbool(false),
   HC_DRY_RUN: zbool(true),
   // Orders UC target: staging (default) | uae (only after staging proof + approval)
@@ -149,7 +156,7 @@ const Env = z.object({
   HC_UC_STAGING_CUSTOMER: z.string().default('OPPB2B01'),
   // Staging SKU fallback when HC SKU is not in map (e.g. optest)
   HC_STAGING_SKU_FALLBACK: z.string().default('optest'),
-  // UAE UC (inventory source; future orders target) — company code opptrauae
+  // UAE UC (inventory source; future orders target), company code opptrauae
   HC_UC_UAE_BASE_URL: z.string().default('https://opptrauae.unicommerce.com'),
   HC_UC_UAE_USER: z.string().default(''),
   HC_UC_UAE_PASS: z.string().default(''),
@@ -160,18 +167,24 @@ const Env = z.object({
   HC_UC_UAE_SHIP_METHOD: z.string().default('STD'),
   HC_UC_UAE_CURRENCY: z.string().default('AED'),
   HC_UC_UAE_CUSTOMER: z.string().default(''),
-  // KSA UC — company code opptraksa
+  // KSA UC, company code opptraksa
   HC_UC_KSA_BASE_URL: z.string().default('https://opptraksa.unicommerce.com'),
   HC_UC_KSA_USER: z.string().default(''),
   HC_UC_KSA_PASS: z.string().default(''),
   HC_UC_KSA_FACILITY: z.string().default(''),
   // Seller Code column on Vinculum import. OppDoor grid uses Vinculum user id (e.g. 2424675).
   // Empty = use sellerCode from downloaded seller SKU list. Legacy doc value "75" is not vendorCode.
+  // Seller code stamped on the Vinculum inventory upload. NO DEFAULTS: '90' used to sit
+  // in the KSA slot but it is the UAE code, so a KSA upload would have carried the wrong
+  // seller. An empty value falls back to the code on the downloaded SKU row, which is
+  // always right for that account.
   HC_SELLER_CODE_UAE: z.string().default(''),
-  HC_SELLER_CODE_KSA: z.string().default('90'),
+  HC_SELLER_CODE_KSA: z.string().default(''),
   // Vinculum vendorCode for jsonSellerSkuEnqBS (defaults to VINCULUM_USER)
   HC_VINCULUM_VENDOR_CODE: z.string().default(''),
-  // Optional overrides only — identity skuCode match is enough for current OppDoor UAE catalog.
+  HC_VINCULUM_UAE_VENDOR_CODE: z.string().default(''),
+  HC_VINCULUM_KSA_VENDOR_CODE: z.string().default(''),
+  // Optional overrides only, identity skuCode match is enough for current OppDoor UAE catalog.
   // {"T80358":"T80358"} or rare remaps. Do not invent LAND*→UC maps from archive orders.
   HC_SKU_MAP_JSON: z.string().default(''),
   // UI default region: india | gcc
@@ -264,7 +277,7 @@ export function config() {
   return cached;
 }
 
-/** Test helper — forget the parsed env so a test can vary process.env. */
+/** Test helper, forget the parsed env so a test can vary process.env. */
 export function _resetConfigForTests() {
   cached = null;
 }

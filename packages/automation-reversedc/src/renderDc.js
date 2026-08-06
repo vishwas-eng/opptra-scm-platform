@@ -1,5 +1,5 @@
 // Uniware-faithful Delivery Challan PDF built from parsed CN data.
-// Source layout no longer matters — we always draw a consistent DC with full line items.
+// Source layout no longer matters, we always draw a consistent DC with full line items.
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 const NAVY = rgb(0.075, 0.102, 0.282); // #131A48
@@ -46,9 +46,9 @@ export function buildDeliveryChallanHtml(data = {}) {
     <div><b>Portal:</b> ${esc(data.portal)}</div>
   </div>
   <div class="boxes">
-    <div class="box"><h3>From</h3>${from || '—'}</div>
-    <div class="box"><h3>Bill To</h3>${to || '—'}</div>
-    <div class="box"><h3>Ship To</h3>${ship || '—'}</div>
+    <div class="box"><h3>From</h3>${from || '-'}</div>
+    <div class="box"><h3>Bill To</h3>${to || '-'}</div>
+    <div class="box"><h3>Ship To</h3>${ship || '-'}</div>
   </div>
   <table><thead><tr>
     <th>Sr</th><th>Product Name</th><th>Product Code</th><th>Qty</th><th>Rate</th><th>Taxable</th>
@@ -278,7 +278,7 @@ export async function renderDeliveryChallanPdf(data = {}) {
         }
       }
       y -= 8;
-      drawText(page, 'This is a Delivery Challan for reverse movement — not a tax invoice.', margin, Math.max(28, y), 7, false, GREY);
+      drawText(page, 'This is a Delivery Challan for reverse movement, not a tax invoice.', margin, Math.max(28, y), 7, false, GREY);
     }
   }
 

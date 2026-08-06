@@ -84,7 +84,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       return only ? results[only] : { ok: true, instances: results };
     },
 
-    // Unicommerce connector invoke — capability layer on top of the shared UcClient.
+    // Unicommerce connector invoke, capability layer on top of the shared UcClient.
     // Does not replace automations; packing/sheet/e-way/etc. stay on their own jobs.
     'connector.unicommerce.invoke': async ({ data: { runUid, input = {} } }) => {
       await markRunning(runUid);
@@ -361,11 +361,11 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       return result;
     },
 
-    // Home Centre: Vinculum confirm / ship / label — OUT OF SCOPE (stub).
+    // Home Centre: Vinculum confirm / ship / label, OUT OF SCOPE (stub).
     'homecentre.fulfill': async ({ data: { runUid, input = {} } }) => {
       if (runUid) await markRunning(runUid);
       if (!homecentrePipeline) {
-        const result = { ok: true, empty: true, configured: false, processed: 0, message: 'Vinculum not configured — fulfill skipped' };
+        const result = { ok: true, empty: true, configured: false, processed: 0, message: 'Vinculum not configured, fulfill skipped' };
         if (runUid) await finishRun(runUid, { ok: true, result });
         return result;
       }
@@ -386,7 +386,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
           ok: true,
           configured: false,
           empty: true,
-          message: '6th Street pipeline not loaded — set STREET6_VPN_* / portal creds on VM',
+          message: '6th Street pipeline not loaded, set STREET6_VPN_* / portal creds on VM',
         };
         if (runUid) await finishRun(runUid, { ok: true, result });
         return result;
@@ -457,7 +457,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
     },
 
     // Agent Beta playbook replay (daily or manual). Runs saved tool steps via the SHARED
-    // executor (@opptra/agent-connectors) — Sheets/Drive/UC/Waypoint/Home Centre only.
+    // executor (@opptra/agent-connectors), Sheets/Drive/UC/Waypoint/Home Centre only.
     // UC tools call the connector DIRECTLY here: the worker is the UC-talking process,
     // and enqueueing back into this concurrency-1 queue would deadlock the playbook job
     // against the UC job it just queued until the wait times out.

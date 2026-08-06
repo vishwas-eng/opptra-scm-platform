@@ -1,7 +1,7 @@
 /* Opptra SCM design tokens.
    Brand: Spectral (display) + Raleway (UI), #FF5800, frosted glass over charcoal.
    Values carried verbatim from the previous stylesheet so the rebuild is a
-   re-implementation, not a redesign — plus the hexes that used to be inline. */
+   re-implementation, not a redesign, plus the hexes that used to be inline. */
 
 :root {
   /* Brand */
@@ -90,7 +90,7 @@
   --t-med: 0.28s;
   --t-slow: 0.45s;
 
-  /* Spacing — the observed rhythm, now nameable */
+  /* Spacing, the observed rhythm, now nameable */
   --s-1: 4px;
   --s-2: 6px;
   --s-3: 8px;

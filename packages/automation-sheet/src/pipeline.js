@@ -58,7 +58,7 @@ function parseSoInput(input = {}) {
 
 // Do NOT invent Brand from the warehouse code (Opp_WIQ_MH_1 → "WIQ"). WIQ/RSG/EKT are
 // 3PL / facility tokens, not product brands. Brand stays blank until Waypoint or a
-// later enrich has a real brand_name — ops can fill the cell if needed.
+// later enrich has a real brand_name, ops can fill the cell if needed.
 export function ucOrderToWaypointRow(o) {
   return {
     'SO Code': o.so || '',
@@ -220,7 +220,7 @@ export function makeSheetPipeline(uc, cfg = {}, google = null, deps = {}) {
         throw new Error(
           `Could not restore headers on "${tab}" from "${masterTab}". `
           + `Check that Master row ${HEADER_ROW} still has an "SO/GP Number" column `
-          + `(IMPORTRANGE may still be loading — retry in a minute).`,
+          + `(IMPORTRANGE may still be loading, retry in a minute).`,
         );
       }
     }

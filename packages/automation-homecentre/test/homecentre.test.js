@@ -161,7 +161,7 @@ test('syncOrders creates on staging when dryRun=false and UC client works', asyn
       return { successful: true };
     },
   };
-  // Inject via makeHcUcClient by providing staging creds and monkeypatching — use vinculum mock + override orderUc
+  // Inject via makeHcUcClient by providing staging creds and monkeypatching, use vinculum mock + override orderUc
   // Simpler: call punch with a pipeline that uses custom order path via syncOrders after patching targets.
   const { makeHcUcClient } = await import('../src/targets.js');
   // Build pipeline with stub vinculum and stub by replacing makeHcUcClient usage: pass ucFallback unused;
@@ -185,7 +185,7 @@ test('syncOrders creates on staging when dryRun=false and UC client works', asyn
     listArchiveOrders: async () => ({ records: 0, orders: [] }),
   });
 
-  // makeHcUcClient will try real OAuth — so for unit test, only dry-run path is safe without network.
+  // makeHcUcClient will try real OAuth, so for unit test, only dry-run path is safe without network.
   // Verify gated write message when creds present but we force dry-run false would hit network.
   // Keep this as dry-run assertion of preview fields for the real order shape.
   const preview = await pipe.syncOrders({ dryRun: true, limit: 1 });

@@ -58,7 +58,7 @@ test('tools/list maps platform specs to MCP shape with read/write annotations', 
   assert.deepEqual(so.inputSchema.required, ['saleOrder']);
   assert.equal(so.annotations.readOnlyHint, true);
   assert.equal(write.annotations.destructiveHint, true);
-  // Auth header must ride every call — trailing slash on baseUrl must not double up.
+  // Auth header must ride every call, trailing slash on baseUrl must not double up.
   assert.equal(fetchImpl.calls[0].url, 'https://scm.example.com/api/mcp/tools');
   assert.equal(fetchImpl.calls[0].init.headers.authorization, 'Bearer tok123');
 });

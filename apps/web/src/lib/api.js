@@ -1,6 +1,6 @@
 // Platform API client.
 //
-// Auth is the httpOnly `opptra_session` cookie — there is no token to attach and
+// Auth is the httpOnly `opptra_session` cookie, there is no token to attach and
 // nothing to read; every call just needs credentials:'same-origin'. A 401 means the
 // session died, which is a global event (log the user out), not a per-call failure.
 
@@ -22,7 +22,7 @@ export class ApiError extends Error {
 
 /**
  * Build the human message for a failed response. The API returns `error` plus, for
- * validation failures, `fieldErrors[]` — surfacing the first field error is what turns
+ * validation failures, `fieldErrors[]`, surfacing the first field error is what turns
  * "invalid input" into something the operator can act on.
  */
 function messageFor(data, status) {
@@ -30,7 +30,7 @@ function messageFor(data, status) {
   const fields = Array.isArray(data?.fieldErrors) ? data.fieldErrors : [];
   if (!fields.length) return base;
   const first = fields[0]?.message;
-  if (fields.length === 1 && first && !base.includes(first)) return `${base} — ${first}`;
+  if (fields.length === 1 && first && !base.includes(first)) return `${base}, ${first}`;
   if (fields.length > 1) return `${base} (${fields.length} issues)`;
   return base;
 }
@@ -79,8 +79,7 @@ export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed']);
 /**
  * Poll one run to completion.
  *
- * `onProgress` fires on every intermediate poll so the UI can show real state —
- * `pending_retry` in particular must be visible, or a run that is quietly retrying
+ * `onProgress` fires on every intermediate poll so the UI can show real state, * `pending_retry` in particular must be visible, or a run that is quietly retrying
  * looks identical to one that has hung.
  *
  * @returns {Promise<object>} the finished run row
@@ -122,7 +121,7 @@ export async function runJob(path, body, { onProgress, signal } = {}) {
  * EventSource cannot POST or send a body, so this parses the stream by hand. The SSE
  * frame format is `event: <name>\ndata: <json>\n\n`; frames are split on the blank
  * line, and a partial frame at the end of a chunk stays in the buffer until the rest
- * arrives — dropping it would silently lose the last tool result of a turn.
+ * arrives, dropping it would silently lose the last tool result of a turn.
  *
  * @param {string} path
  * @param {object} body

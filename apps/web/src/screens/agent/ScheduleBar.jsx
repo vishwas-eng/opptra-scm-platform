@@ -6,8 +6,7 @@ import { useToast } from '../../lib/toast.jsx';
 
 const TZ = 'Asia/Kolkata';
 
-// Half-hour slots. IST is UTC+5:30, so a whole-UTC-hour cron cannot express "9:00 IST" —
-// the server stores the wall-clock hour plus the zone and lets BullMQ convert.
+// Half-hour slots. IST is UTC+5:30, so a whole-UTC-hour cron cannot express "9:00 IST", // the server stores the wall-clock hour plus the zone and lets BullMQ convert.
 const SLOTS = Array.from({ length: 48 }, (_, i) => {
   const hour = Math.floor(i / 2);
   const minute = i % 2 ? 30 : 0;

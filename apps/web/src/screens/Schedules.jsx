@@ -71,7 +71,7 @@ function ConnectPanel() {
   const { ok, bad } = useToast();
 
   const openUc = async () => {
-    // The tab is opened on the click itself — a window.open after an await is a popup
+    // The tab is opened on the click itself, a window.open after an await is a popup
     // the browser did not see the user ask for, and gets blocked.
     const tab = window.open('', '_blank', 'noopener');
     let url = hostFor(instanceId);
@@ -92,7 +92,7 @@ function ConnectPanel() {
     setSaveError('');
     try {
       // A 400 carries the reason the cookie was rejected, which is the whole point of
-      // this form — so read the body instead of letting api() flatten it to a message.
+      // this form, so read the body instead of letting api() flatten it to a message.
       const res = await api('/api/admin/uc-session', { body: { jsessionid, instanceId }, raw: true });
       const data = await res.json().catch(() => null);
       if (!res.ok || data?.ok === false) {
@@ -154,7 +154,7 @@ function ConnectPanel() {
       )}
 
       <p className="meta sch-helper">
-        Copying the cookie by hand is the fallback —{' '}
+        Copying the cookie by hand is the fallback -{' '}
         <a href="/downloads/opptra-session-helper.zip" download>download the capture extension</a>{' '}
         and it keeps the session fresh on its own.
       </p>
@@ -217,9 +217,9 @@ export default function Schedules() {
               ),
             },
             { key: 'status', label: 'Status', render: (r) => (r.needs_relogin ? `${r.status} · needs re-login` : r.status || 'unknown') },
-            { key: 'facility', label: 'Facility', render: (r) => r.facility || '—' },
-            { key: 'source', label: 'Source', render: (r) => r.source || '—' },
-            { key: 'updated_by', label: 'Updated by', render: (r) => r.updated_by || '—' },
+            { key: 'facility', label: 'Facility', render: (r) => r.facility || '-' },
+            { key: 'source', label: 'Source', render: (r) => r.source || '-' },
+            { key: 'updated_by', label: 'Updated by', render: (r) => r.updated_by || '-' },
             { key: 'last_ok_at', label: 'Last OK', render: (r) => fmtDate(r.last_ok_at) },
             { key: 'last_check_at', label: 'Last check', render: (r) => fmtDate(r.last_check_at) },
             { key: 'fail_count', label: 'Fails', render: (r) => r.fail_count ?? 0 },

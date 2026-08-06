@@ -1,6 +1,6 @@
 /**
  * Filename / artifact conventions from real 6th Street OMS pack samples
- * (order 403770599 — invoice + shipping label, 2026-08-03).
+ * (order 403770599, invoice + shipping label, 2026-08-03).
  *
  * Invoice PDF: IBM Store Engagement export; often named `{orderId}….pdf`
  *   - Contains ORDER NUMBER, Invoice Number, line Price/Amount (SAR), SKU

@@ -1,4 +1,4 @@
-# Opptra — Bulk SO Document Download (Chrome extension)
+# Opptra, Bulk SO Document Download (Chrome extension)
 
 Paste Unicommerce SO numbers → downloads each one's invoice/label PDF to **Downloads/opptra-so**, named by SO number.
 
@@ -22,4 +22,4 @@ Paste Unicommerce SO numbers → downloads each one's invoice/label PDF to **Dow
 ## ⚠ One thing to finalize on the first real run
 The HAR we captured was for an SO with **no generated documents**, so the exact **document-list item shape** (which field holds the PDF URL) isn't 100% locked. The worker tries the common fields and **logs the raw list item to the console** if it can't resolve the URL. On the first run against a **real invoiced SO**:
 - If PDFs download → done.
-- If it says "PDF URL not resolved — see console": open the extension's **service-worker console** (`chrome://extensions` → this extension → *Inspect views: service worker*), copy the logged `raw list:` object, and send it to me — I'll lock the field in one line.
+- If it says "PDF URL not resolved, see console": open the extension's **service-worker console** (`chrome://extensions` → this extension → *Inspect views: service worker*), copy the logged `raw list:` object, and send it to me, I'll lock the field in one line.

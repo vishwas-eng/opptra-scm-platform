@@ -34,7 +34,7 @@ test('every channel declares how it can actually be reached', () => {
 });
 
 test('email-PO channels expose purchase-order actions, not a fictional orders endpoint', () => {
-  // Zepto/Instamart/BigBasket/Minutes have no vendor API — their POs arrive by email.
+  // Zepto/Instamart/BigBasket/Minutes have no vendor API, their POs arrive by email.
   // Registering `orders.search` on them would invite a build against an endpoint that
   // does not exist.
   const emailPo = createAllChannelStubs();
@@ -52,7 +52,7 @@ test('channels Unicommerce already ingests are flagged, so we ride it instead of
   }
 });
 
-test('invoking any stub action returns AWAITING_HAR — never a fake success', async () => {
+test('invoking any stub action returns AWAITING_HAR, never a fake success', async () => {
   const c = createChannelStub('noon');
   const r = await c.invoke('orders.search', {});
   assert.equal(r.ok, false);

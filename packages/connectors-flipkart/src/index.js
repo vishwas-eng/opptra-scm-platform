@@ -4,7 +4,7 @@ export const CONNECTOR_ID = 'flipkart';
 export const CONNECTOR_NAME = 'Flipkart Seller Hub';
 
 /**
- * Flipkart — dual:
+ * Flipkart, dual:
  *  - official Seller API (FLIPKART_APP_ID/SECRET + access token or vault)
  *  - RE session cookie paste until HAR maps Seller Hub XHR
  */
@@ -110,7 +110,7 @@ export function createFlipkartConnector({ cfg = {}, getSecret, httpFetch = fetch
     mutates: false,
     backend: hasOfficial ? 'official' : 're',
     awaitingHar: true,
-    description: 'POST /listings/v3/… — needs location ids from onboarding; paste HAR or provide location map',
+    description: 'POST /listings/v3/…, needs location ids from onboarding; paste HAR or provide location map',
     inputSchema: { type: 'object', additionalProperties: false, properties: { skus: { type: 'array', items: { type: 'string' } } } },
     handler: async () => ({ ok: false, awaitingHar: true, error: 'Flipkart inventory needs location IDs + HAR or Seller API onboarding.' }),
   });

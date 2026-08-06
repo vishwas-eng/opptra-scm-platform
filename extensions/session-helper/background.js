@@ -1,4 +1,4 @@
-/* Opptra Connector Capture — background recorder.
+/* Opptra Connector Capture, background recorder.
  *
  * You log into the seller portal normally. This worker records the request/response
  * metadata for the portal's own hosts, batches it, and posts it to the platform, which
@@ -6,7 +6,7 @@
  *
  * Deliberate limits of MV3, and why they are acceptable:
  *  - webRequest in MV3 is OBSERVE-only, so response BODIES are not available here. The
- *    platform gets URLs, methods, statuses, headers and request bodies — enough for
+ *    platform gets URLs, methods, statuses, headers and request bodies, enough for
  *    endpoint discovery and auth detection. When response shapes matter, upload a
  *    DevTools HAR (same pipeline, /api/capture/har).
  *  - Cookie headers are stripped from webRequest by Chrome unless extraHeaders is

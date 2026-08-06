@@ -3,7 +3,7 @@
 // Fallback: fetchBulkReturnSummary → credit-note invoice codes → /oms/invoice/show.
 import { validateReverseDcInput } from '@opptra/core/validate';
 
-/** Real PDF only — never trust Content-Type alone (UC returns application/pdf with 0 bytes on bad IDs). */
+/** Real PDF only, never trust Content-Type alone (UC returns application/pdf with 0 bytes on bad IDs). */
 function isRealPdf(buf) {
   return !!(buf && buf.length > 500 && buf.slice(0, 4).toString() === '%PDF');
 }

@@ -7,7 +7,7 @@ import {
 
 /* --------------------------- import classification --------------------------- */
 // This is a LIVE stock write. A false "ok" means the team believes inventory was
-// pushed when it was not — the most expensive failure this connector can produce.
+// pushed when it was not, the most expensive failure this connector can produce.
 
 test('an HTML error page returned with HTTP 200 is a failure, not a success', () => {
   const r = classifyImportResponse(200, '<html><body><div class="err">Error: invalid file format</div></body></html>');
@@ -33,7 +33,7 @@ test('a session bounce to the login page is a failure', () => {
 test('an ambiguous 200 is reported unconfirmed rather than assumed good', () => {
   const r = classifyImportResponse(200, '<html><body>&nbsp;</body></html>');
   assert.equal(r.ok, false);
-  assert.equal(r.confirmed, false, 'we do not know either way — say so');
+  assert.equal(r.confirmed, false, 'we do not know either way, say so');
   assert.match(r.reason, /did not confirm/i);
 });
 
@@ -61,7 +61,7 @@ test('the RSA public key survives the page formatting Vinculum embeds it with', 
   assert.ok(enc.length > 40);
 });
 
-test('a login page with no key fails loudly — the layout changed', () => {
+test('a login page with no key fails loudly, the layout changed', () => {
   assert.throws(() => extractPublicKeyPem('<html>no key here</html>'), /public key not found/i);
 });
 
@@ -76,7 +76,7 @@ test('order rows map from Vinculum positional params', () => {
   assert.equal(o.webOrderNo, '68243021288-1');
   assert.equal(o.qty, 2);
   assert.equal(o.price, 899);
-  assert.equal(o.cashOnDelivery, true, 'COD must be detected — it changes the UC payload');
+  assert.equal(o.cashOnDelivery, true, 'COD must be detected, it changes the UC payload');
   assert.equal(o.hcSku, 'LAND02600683');
   assert.equal(o.channel, 'HOMECENTREAE01');
 });

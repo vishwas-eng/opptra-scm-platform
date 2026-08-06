@@ -1,9 +1,9 @@
-// Relay endpoints — the server side of packages/relay-agent.
+// Relay endpoints, the server side of packages/relay-agent.
 //
 // The agent runs on a machine that already sits inside a network we cannot reach (the
 // 6th Street IBM OMS behind a Forti VPN whose gateway is a private address). It polls
 // OUTBOUND over HTTPS, so there is no inbound firewall rule, no site-to-site tunnel,
-// and MFA/split-tunnel are irrelevant — a human already authenticated that machine.
+// and MFA/split-tunnel are irrelevant, a human already authenticated that machine.
 //
 // Auth is the same personal access token the MCP bridge uses, so every relayed fetch is
 // attributed to a real person and audited.
@@ -15,7 +15,7 @@ import {
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
-// One artifact is a picklist/invoice/label PDF. Generous, but not unbounded — an agent
+// One artifact is a picklist/invoice/label PDF. Generous, but not unbounded, an agent
 // posting a 100 MB blob would blow the row and the request body limit alike.
 const MAX_ARTIFACT_BYTES = 8 * 1024 * 1024;
 const MAX_ARTIFACTS = 12;

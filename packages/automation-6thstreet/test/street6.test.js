@@ -5,7 +5,7 @@ import { makeSixthStreetPipeline } from '../src/pipeline.js';
 import { buildPicklistXlsx } from '../src/picklistFile.js';
 import { resolveStreet6UcTarget } from '../src/targets.js';
 
-test('invoice selling price only — rejects empty', () => {
+test('invoice selling price only, rejects empty', () => {
   const r = extractInvoiceSellingPrice(null);
   assert.equal(r.ok, false);
   assert.equal(r.code, 'missingInvoicePrice');

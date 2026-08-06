@@ -27,7 +27,7 @@ test('seal → open round-trips arbitrary secrets', () => {
   }
 });
 
-test('empty stays empty — rows use "" as "no secret"', () => {
+test('empty stays empty, rows use "" as "no secret"', () => {
   assert.equal(sealSecret(''), '');
   assert.equal(sealSecret(null), '');
   assert.equal(openSecret(''), '');

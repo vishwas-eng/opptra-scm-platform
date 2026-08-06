@@ -66,7 +66,7 @@ test('a login response without a token is reported, not silently treated as succ
 
 test('a wrong password is NOT retried, even though the portal calls it a 500', async () => {
   // 6th Street answers bad credentials with HTTP 500 and the reason in the body. If the
-  // guard's 5xx retry saw that, we would resubmit bad credentials repeatedly — the
+  // guard's 5xx retry saw that, we would resubmit bad credentials repeatedly, the
   // fastest route to a locked seller account.
   let attempts = 0;
   const { c } = client(() => {
@@ -111,7 +111,7 @@ test('a mid-flight 401 refreshes the session and retries exactly once', async ()
   assert.equal(calls[calls.length - 1].headers.authorization, 'Bearer AT-2', 'retry used the NEW token');
 });
 
-test('inventory upload sends a Sku,Count CSV as multipart — one file, not N calls', async () => {
+test('inventory upload sends a Sku,Count CSV as multipart, one file, not N calls', async () => {
   let uploaded;
   const { c } = client((url, init) => {
     if (url.endsWith('api/public/login')) return { body: LOGIN_OK };
@@ -128,7 +128,7 @@ test('inventory upload sends a Sku,Count CSV as multipart — one file, not N ca
   assert.ok(uploaded instanceof FormData, 'must be multipart, not a JSON body');
 });
 
-test('CSV never emits a negative or fractional count — the portal rejects both', () => {
+test('CSV never emits a negative or fractional count, the portal rejects both', () => {
   const { c } = client(() => ({ body: LOGIN_OK }));
   const csv = c.buildInventoryCsv([
     { sku: 'A', count: -4 }, { sku: 'B', count: 2.7 }, { sku: 'C', count: '9' },

@@ -1,6 +1,6 @@
 // Per-user rate-limit bucketing.
 //
-// @fastify/rate-limit runs on the onRequest hook — BEFORE preValidation auth — so the
+// @fastify/rate-limit runs on the onRequest hook, BEFORE preValidation auth, so the
 // signed-in identity is not available yet and we have to read the cookie ourselves. The
 // JWT signature is NOT verified here (verifying twice per request would be wasteful, and
 // this is only a bucketing key, not an authorization decision), so the email in the
@@ -9,7 +9,7 @@
 // only ever split that one IP's traffic, never escape it.
 //
 // Requests that reach a handler have still passed real JWT verification in the auth
-// plugin — this file decides *which counter to increment*, never *who you are*.
+// plugin, this file decides *which counter to increment*, never *who you are*.
 function claimedEmail(req) {
   try {
     const m = (req.headers.cookie || '').match(/(?:^|;\s*)opptra_session=([^;]+)/);

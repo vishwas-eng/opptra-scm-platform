@@ -1,4 +1,4 @@
-<title>Get the Unicommerce session — step by step</title>
+<title>Get the Unicommerce session, step by step</title>
 <style>
   :root {
     --navy: #131A48; --navy-2: #232c63; --orange: #FF5800; --orange-soft: #ffe9df;
@@ -79,16 +79,16 @@
 <div class="page">
   <div class="eyebrow">Opptra SCM Platform</div>
   <h1>Get the live Unicommerce session</h1>
-  <p class="lead">Five steps, about two minutes. This is the one manual thing the platform needs from a human — after this, it keeps itself alive on its own.</p>
+  <p class="lead">Five steps, about two minutes. This is the one manual thing the platform needs from a human, after this, it keeps itself alive on its own.</p>
 
-  <div class="warn"><span>🔒</span><div><b>Don't forward the password over chat/email.</b> Share it the way you'd share any login — in person, a password manager, or a call. This page intentionally doesn't repeat it.</div></div>
+  <div class="warn"><span>🔒</span><div><b>Don't forward the password over chat/email.</b> Share it the way you'd share any login, in person, a password manager, or a call. This page intentionally doesn't repeat it.</div></div>
 
   <div class="steps">
     <div class="step">
       <div class="num">1</div>
       <div class="step-body">
         <h3>Open Unicommerce</h3>
-        <p>In a normal browser tab, go to <code>oppdoor.unicommerce.co.in</code> — this is the production account.</p>
+        <p>In a normal browser tab, go to <code>oppdoor.unicommerce.co.in</code>, this is the production account.</p>
       </div>
     </div>
 
@@ -96,7 +96,7 @@
       <div class="num">2</div>
       <div class="step-body">
         <h3>Log in as the automation account</h3>
-        <p>Username: <code>sc.automations@opptra.com</code> — password as shared separately. Note the "s" — <b>automations</b>, plural.</p>
+        <p>Username: <code>sc.automations@opptra.com</code>, password as shared separately. Note the "s", <b>automations</b>, plural.</p>
         <div class="mock">
           <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">oppdoor.unicommerce.co.in/login</span></div>
           <div class="body login-mock">
@@ -112,7 +112,7 @@
       <div class="num">3</div>
       <div class="step-body">
         <h3>Tell us what the login asked for</h3>
-        <p>Did anything besides username + password show up — a CAPTCHA, an OTP, a code sent somewhere? Just note yes/no, you'll report this back.</p>
+        <p>Did anything besides username + password show up, a CAPTCHA, an OTP, a code sent somewhere? Just note yes/no, you'll report this back.</p>
       </div>
     </div>
 
@@ -122,7 +122,7 @@
         <h3>Open DevTools and find <code>JSESSIONID</code></h3>
         <p>Right-click the page → <b>Inspect</b> → <b>Application</b> tab → <b>Cookies</b> → click the site. Find the row named exactly <code>JSESSIONID</code> and copy its <b>Value</b> column only.</p>
         <div class="mock devtools-mock">
-          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">DevTools — Application → Cookies</span></div>
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">DevTools, Application → Cookies</span></div>
           <div class="body" style="padding:0">
             <div class="tabs"><span>Elements</span><span>Console</span><span class="on">Application</span><span>Network</span></div>
             <table>
@@ -135,7 +135,7 @@
             </table>
           </div>
         </div>
-        <p style="margin-top:8px">A real value looks like the highlighted row above: long, random letters and numbers, <b>no dashes</b>. If what you copied has dashes in groups of 8-4-4-4-12, it's the wrong field — keep looking.</p>
+        <p style="margin-top:8px">A real value looks like the highlighted row above: long, random letters and numbers, <b>no dashes</b>. If what you copied has dashes in groups of 8-4-4-4-12, it's the wrong field, keep looking.</p>
       </div>
     </div>
 
@@ -154,7 +154,7 @@
 
   <div class="success">
     <span class="badge"><span class="dot"></span>ALIVE</span>
-    <p>This is what the Dashboard's session card shows when it worked. If it still says <b>DEAD</b>, the value was probably wrong — go back to step 4.</p>
+    <p>This is what the Dashboard's session card shows when it worked. If it still says <b>DEAD</b>, the value was probably wrong, go back to step 4.</p>
   </div>
 
   <div class="qbox">
@@ -162,9 +162,9 @@
     <ul>
       <li>Did step 3 show a CAPTCHA or OTP? Yes / no.</li>
       <li>Did the dashboard turn <b>ALIVE</b>?</li>
-      <li>If no CAPTCHA/OTP appeared: a HAR capture of this login (DevTools → Network → Preserve log → do the login → Save all as HAR) lets the platform log itself in automatically from now on — this manual step would never be needed again.</li>
+      <li>If no CAPTCHA/OTP appeared: a HAR capture of this login (DevTools → Network → Preserve log → do the login → Save all as HAR) lets the platform log itself in automatically from now on, this manual step would never be needed again.</li>
     </ul>
   </div>
 
-  <footer>Opptra SCM Platform — one-time session setup. The session then keeps itself alive automatically.</footer>
+  <footer>Opptra SCM Platform, one-time session setup. The session then keeps itself alive automatically.</footer>
 </div>

@@ -23,7 +23,7 @@ function spyUc(responses = {}) {
 /* ---------------- dry-run: the safety net for every mutate ---------------- */
 
 // Minimal VALID params per mutating action. Params are validated before the dry-run
-// branch — deliberately: previewing garbage should tell you it is garbage, not render a
+// branch, deliberately: previewing garbage should tell you it is garbage, not render a
 // confident preview of a call that could never succeed. So the dry-run sweep has to use
 // real params, which also keeps this fixture honest as the write surface grows.
 const VALID_MUTATE_PARAMS = {
@@ -54,7 +54,7 @@ test('EVERY mutating action is dry-runnable and touches nothing when previewing'
 
   for (const cap of mutating) {
     const params = VALID_MUTATE_PARAMS[cap.id];
-    assert.ok(params, `new mutating action ${cap.id} has no dry-run fixture — add one`);
+    assert.ok(params, `new mutating action ${cap.id} has no dry-run fixture, add one`);
     const r = await c.invoke(cap.id, params, { dryRun: true });
     assert.equal(r.dryRun, true, `${cap.id} must support dryRun`);
     assert.equal(r.ok, true);
@@ -105,7 +105,7 @@ test('allocateB2B resolves a shelf and ALWAYS sends inventoryLocationData', asyn
     saleOrder: 'SO1', facility: 'F1', items: [{ sku: 'A', quantity: 3 }],
   });
   assert.equal(r.ok, true);
-  assert.equal(r.async, true, 'B2B allocation is async — caller must poll');
+  assert.equal(r.async, true, 'B2B allocation is async, caller must poll');
   const call = uc.calls.find((x) => x.path.includes('smart-fill/orders/allocate'));
   const locData = call.body.allocationItems[0].saleOrderItemCodeToInventoryAllocation.A.inventoryLocationData;
   assert.deepEqual(locData, [{ shelfCode: 'S1', batchCode: 'B7', inventory: '3' }]);

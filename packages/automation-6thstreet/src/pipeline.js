@@ -5,7 +5,7 @@
  *   - Selling price ONLY from invoice (see price.js)
  * SECONDARY: UC inventory snapshot → 6th Street portal update (HAR-gated)
  *
- * Portal/OMS XHR not reversed yet — downloaders return awaitingHar / accept injected artifacts for dry-run/tests.
+ * Portal/OMS XHR not reversed yet, downloaders return awaitingHar / accept injected artifacts for dry-run/tests.
  */
 
 import { gmailApi } from '@opptra/integrations-google';
@@ -60,7 +60,7 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
   }
 
   /**
-   * Download helpers — plug real RE client when HAR lands.
+   * Download helpers, plug real RE client when HAR lands.
    * For tests / operator Path B: pass artifacts on each order.
    */
   async function fetchPackArtifacts(orderId, injected = null) {
@@ -85,7 +85,7 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
       portalConfigured: portalReady(),
       omsConfigured: omsReady(),
       omsHomeUrl: street6OmsHomeUrl(cfg),
-      error: '6th Street picklist/invoice/label download APIs not reversed yet — need HAR (docs/connectors/6thstreet.md)',
+      error: '6th Street picklist/invoice/label download APIs not reversed yet, need HAR (docs/connectors/6thstreet.md)',
     };
   }
 
@@ -170,14 +170,14 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
       };
     }
 
-    const subject = `6th Street pack — ${okCount} order(s)`;
+    const subject = `6th Street pack, ${okCount} order(s)`;
     const htmlBody = [
       '<p>6th Street pick list / invoice / shipping label pack.</p>',
       '<p>Selling prices below are <b>from invoice only</b>.</p>',
       '<ul>',
       ...priceRows.map((p) => `<li>${p.orderId}: ${p.sellingPrice} (${p.source})</li>`),
       '</ul>',
-      dryRun ? '<p><i>Dry-run — email not sent.</i></p>' : '',
+      dryRun ? '<p><i>Dry-run, email not sent.</i></p>' : '',
     ].join('\n');
 
     if (dryRun || !google?.gmail) {
@@ -194,7 +194,7 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
         preview: { subject, to, attachmentNames: attachments.map((a) => a.filename) },
         message: google?.gmail
           ? `Dry-run: would email ${to} with ${attachments.length} attachment(s)`
-          : 'Dry-run / Gmail not connected — preview only. Connect Gmail (Packing Mail style) to draft/send.',
+          : 'Dry-run / Gmail not connected, preview only. Connect Gmail (Packing Mail style) to draft/send.',
         gmailConfigured: !!google?.gmail,
       };
     }
@@ -236,7 +236,7 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
 
   /**
    * Secondary: pull UC inventory snapshot rows → portal push (HAR/password-gated).
-   * Reads from STREET6_UC_INSTANCE (prefer ksa — sample invoice SKU lives there).
+   * Reads from STREET6_UC_INSTANCE (prefer ksa, sample invoice SKU lives there).
    * Never writes to portal unless STREET6_LIVE + not dry-run (still awaiting working login + HAR).
    */
   async function syncInventory({ dryRun = true, skus = null } = {}) {
@@ -271,7 +271,7 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
     }
 
     const skuList = Array.isArray(skus) ? skus.map(String).filter(Boolean).slice(0, 50) : [];
-    // Without SKUs this used to make no calls at all and still return ok:true — a
+    // Without SKUs this used to make no calls at all and still return ok:true, a
     // scheduled job would report success forever while doing nothing. Say so instead.
     if (!skuList.length) {
       return {
@@ -279,7 +279,7 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
         dryRun,
         ownerEmail,
         ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
-        message: 'No SKUs given — pass skus[] to read UC inventory. Nothing was checked.',
+        message: 'No SKUs given, pass skus[] to read UC inventory. Nothing was checked.',
         snapshotCount: 0,
       };
     }
@@ -332,7 +332,7 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
       dryRun: false,
       awaitingHar: true,
       ownerEmail,
-      message: 'Portal inventory update refused — need working portal login + upload HAR; STREET6_LIVE alone is not enough',
+      message: 'Portal inventory update refused, need working portal login + upload HAR; STREET6_LIVE alone is not enough',
     };
   }
 

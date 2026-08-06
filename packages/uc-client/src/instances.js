@@ -1,9 +1,9 @@
 // Known Unicommerce tenants and how they map onto the session vault.
 //
-//   india   — oppdoor.unicommerce.co.in   (packing / sheet / e-way / India bot)
-//   uae     — opptrauae.unicommerce.com   (HC inventory; future HC orders)
-//   ksa     — opptraksa.unicommerce.com   (KSA tenant; 6th Street / future)
-//   staging — oppdoorstg.unicommerce.com  (HC orders proof)
+//   india, oppdoor.unicommerce.co.in   (packing / sheet / e-way / India bot)
+//   uae, opptrauae.unicommerce.com   (HC inventory; future HC orders)
+//   ksa, opptraksa.unicommerce.com   (KSA tenant; 6th Street / future)
+//   staging, oppdoorstg.unicommerce.com  (HC orders proof)
 //
 // Session cookies (JSESSIONID) are stored per instance_id and must never cross.
 // Company codes from UC "Choose your company": oppdoor, oppdoorstg, opptrauae, opptraksa.

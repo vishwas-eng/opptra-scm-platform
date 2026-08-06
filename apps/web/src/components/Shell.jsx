@@ -15,7 +15,7 @@ export function useRegion() {
   return [region, setRegion];
 }
 
-/** UC session health, polled slowly — it drives the topbar pill and the outage banner. */
+/** UC session health, polled slowly, it drives the topbar pill and the outage banner. */
 function useUcHealth() {
   const [session, setSession] = useState(null);
   useEffect(() => {
@@ -128,8 +128,7 @@ export default function Shell({ children, region, setRegion }) {
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
               <span>
-                The Unicommerce session for <strong>{session.instance_id || 'india'}</strong> is down —
-                automations that talk to UC will fail until it is refreshed.
+                The Unicommerce session for <strong>{session.instance_id || 'india'}</strong> is down, automations that talk to UC will fail until it is refreshed.
               </span>
               {isAdmin && <NavLink to="/schedules" className="banner-action">Reconnect</NavLink>}
             </motion.div>

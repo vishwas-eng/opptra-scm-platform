@@ -1,4 +1,4 @@
-// Connector capture — "connect once, we take it from there".
+// Connector capture, "connect once, we take it from there".
 //
 // The operator opens the seller portal from the Connectors page and logs in normally.
 // The Opptra Capture extension records the session's network traffic and posts it here.
@@ -138,7 +138,7 @@ export default async function captureRoutes(app) {
     },
   }, async (req, reply) => {
     const raw = req.body.entries || [];
-    // Session material must be lifted BEFORE redaction — after it, it is gone forever.
+    // Session material must be lifted BEFORE redaction, after it, it is gone forever.
     const capture = await getCaptureSession(req.params.captureUid);
     if (!capture || capture.owner_email !== req.captureUser.email) {
       return reply.code(404).send({ error: 'capture not found' });
@@ -202,7 +202,7 @@ export default async function captureRoutes(app) {
     return { ok: true, capture: done };
   });
 
-  // Upload a DevTools HAR instead of recording live — same pipeline, one shot.
+  // Upload a DevTools HAR instead of recording live, same pipeline, one shot.
   app.post('/api/capture/har', {
     ...authed,
     // A HAR is big; this route needs more than the 1 MB global body limit, so the

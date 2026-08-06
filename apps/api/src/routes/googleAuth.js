@@ -116,7 +116,7 @@ export default async function googleAuthRoutes(app) {
       const { tokens } = await client.getToken(code);
       if (!tokens.refresh_token) {
         return failTo(
-          'Google did not return a refresh token — revoke Opptra at myaccount.google.com/permissions then Connect again',
+          'Google did not return a refresh token, revoke Opptra at myaccount.google.com/permissions then Connect again',
           tab,
         );
       }
@@ -147,7 +147,7 @@ export default async function googleAuthRoutes(app) {
 
       if (!scopeStatus.ok) {
         return failTo(
-          `connected but missing scopes: ${scopeStatus.missing.join(', ')} — disconnect and reconnect granting Sheets + Drive`,
+          `connected but missing scopes: ${scopeStatus.missing.join(', ')}, disconnect and reconnect granting Sheets + Drive`,
           tab,
         );
       }

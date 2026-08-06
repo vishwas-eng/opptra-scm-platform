@@ -1,5 +1,5 @@
 // Reverse DC: Bulk Return ID + facility → download CN → PARSE all pages → render
-// Uniware-style Delivery Challan. Layout of the source CN no longer matters — we
+// Uniware-style Delivery Challan. Layout of the source CN no longer matters, we
 // rebuild from extracted data (parties + every line item + totals).
 import { downloadCnByBulkReturn } from './download.js';
 import { parseCreditNote } from './parseCn.js';
@@ -21,7 +21,7 @@ export function reconcileParsed(parsed) {
     if (!String(l.amount || '').trim()) return `row ${l.sr}: amount missing`;
   }
 
-  // Serials must be a continuous 1..N run — a gap means we dropped a row.
+  // Serials must be a continuous 1..N run, a gap means we dropped a row.
   for (let i = 0; i < lines.length; i++) {
     if (parseInt(lines[i].sr, 10) !== i + 1) {
       return `serial sequence broken at position ${i + 1} (saw "${lines[i].sr}")`;
@@ -73,7 +73,7 @@ export function makeReverseDcPipeline(uc) {
     const failReason = reconcileParsed(parsed);
     if (failReason) {
       // Hybrid fallback: parse didn't reconcile against the CN's own totals, so
-      // edit the original PDF in place — every byte of data stays intact.
+      // edit the original PDF in place, every byte of data stays intact.
       const edited = await editCreditNoteToDeliveryChallan(pdf, {}, {
         removeBarcode: true,
         challanDate: dateFilled ? parsed.creditNoteDate : '',

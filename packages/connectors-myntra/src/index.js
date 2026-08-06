@@ -4,7 +4,7 @@ export const CONNECTOR_ID = 'myntra';
 export const CONNECTOR_NAME = 'Myntra Partner';
 
 /**
- * Myntra Partner/Seller — RE/session primary.
+ * Myntra Partner/Seller, RE/session primary.
  * Opptra already emits Myntra ASN XLSX via automation-asn; portal write-back needs HAR.
  */
 export function createMyntraConnector({ getSecret } = {}) {
@@ -16,7 +16,7 @@ export function createMyntraConnector({ getSecret } = {}) {
     mutates: false,
     backend: 're',
     awaitingHar: true,
-    description: 'Partner portal session probe — needs cookie vault + HAR for ping URL',
+    description: 'Partner portal session probe, needs cookie vault + HAR for ping URL',
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     handler: async () => {
       const sec = getSecret ? await getSecret() : null;

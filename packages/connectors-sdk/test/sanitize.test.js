@@ -22,13 +22,13 @@ test('secret-looking VALUES are redacted even under innocuous keys', () => {
   assert.match(jwt.blob, /\[redacted\]/);
 });
 
-test('ordinary data is untouched — scrubbing must not corrupt real values', () => {
+test('ordinary data is untouched, scrubbing must not corrupt real values', () => {
   const r = sanitizeResult({ ok: true, saleOrder: 'SO02780', qty: 12, city: 'Bengaluru', empty: null });
   assert.deepEqual(r, { ok: true, saleOrder: 'SO02780', qty: 12, city: 'Bengaluru', empty: null });
 });
 
 test('a realistic 50-row result keeps ok AND its data (the 4KB-blob regression)', () => {
-  // Before: anything over 4 KB collapsed to { truncated, preview } — `ok` vanished, so
+  // Before: anything over 4 KB collapsed to { truncated, preview }, `ok` vanished, so
   // `result.ok !== false` passed while the caller got no data at all.
   const orders = Array.from({ length: 50 }, (_, i) => ({
     'SO Code': `SO000${i}`, 'SO Status': 'PROCESSING', Warehouse: 'Opp_RSG_MH',

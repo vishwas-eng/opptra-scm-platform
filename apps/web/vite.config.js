@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // The API serves the built SPA from apps/web/dist (see apps/api/src/app.js) and owns
-// every /api and /auth path, so dev proxies both to a locally running API — same-origin
+// every /api and /auth path, so dev proxies both to a locally running API, same-origin
 // in dev as in prod, which is what keeps the httpOnly session cookie working.
 export default defineConfig({
   plugins: [react()],
@@ -11,7 +11,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     // Source maps stay off in the shipped bundle but the build must not silently
-    // swallow oversized chunks — the vendor split below keeps this honest.
+    // swallow oversized chunks, the vendor split below keeps this honest.
     rollupOptions: {
       output: {
         manualChunks: {

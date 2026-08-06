@@ -4,8 +4,8 @@
 
 | System | What it holds | VPN? | Status |
 |---|---|---|---|
-| **Seller portal** `prod-seller-portal-backend.6thstreet.com/sellerportal/` | **Inventory + pricing** | **No** — plain internet | Client built (`packages/connectors-6thstreet/src/portalClient.js`). Blocked only on a working password. |
-| **IBM Sterling OMS** `apg-oms.prod.coc.ibmcloud.com` | Picklist, invoice, shipping label (the SO/pack side) | **Yes** | Blocked on VPN routing — this doc. |
+| **Seller portal** `prod-seller-portal-backend.6thstreet.com/sellerportal/` | **Inventory + pricing** | **No**, plain internet | Client built (`packages/connectors-6thstreet/src/portalClient.js`). Blocked only on a working password. |
+| **IBM Sterling OMS** `apg-oms.prod.coc.ibmcloud.com` | Picklist, invoice, shipping label (the SO/pack side) | **Yes** | Blocked on VPN routing, this doc. |
 
 Verified again 2026-08-06: the seller portal answered from a public host; the OMS host
 timed out from outside the VPN.
@@ -15,7 +15,7 @@ timed out from outside the VPN.
 ## Why `10.61.1.11` cannot work
 
 `STREET6_VPN_HOST=10.61.1.11` is an **RFC1918 private address**. Nothing on the public
-internet — including the GCP VM — can route to it. Pointing `openfortivpn` at it fails
+internet, including the GCP VM, can route to it. Pointing `openfortivpn` at it fails
 with "no route to host", and no amount of credentials changes that.
 
 Almost certainly `10.61.1.11` is not what FortiClient actually dials. A FortiClient
@@ -23,7 +23,7 @@ profile connects to a **public gateway** (a hostname or public IP, usually on po
 or 10443); `10.61.1.11` looks like an internal host reached *after* the tunnel is up, or
 simply the wrong field was recorded.
 
-### Step 1 — read the real gateway off a machine that already connects
+### Step 1, read the real gateway off a machine that already connects
 
 Fastest path, and it may unblock everything:
 
@@ -39,16 +39,16 @@ viable.
 
 ## The three paths
 
-### Path A — headless VPN on the server
+### Path A, headless VPN on the server
 `openfortivpn <public-gateway> -u <user> -p <pass>` on the VM, then the OMS becomes
 reachable. **Works only if** the gateway is public *and* the VPN allows a non-interactive
 client. It usually does not: FortiClient deployments commonly require a certificate,
 MFA/OTP, or a host-check that a headless client cannot satisfy. Worth ten minutes of
 testing once you have the gateway; do not build on it until it is proven.
 
-### Path B — relay agent on a machine that already has VPN ✅ recommended
+### Path B, relay agent on a machine that already has VPN ✅ recommended
 A small Node process runs on a laptop or office box **that is already on the VPN**. It
-**polls the platform outbound over HTTPS** — claim a job, fetch the documents from the
+**polls the platform outbound over HTTPS**, claim a job, fetch the documents from the
 OMS through the existing tunnel, upload them back, done.
 
 ```
@@ -67,7 +67,7 @@ Why this is the right answer:
 - **No inbound firewall change, no site-to-site, no IT ticket.** Everything is an
   outbound HTTPS call from a machine that already has access.
 - **Topology-proof.** It does not matter whether the gateway is public, whether MFA is
-  required, or whether the VPN is split-tunnel — a human already solved that by being
+  required, or whether the VPN is split-tunnel, a human already solved that by being
   logged in.
 - **Same pattern reusable** for any future VPN-gated or MFA-gated portal.
 - Auth is a normal platform access token, so every fetch is attributed and audited like
@@ -76,7 +76,7 @@ Why this is the right answer:
 Cost: the machine must be on and connected when jobs run. For a daily pack-email that is
 a laptop open during working hours; for reliability, a small always-on box in the office.
 
-### Path C — site-to-site GCP ↔ their network
+### Path C, site-to-site GCP ↔ their network
 Cloud VPN or an IPsec tunnel from the GCP VPC to the `10.61.x.x` network. Fully
 unattended and the best long-term answer, but it needs Apparel Group IT to provision the
 peer, agree on address ranges and open the tunnel. Start the conversation in parallel;
@@ -92,5 +92,5 @@ do not block on it.
 ## Do not do this
 
 Do not retry the portal login with guessed passwords. 6th Street returns HTTP **500**
-with "Incorrect username or password" for a bad credential — the client now detects that
+with "Incorrect username or password" for a bad credential, the client now detects that
 and refuses to retry, precisely because repeated failed logins lock seller accounts.

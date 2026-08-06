@@ -116,7 +116,7 @@ test('step 1: blank Appointment ID is omitted from the email table (not an empty
   });
   const r = await pipeOf({}, google).createDrafts(['SO1']);
   assert.equal(r.ok, true);
-  assert.equal(r.drafts[0].attachmentCount, 1, 'label only — no appointment PDF required');
+  assert.equal(r.drafts[0].attachmentCount, 1, 'label only, no appointment PDF required');
   assert.ok(!(r.drafts[0].missing || []).some((m) => /appointment id/i.test(m)), 'blank appt is not flagged missing');
   const raw = rawOf(capturedDrafts[0]);
   assert.match(raw, /Blinkit dispatches/);

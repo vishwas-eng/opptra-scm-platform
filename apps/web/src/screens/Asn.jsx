@@ -27,7 +27,7 @@ export default function Asn() {
     <PageTransition>
       <Panel title="ASN / Packaging compile">
         <p className="lead">
-          The marketplace is detected from the order&rsquo;s own Unicommerce channel — the sale
+          The marketplace is detected from the order&rsquo;s own Unicommerce channel, the sale
           order number is all you need.
         </p>
 
@@ -54,7 +54,7 @@ export default function Asn() {
           <ResultHead
             ok={r.ok}
             title={r.ok
-              ? `ASN ready — ${r.lineCount ?? 0} line${r.lineCount === 1 ? '' : 's'}`
+              ? `ASN ready, ${r.lineCount ?? 0} line${r.lineCount === 1 ? '' : 's'}`
               : (r.error || 'Compile failed')}
           />
           <KeyValues

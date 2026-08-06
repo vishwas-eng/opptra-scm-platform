@@ -15,7 +15,7 @@ function shellWith(defs, opts = {}) {
   return createConnectorShell({ id: 'test', name: 'Test', auth: {}, registry, ...opts });
 }
 
-test('registries are isolated — one connector cannot see another\'s actions', () => {
+test('registries are isolated, one connector cannot see another\'s actions', () => {
   const a = createRegistry();
   const b = createRegistry();
   a.register({ id: 'x', handler: async () => ({ ok: true }) });
@@ -49,7 +49,7 @@ test('listRegisteredActions exposes metadata but never the handler or compiled v
   assert.equal(a.validate, undefined);
 });
 
-test('invalid params are refused BEFORE the handler runs — nothing reaches the vendor', async () => {
+test('invalid params are refused BEFORE the handler runs, nothing reaches the vendor', async () => {
   let called = false;
   const shell = shellWith([{
     id: 'ship', inputSchema: numericSchema, handler: async () => { called = true; return { ok: true }; },

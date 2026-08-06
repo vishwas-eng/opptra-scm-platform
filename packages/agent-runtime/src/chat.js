@@ -7,8 +7,8 @@ export { llmTurn, llmModeLabel, routeIntent, DEFAULT_SYSTEM, truncJson };
 /**
  * Run one agent turn: LLM tool-use loop (max 3 rounds) or tool-router fallback.
  *
- * `onEvent` receives the turn's lifecycle as it happens — phase changes, each tool
- * starting and finishing — so a UI can show work in progress instead of a spinner that
+ * `onEvent` receives the turn's lifecycle as it happens, phase changes, each tool
+ * starting and finishing, so a UI can show work in progress instead of a spinner that
  * hides a 30-second multi-tool turn. It is optional and never affects the return value:
  * a caller that ignores events gets exactly the same result as before, and an event
  * handler that throws cannot break the turn.
@@ -40,7 +40,7 @@ export async function runAgentTurn({
   };
   const sysExtra = connectedIds.length
     ? `\nConnected connectors: ${connectedIds.join(', ')}.`
-    : '\nNo connectors connected — tell user to Connect in the panel.';
+    : '\nNo connectors connected, tell user to Connect in the panel.';
 
   // --- Tool-router path (no LLM key) ---
   if (mode === 'tool-router') {

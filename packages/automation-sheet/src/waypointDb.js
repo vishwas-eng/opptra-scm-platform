@@ -67,7 +67,7 @@ export async function fetchSOsFromNeon(dbUrl) {
   return rows.map(mapNeonRow);
 }
 
-/** Cheap connectivity probe for connector health — never touches business tables' data. */
+/** Cheap connectivity probe for connector health, never touches business tables' data. */
 export async function pingWaypointDb(dbUrl) {
   const { rows } = await pool_(dbUrl).query('SELECT count(*)::int AS n FROM "SalesOrder"');
   return { ok: true, salesOrders: rows[0]?.n ?? 0 };
@@ -75,7 +75,7 @@ export async function pingWaypointDb(dbUrl) {
 
 /**
  * Filtered, LIMITed SO query for the Agent connector. Unlike fetchSOsFromNeon (the sheet
- * pipeline wants the whole order book), agent questions are "recent/specific" — pulling
+ * pipeline wants the whole order book), agent questions are "recent/specific", pulling
  * every row to answer a 20-row question wastes Neon compute and tool-result tokens.
  * All filters are parameterized; free-text values never touch the SQL string.
  */

@@ -131,7 +131,7 @@ export default function HomeCentre() {
           <Checkbox label="Use archive orders" checked={archive} onChange={(e) => setArchive(e.target.checked)} />
           <span className="meta">
             {writesToProduction
-              ? 'Live run — this writes real orders into the Home Centre marketplace.'
+              ? 'Live run, this writes real orders into the Home Centre marketplace.'
               : 'Dry run reads the marketplace and reports what it would do.'}
           </span>
         </div>
@@ -181,14 +181,14 @@ export default function HomeCentre() {
           columns={[
             { key: 'created_at', label: 'When', render: (r) => fmtDate(r.created_at) },
             { key: 'action', label: 'Action', render: (r) => ACTION_LABEL[r.action] || r.action },
-            { key: 'mode', label: 'Mode', render: (r) => (r.dryRun ? 'Dry run' : r.mode || '—') },
+            { key: 'mode', label: 'Mode', render: (r) => (r.dryRun ? 'Dry run' : r.mode || '-') },
             { key: 'status', label: 'Status', render: (r) => <StatusPill status={r.status}>{r.status}</StatusPill> },
             {
               key: 'counts',
               label: 'Counts',
               render: (r) => (
                 r.okCount === undefined && r.failed === undefined
-                  ? (r.error || r.summary || '—')
+                  ? (r.error || r.summary || '-')
                   : `${r.okCount ?? 0} ok · ${r.failed ?? 0} failed`
               ),
             },

@@ -1,4 +1,4 @@
-// Mutating Unicommerce actions — the write half of the connector.
+// Mutating Unicommerce actions, the write half of the connector.
 //
 // EVERY payload here is copied from code that has run against real Unicommerce and been
 // verified by a document code or an inventory delta (automation-return, automation-
@@ -6,14 +6,14 @@
 // endpoint name. If you cannot point at a proven call, it does not belong here.
 //
 // Four rules every mutate obeys:
-//   1. `mutates: true` — the connector shell turns ctx.dryRun into a preview of the exact
+//   1. `mutates: true`, the connector shell turns ctx.dryRun into a preview of the exact
 //      request body, so an operator can see what WOULD be sent without sending it.
 //   2. Never blind-retry. uc-client retries idempotent GETs; a mutate that fails stays
 //      failed and surfaces, because a silent second allocate/invoice is real money.
 //   3. Facility is explicit. `/data/*` facility is session-global on a concurrency-1
 //      worker, so an action that guesses it corrupts the next job's context.
 //   4. Assert the upstream envelope. `successful: false` is a business failure and must
-//      not be reported as success — it is NOT session death (that is 401 / redirect /
+//      not be reported as success, it is NOT session death (that is 401 / redirect /
 //      USER_NOT_LOGGED_IN only).
 
 /** Throw on UC's business-failure envelope so a mutate can never report false success. */
@@ -37,7 +37,7 @@ export function registerAllocationActions(register) {
     title: 'Allocate inventory (B2C)',
     mutates: true,
     backend: 're',
-    description: 'POST /data/oms/saleorder/allocate/inventory — synchronous; returns shippingPackageCodes. Flow-proven (FLOWS.md §2, OPPD00149).',
+    description: 'POST /data/oms/saleorder/allocate/inventory, synchronous; returns shippingPackageCodes. Flow-proven (FLOWS.md §2, OPPD00149).',
     inputSchema: {
       type: 'object',
       required: ['saleOrder', 'facility', 'items'],
@@ -82,7 +82,7 @@ export function registerAllocationActions(register) {
     title: 'Allocate inventory (B2B smart-fill)',
     mutates: true,
     backend: 're',
-    description: 'POST /data/wms/b2b/sale-order/smart-fill/orders/allocate — ASYNC. inventoryLocationData (shelf) is REQUIRED: without it UC returns HTTP 200 and allocates nothing. The package materializes minutes later — poll saleOrder.getShippingPackages. Flow-proven (FLOWS.md §3, OPPD00150).',
+    description: 'POST /data/wms/b2b/sale-order/smart-fill/orders/allocate, ASYNC. inventoryLocationData (shelf) is REQUIRED: without it UC returns HTTP 200 and allocates nothing. The package materializes minutes later, poll saleOrder.getShippingPackages. Flow-proven (FLOWS.md §3, OPPD00150).',
     inputSchema: {
       type: 'object',
       required: ['saleOrder', 'facility', 'items'],
@@ -125,7 +125,7 @@ export function registerAllocationActions(register) {
               ok: false,
               code: 'INVALID_INPUT',
               retryable: false,
-              error: `no shelf/batch inventory found for ${it.sku} at ${params.facility} — allocation would silently do nothing`,
+              error: `no shelf/batch inventory found for ${it.sku} at ${params.facility}, allocation would silently do nothing`,
               sku: it.sku,
             };
           }
@@ -159,7 +159,7 @@ export function registerAllocationActions(register) {
         saleOrder: params.saleOrder,
         facility: params.facility,
         allocated,
-        note: 'B2B allocation is asynchronous — poll saleOrder.getShippingPackages until the package appears.',
+        note: 'B2B allocation is asynchronous, poll saleOrder.getShippingPackages until the package appears.',
       };
     },
   });
@@ -171,7 +171,7 @@ export function registerInvoiceDispatchActions(register) {
     title: 'Create invoice for a shipping package',
     mutates: true,
     backend: 're',
-    description: 'POST /services/rest/v1/oms/shippingPackage/createInvoice (bearer) — moves the package to PACKED and returns invoiceCode. Flow-proven (FLOWS.md §2/§3, INS0109/INS0110).',
+    description: 'POST /services/rest/v1/oms/shippingPackage/createInvoice (bearer), moves the package to PACKED and returns invoiceCode. Flow-proven (FLOWS.md §2/§3, INS0109/INS0110).',
     inputSchema: {
       type: 'object',
       required: ['shippingPackageCode', 'facility'],
@@ -197,7 +197,7 @@ export function registerInvoiceDispatchActions(register) {
     title: 'Allocate courier + AWB',
     mutates: true,
     backend: 're',
-    description: 'POST /data/oms/shipment/provider/allocate — assigns a trackingNumber from the courier pool. Flow-proven (FLOWS.md §4).',
+    description: 'POST /data/oms/shipment/provider/allocate, assigns a trackingNumber from the courier pool. Flow-proven (FLOWS.md §4).',
     inputSchema: {
       type: 'object',
       required: ['shippingPackageCode', 'facility'],
@@ -225,7 +225,7 @@ export function registerInvoiceDispatchActions(register) {
     title: 'Dispatch a shipping package',
     mutates: true,
     backend: 're',
-    description: 'POST /data/oms/shipment/dispatch. NOTE: in the manifest flow it is manifest.close that dispatches — use this only for the direct path.',
+    description: 'POST /data/oms/shipment/dispatch. NOTE: in the manifest flow it is manifest.close that dispatches, use this only for the direct path.',
     inputSchema: {
       type: 'object',
       required: ['shippingPackageCode', 'facility'],
@@ -345,7 +345,7 @@ export function registerManifestActions(register) {
     title: 'Close a manifest (THIS dispatches)',
     mutates: true,
     backend: 're',
-    description: 'POST /services/rest/v1/oms/shippingManifest/close (bearer). Closing the manifest is what actually dispatches the packages — not a separate dispatch call. Irreversible. Flow-proven (FLOWS.md §4).',
+    description: 'POST /services/rest/v1/oms/shippingManifest/close (bearer). Closing the manifest is what actually dispatches the packages, not a separate dispatch call. Irreversible. Flow-proven (FLOWS.md §4).',
     inputSchema: {
       type: 'object',
       required: ['shippingManifestCode', 'facility'],
@@ -377,7 +377,7 @@ export function registerReturnMutateActions(register) {
     title: 'Create a bulk return (auto-creates the CN)',
     mutates: true,
     backend: 're',
-    description: 'POST /data/oms/returns/reversePickup/bulkReturn/create. The order must be DELIVERED first. The ISR credit note is created automatically — read it back via saleOrder.getInvoiceDetails. Inventory does NOT return to sellable until putaway.complete. Flow-proven (FLOWS.md §5, ISR0051, inventory +1).',
+    description: 'POST /data/oms/returns/reversePickup/bulkReturn/create. The order must be DELIVERED first. The ISR credit note is created automatically, read it back via saleOrder.getInvoiceDetails. Inventory does NOT return to sellable until putaway.complete. Flow-proven (FLOWS.md §5, ISR0051, inventory +1).',
     inputSchema: {
       type: 'object',
       required: ['saleOrder', 'facility', 'customerCode', 'channelCode', 'items'],
@@ -434,7 +434,7 @@ export function registerReturnMutateActions(register) {
         bulkReturnId: d?.bulkReturnId ?? null,
         putawayCode: d?.putawayCode ?? null,
         reversePickups: (d?.reversePickups || []).map((x) => x.reversePickupCode).filter(Boolean),
-        note: 'Credit note is auto-created — read it via saleOrder.getInvoiceDetails. Inventory returns to sellable only after putaway.complete.',
+        note: 'Credit note is auto-created, read it via saleOrder.getInvoiceDetails. Inventory returns to sellable only after putaway.complete.',
       };
     },
   });
@@ -477,7 +477,7 @@ export function registerInventoryMutateActions(register) {
     title: 'Adjust inventory (ADD / REMOVE)',
     mutates: true,
     backend: 're',
-    description: 'POST /data/inflow/inventory/adjust — the same call automation-inventory uses for ADJUST mode. Applies to ONE sku/shelf at a time.',
+    description: 'POST /data/inflow/inventory/adjust, the same call automation-inventory uses for ADJUST mode. Applies to ONE sku/shelf at a time.',
     inputSchema: {
       type: 'object',
       required: ['sku', 'quantity', 'adjustmentType', 'facility'],

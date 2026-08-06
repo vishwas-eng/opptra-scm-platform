@@ -132,7 +132,7 @@ const handlers = makeHandlers({
     homecentrePipeline: (cfg.VINCULUM_USER && cfg.VINCULUM_PASS)
       ? makeHomecentrePipeline(uc, cfg)
       : null,
-    // Always load scaffold — downloads stay HAR-gated; status/email dry-run work without VPN.
+    // Always load scaffold, downloads stay HAR-gated; status/email dry-run work without VPN.
     street6Pipeline: makeSixthStreetPipeline(uc, cfg, google),
   },
   reenqueue: (name, data, opts) => queue.add(name, data, opts),
@@ -179,7 +179,7 @@ if (cfg.SHEET_SYNC_MINUTES > 0) {
 }
 
 // Home Centre scheduled sync (inventory UAE + orders→staging). Always enqueues dryRun unless HC_LIVE
-// and caller later flips input — scheduled jobs stay dry-run by default for safety.
+// and caller later flips input, scheduled jobs stay dry-run by default for safety.
 if (cfg.HC_SYNC_MINUTES > 0 && cfg.VINCULUM_USER && cfg.VINCULUM_PASS) {
   await queue.upsertJobScheduler('homecentre-sync', { every: cfg.HC_SYNC_MINUTES * 60_000 }, {
     name: 'homecentre.scheduled',
@@ -229,7 +229,7 @@ if (cfg.STREET6_SYNC_MINUTES > 0) {
 
 // Channel schedules (Home Centre UAE/KSA, 6th Street) live in the DB, not in env, so
 // operators can change the timing per region without a redeploy. Reconcile at boot and
-// then on a slow tick — a schedule saved in the UI takes effect within a minute.
+// then on a slow tick, a schedule saved in the UI takes effect within a minute.
 try {
   const { reconcileChannelSchedules } = await import('./channelSchedulers.js');
   await reconcileChannelSchedules(queue);

@@ -1,6 +1,6 @@
 // Per-user Google OAuth resolution + error mapping for Agent tools.
 //
-// Agent Sheets/Drive tools use ONLY the signed-in user's own OAuth grant — never the
+// Agent Sheets/Drive tools use ONLY the signed-in user's own OAuth grant, never the
 // platform's shared refresh token or service account. That keeps the ACL honest: the
 // Agent can touch exactly what the human could touch in their own browser, nothing more.
 import {
@@ -24,7 +24,7 @@ export async function agentGoogleFor(userEmail) {
   if (!tok?.refresh_token) return null;
   const scopes = userGoogleScopeStatus(tok.scope);
   if (!scopes.ok) {
-    const err = new Error(`Google reconnect required — missing scopes: ${scopes.missing.join(', ')}`);
+    const err = new Error(`Google reconnect required, missing scopes: ${scopes.missing.join(', ')}`);
     err.code = 'GOOGLE_SCOPES';
     throw err;
   }
@@ -40,7 +40,7 @@ export async function agentGoogleFor(userEmail) {
   } catch (err) {
     const msg = String(err.message || err);
     if (/invalid_grant|Token has been expired or revoked|revoked/i.test(msg)) {
-      await markUserGoogleOAuthError(email, 'refresh token revoked — reconnect Google').catch(() => {});
+      await markUserGoogleOAuthError(email, 'refresh token revoked, reconnect Google').catch(() => {});
       const e = new Error('Google access revoked. Open Connectors → Google Sheets → Connect again.');
       e.code = 'GOOGLE_REVOKED';
       throw e;
@@ -75,12 +75,12 @@ export function mapGoogleToolError(err) {
   }
   if (status === 403 || /PERMISSION_DENIED|insufficientPermissions|The caller does not have permission/i.test(msg)) {
     return connectorError(CONNECTOR_ERROR_CODES.PERMISSION_DENIED,
-      'Permission denied — you can see this file but cannot edit it, or scopes are missing. Share edit access or reconnect Google with Sheets+Drive.',
+      'Permission denied, you can see this file but cannot edit it, or scopes are missing. Share edit access or reconnect Google with Sheets+Drive.',
       { permissionDenied: true });
   }
   if (status === 429 || /rateLimit|quota|userRateLimit/i.test(msg)) {
     return connectorError(CONNECTOR_ERROR_CODES.RATE_LIMITED,
-      'Google API rate limit — wait a minute and retry.',
+      'Google API rate limit, wait a minute and retry.',
       { rateLimited: true });
   }
   return connectorError(CONNECTOR_ERROR_CODES.UPSTREAM_ERROR, msg);

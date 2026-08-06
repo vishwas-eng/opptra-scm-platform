@@ -34,7 +34,7 @@ export function resolveStreet6UcTarget(cfg = {}) {
       configured: !!(cfg.STREET6_UC_USER || cfg.HC_UC_STAGING_USER),
     };
   }
-  // india (default until env flipped) — sc.automations only.
+  // india (default until env flipped), sc.automations only.
   // Evidence 2026-08-04: invoice SKU 5056791600146 exists on KSA (OPP_SLS_ML_KSA), not as a HC LAND* code.
   // Prefer STREET6_UC_INSTANCE=ksa + HC_UC_KSA_* / UC_KSA_* once ops confirms 6th Street stocks from KSA.
   return {

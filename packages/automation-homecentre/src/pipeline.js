@@ -106,7 +106,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
     try {
       return { target, client: makeHcUcClient(target) };
     } catch (err) {
-      // Fall back to injected India/shared uc ONLY for staging dry-run previews — never for writes
+      // Fall back to injected India/shared uc ONLY for staging dry-run previews, never for writes
       // against the wrong tenant.
       if (ucFallback && target.label === 'staging' && !target.configured) {
         return { target: { ...target, clientSource: 'fallback-shared', error: String(err.message || err) }, client: ucFallback };
@@ -131,10 +131,10 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
     const price = Number(order.price || order.lineAmount || 0) || 0;
     const qty = Math.max(1, Number(order.qty) || 1);
     const customerCode = target.customerCode;
-    if (!customerCode) throw new Error('HC customer code missing — set HC_CUSTOMER_CODE / HC_UC_STAGING_CUSTOMER (no new customer create)');
+    if (!customerCode) throw new Error('HC customer code missing, set HC_CUSTOMER_CODE / HC_UC_STAGING_CUSTOMER (no new customer create)');
 
     const fac = target.facility ? { facility: target.facility } : {};
-    // Staging tenant is India — GCC order address (DU/Dubai) fails SO create validation.
+    // Staging tenant is India, GCC order address (DU/Dubai) fails SO create validation.
     // For staging proof, force India-safe geo; keep buyer name/phone/line1 from the order.
     const staging = target.label === 'staging';
     const addr = {
@@ -226,7 +226,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
     }
 
     if (targetCfg.label === 'uae' && !resolved.live) {
-      return { ok: false, webOrderNo, soCode, error: 'HC_LIVE=false — refusing UAE/production SO create' };
+      return { ok: false, webOrderNo, soCode, error: 'HC_LIVE=false, refusing UAE/production SO create' };
     }
 
     let uc;
@@ -249,7 +249,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
       return { ok: true, webOrderNo, ...so, ucTarget: targetCfg.label, ucBaseUrl: targetCfg.baseUrl, mode: resolved.modeLabel };
     } catch (err) {
       const msg = String(err.message || err);
-      // "Already exists" is the one failure that is really a success — the order was
+      // "Already exists" is the one failure that is really a success, the order was
       // punched by an earlier run. But the old test was /already|duplicate|exist/i,
       // which also matched "item does not exist" and "SKU does not exist": a genuinely
       // unmapped SKU was reported as ok:true, skipped, so a whole sync could look clean
@@ -308,7 +308,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
         results: [],
         empty: true,
         ownerEmail,
-        message: 'No Home Centre orders to process — nothing to do',
+        message: 'No Home Centre orders to process, nothing to do',
       };
     }
 
@@ -318,7 +318,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
         dryRun: true,
         mode: mode.modeLabel,
         ordersTarget: mode.ordersTarget,
-        message: 'Order writes gated — set dryRun=false; staging needs HC_UC_STAGING_* creds; UAE needs HC_LIVE=true + HC_ORDERS_UC_TARGET=uae',
+        message: 'Order writes gated, set dryRun=false; staging needs HC_UC_STAGING_* creds; UAE needs HC_LIVE=true + HC_ORDERS_UC_TARGET=uae',
         fetched: page.records,
         processed: 0,
         okCount: 0,
@@ -508,7 +508,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
 
     // Identity map: every seller skuCode is the UC key. Missing snapshot row ⇒ qty 0
     // (SKU may exist in catalog with no facility inventory record).
-    // Do NOT pre-fill all keys before merge — inventory-row match ≠ catalog match.
+    // Do NOT pre-fill all keys before merge, inventory-row match ≠ catalog match.
     const ucQtyBySku = {};
     let withInvRow = 0;
     let withPosQty = 0;
@@ -626,7 +626,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
   }
 
   async function fulfillOrders({ dryRun = false, limit = 20, webOrderNos = null } = {}) {
-    // Explicitly out of scope for current go-live — keep dry-run stub only.
+    // Explicitly out of scope for current go-live, keep dry-run stub only.
     if (dryRun || !truthyLive(cfg)) {
       return {
         ok: true,
@@ -635,7 +635,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
         okCount: 0,
         failed: 0,
         results: [],
-        message: 'Fulfill (invoice/transporter/acceptance) is OUT OF SCOPE — dry-run only',
+        message: 'Fulfill (invoice/transporter/acceptance) is OUT OF SCOPE, dry-run only',
         actionsConfigured: fulfill.actionsConfigured,
       };
     }

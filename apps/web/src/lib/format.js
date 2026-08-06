@@ -25,14 +25,14 @@ export const AUTOMATION_LABEL = {
 };
 
 export function automationLabel(a) {
-  return AUTOMATION_LABEL[a] || a || '—';
+  return AUTOMATION_LABEL[a] || a || '-';
 }
 
 /** Short, unambiguous timestamp in the team's local convention. */
 export function fmtDate(t) {
-  if (!t) return '—';
+  if (!t) return '-';
   const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return '-';
   return d.toLocaleString('en-IN', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   });
@@ -110,7 +110,7 @@ export function fileToObjectUrl(file) {
   return URL.createObjectURL(new Blob([bytes], { type: file.contentType || 'application/octet-stream' }));
 }
 
-/** Strip base64 blobs before showing raw JSON — they are megabytes of noise. */
+/** Strip base64 blobs before showing raw JSON, they are megabytes of noise. */
 export function withoutBase64(obj) {
   return JSON.parse(JSON.stringify(obj ?? null, (k, v) => (
     k === 'base64' && typeof v === 'string' ? '…' : v

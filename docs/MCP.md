@@ -2,7 +2,7 @@
 
 Every connector the platform exposes is also available as MCP tools in any MCP-capable
 editor. The editor runs a thin stdio bridge (`packages/mcp-server`); **all execution
-happens on the deployed platform** — same session vault, same worker queue, same
+happens on the deployed platform**, same session vault, same worker queue, same
 sanitization, same per-user audit trail as the web app's Agent chat. A revoked token or
 deactivated user loses MCP access instantly.
 
@@ -53,7 +53,7 @@ OPPTRA_URL=https://<host> OPPTRA_TOKEN=<token> claude mcp add opptra -- node <re
 ## What you get
 
 `tools/list` returns exactly the tools the token's owner is connected to on the
-Connectors page — Unicommerce (orders, inventory, shipments, invoices), Google
+Connectors page, Unicommerce (orders, inventory, shipments, invoices), Google
 Sheets/Drive, Waypoint, Home Centre, and every channel that goes live later. No
 per-editor work is ever needed when a new connector ships: connect it once on the
 Connectors page and it appears in `tools/list` everywhere.
@@ -70,8 +70,8 @@ running them.
 
 ## Troubleshooting
 
-- `invalid or revoked access token` — regenerate in Admin → Access tokens.
-- `token owner is not an active user` — the user row was deactivated.
-- Empty tool list — that user has nothing connected on the Connectors page.
+- `invalid or revoked access token`, regenerate in Admin → Access tokens.
+- `token owner is not an active user`, the user row was deactivated.
+- Empty tool list, that user has nothing connected on the Connectors page.
 - The bridge logs to **stderr** only; if an editor shows protocol errors, check that
   nothing else on the machine wraps `node` with stdout noise (nvm echo, etc.).

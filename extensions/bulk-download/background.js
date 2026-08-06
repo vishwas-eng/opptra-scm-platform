@@ -1,4 +1,4 @@
-// Background service worker — bulk download of INVOICE or E-WAY BILL PDFs, facility-aware.
+// Background service worker, bulk download of INVOICE or E-WAY BILL PDFs, facility-aware.
 //
 // Proven on production (oppdoor.unicommerce.co.in):
 //   GET  /data/user/facilities                          -> {currentFacilityCode, facilityDTOList[].code}
@@ -14,7 +14,7 @@
 
 async function getFacilities(base) {
   const r = await fetch(base + '/data/user/facilities', { credentials: 'include', headers: { 'Accept': 'application/json' } });
-  if ([401, 403, 302].includes(r.status)) throw new Error('not logged in — open & log into Unicommerce first');
+  if ([401, 403, 302].includes(r.status)) throw new Error('not logged in, open & log into Unicommerce first');
   const d = await r.json();
   return { current: d.currentFacilityCode, all: (d.facilityDTOList || []).map(f => f.code) };
 }
@@ -102,7 +102,7 @@ async function downloadInvoicePdf(base, invoiceCode, filename) {
   await chrome.downloads.download({ url: dataUrl, filename, conflictAction: 'overwrite' });
 }
 
-// E-way bill PDF: ewayBillPdfUrl is a self-contained (S3) link — download directly.
+// E-way bill PDF: ewayBillPdfUrl is a self-contained (S3) link, download directly.
 async function downloadEwayPdf(url, filename) {
   await chrome.downloads.download({ url, filename, conflictAction: 'overwrite' });
 }
@@ -125,7 +125,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           if (!sps.length) {
             failSos++;
             const info = await orderStatusAcrossFacilities(base, candidateCodes(so), state);
-            progress({ so, ok: false, error: info.found ? ('not invoiced yet — status ' + info.status) : 'order not found (check the id)' });
+            progress({ so, ok: false, error: info.found ? ('not invoiced yet, status ' + info.status) : 'order not found (check the id)' });
             continue;
           }
           const fnameBase = (matched && /^[A-Za-z0-9._-]+$/.test(matched)) ? matched : so.replace(/[^A-Za-z0-9._-]/g, '_');

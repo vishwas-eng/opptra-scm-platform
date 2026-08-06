@@ -98,7 +98,7 @@ export function makeEwaybillPipeline(uc) {
     if (vehicleNo) td.vehicleNo = vehicleNo;
     if (mode) td.transMode = mode;
     // NIC/GST rejects distance 0 / empty when ship-from and ship-to share a pincode
-    // (error 107). Ops often leave distance blank for local moves — default to 1 km;
+    // (error 107). Ops often leave distance blank for local moves, default to 1 km;
     // an explicit positive value still wins.
     const dist = v(row.distance);
     td.transDistance = dist && Number(dist) > 0 ? dist : '1';
@@ -153,7 +153,7 @@ export function makeEwaybillPipeline(uc) {
       let err = (d.errors || []).map((x) => x.description || x.message).join('; ') || 'failed';
       // Tip for the two most common GST payload mistakes so operators fix input, not "retry forever".
       if (/4011|vehicle number/i.test(err) && !td.vehicleNo) {
-        err += ' — add a vehicle number (required for Road transport).';
+        err += ', add a vehicle number (required for Road transport).';
       }
       return { so, ok: false, invoiceCode: inv.invoiceCode, error: err };
     }

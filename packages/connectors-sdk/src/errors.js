@@ -3,9 +3,9 @@
 // rewords their message.
 //
 // Shape: { ok: false, code, error, retryable, ...hints }
-//   code      — stable machine identifier from CONNECTOR_ERROR_CODES
-//   error     — human sentence (safe to show; never contains secrets)
-//   retryable — true only when repeating the SAME call unchanged may succeed later.
+//   code, stable machine identifier from CONNECTOR_ERROR_CODES
+//   error, human sentence (safe to show; never contains secrets)
+//   retryable, true only when repeating the SAME call unchanged may succeed later.
 //               Auth/permission/validation failures are NOT retryable: retrying them
 //               burns quota and hides the real fix from the operator.
 

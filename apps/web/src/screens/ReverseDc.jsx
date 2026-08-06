@@ -15,7 +15,7 @@ const MODE_LABEL = {
 
 /**
  * Facilities are a background lookup, not the operator's action, so they get their own
- * state — routing them through useRun would blank the result they are looking at.
+ * state, routing them through useRun would blank the result they are looking at.
  */
 function useFacilities() {
   const [facilities, setFacilities] = useState([]);
@@ -107,7 +107,7 @@ export default function ReverseDc() {
           <Field
             label="Warehouse"
             hint={facilityError || (current ? `Yours: ${current}` : 'Loaded from Unicommerce')}
-            error={facilityError ? 'Could not load facilities — refresh to retry.' : undefined}
+            error={facilityError ? 'Could not load facilities, refresh to retry.' : undefined}
           >
             <Select
               value={facility}
@@ -160,8 +160,8 @@ export default function ReverseDc() {
 
       <Panel title="Upload a credit note PDF instead">
         <p className="lead">
-          When Unicommerce will not hand over the credit note — a dead session, a return
-          raised outside the platform — download the PDF yourself and drop it here.
+          When Unicommerce will not hand over the credit note, a dead session, a return
+          raised outside the platform, download the PDF yourself and drop it here.
         </p>
         <div className="row" style={{ marginTop: 'var(--s-5)', marginBottom: 0 }}>
           <Field label="Credit note PDF">

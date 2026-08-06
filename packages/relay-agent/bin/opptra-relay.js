@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Opptra relay agent — runs on a machine that is ALREADY inside a network the platform
+// Opptra relay agent, runs on a machine that is ALREADY inside a network the platform
 // cannot reach (today: 6th Street's IBM Sterling OMS behind a Forti VPN).
 //
 //   OPPTRA_URL=https://scm.opptra.com OPPTRA_TOKEN=<token> \
@@ -8,7 +8,7 @@
 //
 // It only ever makes OUTBOUND HTTPS calls to the platform, so there is no inbound
 // firewall rule to open, no site-to-site tunnel to provision, and MFA or split-tunnel
-// on the VPN is irrelevant — a human already authenticated this machine.
+// on the VPN is irrelevant, a human already authenticated this machine.
 //
 // Logs go to stderr; stdout stays clean for piping status.
 import { hostname } from 'node:os';
@@ -73,7 +73,7 @@ async function runOnce() {
   try {
     const { artifacts = [], result = {} } = await handler(job.payload || {});
     await api(`/api/relay/jobs/${job.job_uid}/result`, { agentId, artifacts, result });
-    log(`done ${job.job_uid} — ${artifacts.length} artifact(s)`);
+    log(`done ${job.job_uid}, ${artifacts.length} artifact(s)`);
   } catch (err) {
     log(`failed ${job.job_uid}: ${err.message}`);
     // Report the failure so the job stops being retried blindly; the platform counts
@@ -99,7 +99,7 @@ while (!stopping) {
     while (worked && !stopping) worked = await runOnce();
   } catch (err) {
     if (err.status === 401 || err.status === 403) {
-      log(`auth rejected (${err.message}) — fix the token and restart`);
+      log(`auth rejected (${err.message}), fix the token and restart`);
       process.exit(1);
     }
     log(`poll error: ${err.message}`);

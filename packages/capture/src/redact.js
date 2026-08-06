@@ -1,5 +1,5 @@
 // Capture redaction. A capture is, by design, a recording of an authenticated session:
-// it CONTAINS the credentials. So the rule is not "never store secrets" — it is
+// it CONTAINS the credentials. So the rule is not "never store secrets", it is
 //
 //   the session material is extracted once, sealed into the vault, and everything that
 //   remains (the part humans and models read) carries no live credential.
@@ -52,8 +52,7 @@ export function redactHeaders(headers = {}) {
 }
 
 /**
- * Redact a request/response body. JSON is walked key-wise so the SHAPE survives —
- * shape is the entire point of a capture — while secret-ish leaves are replaced.
+ * Redact a request/response body. JSON is walked key-wise so the SHAPE survives, * shape is the entire point of a capture, while secret-ish leaves are replaced.
  * Non-JSON is pattern-scrubbed and truncated.
  */
 export function redactBody(body, { maxChars = 20000 } = {}) {
@@ -116,7 +115,7 @@ export function extractSessionMaterial(entries = []) {
   };
 }
 
-/** Full-entry redaction — what gets persisted and shown. */
+/** Full-entry redaction, what gets persisted and shown. */
 export function redactEntry(entry = {}) {
   return {
     method: String(entry.method || 'GET').toUpperCase(),

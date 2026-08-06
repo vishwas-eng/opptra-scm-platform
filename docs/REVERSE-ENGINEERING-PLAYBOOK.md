@@ -4,7 +4,7 @@
 
 Version 1.0 · 3 Aug 2026 · Companion: `docs/CONNECTOR-MASTER-PLAN.md` §0 Doctrine
 
-Unicommerce is the **reference implementation**. Every new seller portal (Amazon, Flipkart, Myntra, Nykaa, Zepto, Blinkit, Instamart, …) follows this same loop. Google Sheets is **hybrid** — OAuth/official already; skip RE unless a UI-only gap appears.
+Unicommerce is the **reference implementation**. Every new seller portal (Amazon, Flipkart, Myntra, Nykaa, Zepto, Blinkit, Instamart, …) follows this same loop. Google Sheets is **hybrid**, OAuth/official already; skip RE unless a UI-only gap appears.
 
 ---
 
@@ -97,7 +97,7 @@ packages/connectors-<portal>/
 ### Registry pattern (HAR → one PR)
 
 ```js
-// registry.js — adding a newly discovered endpoint:
+// registry.js, adding a newly discovered endpoint:
 register({
   id: 'orders.get',
   title: 'Get order',
@@ -130,7 +130,7 @@ register({
 
 1. **`health.ping` (or equivalent):** cheapest authenticated read (UC: `GET /data/user/facilities` via `uc.ping()`).
 2. **Keepalive job:** BullMQ scheduler on an interval (UC: `system.keepalive` in `apps/worker/src/worker.js`).
-3. **On death:** alert + `needs_relogin`; human paste/extension/remote browser — no CAPTCHA bypass.
+3. **On death:** alert + `needs_relogin`; human paste/extension/remote browser, no CAPTCHA bypass.
 4. **API health route:** may return vault **metadata** only (`has_cookie`, `status`, `last_ok_at`). Live probe goes through the worker via `invoke`.
 
 ---
@@ -157,19 +157,19 @@ When keys arrive:
 2. Register it under the **same** `id: 'orders.search'`.
 3. Feature-flag or vault `kind` selects RE vs official.
 4. Keep Run ledger, API routes, and agent tool names unchanged.
-5. Retire RE only when parity is proven — don’t big-bang delete HARs/fixtures.
+5. Retire RE only when parity is proven, don’t big-bang delete HARs/fixtures.
 
 Sheets already live at step 7 (OAuth). Marketplaces start at steps 1–6.
 
 ---
 
-## Portal reverse backlog — what to capture first
+## Portal reverse backlog, what to capture first
 
 After Unicommerce, capture in this order. Each: **login/session** + the four flows.
 
 | Order | Portal | Auth posture | Capture first |
 |---|---|---|---|
-| 0 | Unicommerce | Session/RE primary (+ bearer dual) | Done — extend from engine + live HARs |
+| 0 | Unicommerce | Session/RE primary (+ bearer dual) | Done, extend from engine + live HARs |
 | 1 | Google Sheets | **Official OAuth (hybrid)** | Skip RE; resource-id connector next |
 | 2 | Amazon Seller Central | Session/RE primary; SP-API future swap | Orders → inventory → labels → returns |
 | 3 | Flipkart Seller | Session/RE primary; Seller API future swap | Orders → inventory → labels/shipments → returns |
@@ -208,4 +208,4 @@ For the **next** portal after UC (usually **Amazon** once UC scaffold is green):
 
 ---
 
-*End of Reverse-Engineering Playbook v1.0 — keep this procedural; put platform priorities in the master plan.*
+*End of Reverse-Engineering Playbook v1.0, keep this procedural; put platform priorities in the master plan.*

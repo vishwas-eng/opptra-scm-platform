@@ -1,4 +1,4 @@
-// Relay job queue — work the platform cannot reach, executed by an agent that can.
+// Relay job queue, work the platform cannot reach, executed by an agent that can.
 //
 // The platform never dials into a private network. An agent already inside it polls
 // outbound, claims a job, does the work through the access it already has, and posts

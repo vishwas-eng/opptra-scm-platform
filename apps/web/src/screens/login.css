@@ -10,7 +10,7 @@
     linear-gradient(165deg, var(--login-1) 0%, var(--login-2) 48%, var(--login-3) 100%);
 }
 
-/* Slow drifting grid — depth without distraction. Masked so it fades at the edges
+/* Slow drifting grid, depth without distraction. Masked so it fades at the edges
    instead of ending in a hard line. */
 .login-grid {
   position: absolute;

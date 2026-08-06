@@ -147,8 +147,7 @@ function extractTotals(items) {
   const band = items
     .filter((it) => it.page === totalLabel.page && Math.abs(it.yTop - totalLabel.yTop) < 4)
     .sort((a, b) => a.x - b.x);
-  // Wrapped digits: a long total ("280205.7" / "8") continues just below the band —
-  // stitch pure-digit continuations back onto the nearest number to their left.
+  // Wrapped digits: a long total ("280205.7" / "8") continues just below the band, // stitch pure-digit continuations back onto the nearest number to their left.
   const wraps = items.filter((it) => it.page === totalLabel.page
     && it.yTop > totalLabel.yTop + 4 && it.yTop < totalLabel.yTop + 18
     && /^[\d,.]+$/.test(it.str.trim()));

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   Badge, Button, Checkbox, DataTable, EmptyState, PageTransition, Panel, Select,
 } from '../components/ui.jsx';
 import { api } from '../lib/api.js';
 import { fmtRelative } from '../lib/format.js';
 import { useToast } from '../lib/toast.jsx';
+import { humanError, humanSummary } from '../lib/humanError.js';
 import './channels.css';
 
 const CHANNEL_NAME = { homecentre: 'Home Centre', '6thstreet': '6th Street' };
@@ -42,10 +44,11 @@ function OperationRow({ channelId, region, entry, onChanged }) {
         `/api/channels/${channelId}/${region || 'default'}/run/${entry.operation}`,
         { body: { dryRun: runDry } },
       );
-      ok(`${OPERATION_NAME[entry.operation]} queued${runDry ? ' (dry run)' : ' — LIVE'}. Run ${r.runUid.slice(0, 8)}.`);
+      ok(`${OPERATION_NAME[entry.operation]} queued${runDry ? ' (dry run)' : ', LIVE'}. Run ${r.runUid.slice(0, 8)}.`);
       onChanged();
     } catch (err) {
-      bad(err.message);
+      const h = humanError(err);
+      bad(`${h.title}. ${h.fix}`);
     } finally {
       setRunning(false);
     }
@@ -64,7 +67,8 @@ function OperationRow({ channelId, region, entry, onChanged }) {
       setOpen(false);
       onChanged();
     } catch (err) {
-      bad(err.message);
+      const h = humanError(err);
+      bad(`${h.title}. ${h.fix}`);
     } finally {
       setSaving(false);
     }
@@ -145,6 +149,9 @@ function OperationRow({ channelId, region, entry, onChanged }) {
 
 export default function Channels() {
   const { bad } = useToast();
+  // /channels/homecentre and /channels/6thstreet deep-link to one channel from the
+  // sidebar; /channels shows everything.
+  const { focus } = useParams();
   const [channels, setChannels] = useState([]);
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -171,11 +178,11 @@ export default function Channels() {
   return (
     <PageTransition>
       <p className="lead channels-lead">
-        Each marketplace runs two jobs — inventory out, sale orders in — and each region
+        Each marketplace runs two jobs, inventory out, sale orders in, and each region
         is independent, so UAE and KSA can sync on their own schedules.
       </p>
 
-      {channels.map((ch) => (
+      {channels.filter((ch) => !focus || ch.id === focus).map((ch) => (
         <Panel key={ch.id} title={CHANNEL_NAME[ch.id] || ch.id}>
           {ch.regions.map((r) => (
             <div key={r.region || 'default'} className="region-block">

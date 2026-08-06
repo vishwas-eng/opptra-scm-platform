@@ -4,7 +4,7 @@
 // Unicommerce differently:
 //   - API: enqueue connector.unicommerce.invoke and poll the Run (only the worker may
 //     talk to UC).
-//   - Worker: call the connector directly — it IS the UC-talking process. Enqueueing
+//   - Worker: call the connector directly, it IS the UC-talking process. Enqueueing
 //     from inside the worker would deadlock a concurrency-1 queue: the playbook job
 //     holds the only slot while waiting for the UC job it just queued.
 import {
@@ -25,12 +25,12 @@ import {
 
 const SHEET_ID_PROPS = {
   resourceId: { type: 'string', description: 'Bound resourceUid from Connectors (preferred)' },
-  spreadsheetId: { type: 'string', description: 'Google spreadsheet id — must already be bound' },
+  spreadsheetId: { type: 'string', description: 'Google spreadsheet id, must already be bound' },
 };
 const DRIVE_ID_PROPS = {
   resourceId: { type: 'string', description: 'Bound resourceUid from Connectors (preferred)' },
-  folderId: { type: 'string', description: 'Drive folder id — must already be bound' },
-  fileId: { type: 'string', description: 'Drive file id — must already be bound' },
+  folderId: { type: 'string', description: 'Drive folder id, must already be bound' },
+  fileId: { type: 'string', description: 'Drive file id, must already be bound' },
 };
 
 /** The only mimeType values drive_search will filter on (no free-form query expressions). */
@@ -78,7 +78,7 @@ export const TOOLS_BY_CONNECTOR = {
   ],
   'google-sheets': [
     { name: 'sheets_list_bound', description: 'List spreadsheets the user bound under Connectors (use resourceId for read/write)', parameters: { type: 'object', properties: {} } },
-    { name: 'sheets_list_spreadsheets', description: 'Discover recent Google Spreadsheets visible via OAuth (not a substitute for binding — bind on Connectors to read/write)', parameters: { type: 'object', properties: { pageSize: { type: 'integer' }, nameContains: { type: 'string' } } } },
+    { name: 'sheets_list_spreadsheets', description: 'Discover recent Google Spreadsheets visible via OAuth (not a substitute for binding, bind on Connectors to read/write)', parameters: { type: 'object', properties: { pageSize: { type: 'integer' }, nameContains: { type: 'string' } } } },
     { name: 'sheets_list_tabs', description: 'List tab names in a bound spreadsheet', parameters: { type: 'object', properties: SHEET_ID_PROPS } },
     { name: 'sheets_read', description: 'Read values from a bound spreadsheet range (A1). Alias: sheets_get_range', parameters: { type: 'object', properties: { ...SHEET_ID_PROPS, range: { type: 'string' } }, required: ['range'] } },
     { name: 'sheets_get_range', description: 'Read values from a bound sheet range (A1 notation)', parameters: { type: 'object', properties: { ...SHEET_ID_PROPS, range: { type: 'string' } }, required: ['range'] } },
@@ -102,13 +102,13 @@ export const TOOLS_BY_CONNECTOR = {
     { name: 'homecentre_orders_list', description: 'List active Home Centre orders', parameters: { type: 'object', properties: { limit: { type: 'integer' } } } },
     {
       name: 'homecentre_run_operation',
-      description: 'Run a Home Centre job for one region and report what it did. Defaults to a dry run — set dryRun:false only when the user explicitly asks to write for real.',
+      description: 'Run a Home Centre job for one region and report what it did. Defaults to a dry run, set dryRun:false only when the user explicitly asks to write for real.',
       parameters: {
         type: 'object',
         properties: {
           operation: { type: 'string', enum: ['inventory', 'orders'], description: 'inventory = push stock to Home Centre; orders = punch HC orders into Unicommerce' },
           region: { type: 'string', enum: ['uae', 'ksa'], description: 'UAE and KSA are separate marketplaces' },
-          dryRun: { type: 'boolean', description: 'default true — preview without writing' },
+          dryRun: { type: 'boolean', description: 'default true, preview without writing' },
           limit: { type: 'integer', description: 'max orders to process' },
         },
         required: ['operation', 'region'],
@@ -175,7 +175,7 @@ export function buildToolSpecs(connectedLiveIds) {
 
 /* ------------------------------ executor ------------------------------ */
 
-/** Mutating tools — playbook UIs surface these, and future approval gates key off this. */
+/** Mutating tools, playbook UIs surface these, and future approval gates key off this. */
 export const MUTATING_TOOLS = new Set([
   'sheets_write', 'sheets_update_range', 'sheets_append_rows', 'sheets_clear_range', 'sheets_copy_range',
 ]);
@@ -314,7 +314,7 @@ export function makeToolExecutor({ userEmail, connectedIds, invokeUc, runChannel
     }
     if (tool === 'sheets_list_spreadsheets') {
       if (!g.drive) {
-        return connectorError(CONNECTOR_ERROR_CODES.SCOPE_MISSING, 'Drive scope missing — reconnect Google', {
+        return connectorError(CONNECTOR_ERROR_CODES.SCOPE_MISSING, 'Drive scope missing, reconnect Google', {
           reconnect: true, oauthUrl: GOOGLE_RECONNECT_URL,
         });
       }
@@ -329,7 +329,7 @@ export function makeToolExecutor({ userEmail, connectedIds, invokeUc, runChannel
         ok: true,
         googleEmail: g.googleEmail,
         spreadsheets: res.data.files || [],
-        note: 'Discovery only — bind a spreadsheet on Connectors before sheets_read/write.',
+        note: 'Discovery only, bind a spreadsheet on Connectors before sheets_read/write.',
       });
     }
 
@@ -344,7 +344,7 @@ export function makeToolExecutor({ userEmail, connectedIds, invokeUc, runChannel
       if (!src.ok) return src;
       // resolveBoundResource short-circuits on resourceUid and ignores externalId, so
       // falling back to sourceResourceId here would resolve the DESTINATION to the SOURCE
-      // sheet and write over it — while cheerfully echoing the destination id back. Only
+      // sheet and write over it, while cheerfully echoing the destination id back. Only
       // fall back when the caller named no destination at all (copy within one sheet).
       const destNamed = args.destResourceId || args.destSpreadsheetId;
       const dst = destNamed
@@ -425,8 +425,8 @@ export function makeToolExecutor({ userEmail, connectedIds, invokeUc, runChannel
     }
     if (tool === 'drive_search') {
       // Deliberately NOT a raw `q` passthrough. A free-form Drive query would let anything
-      // that reaches the model — including text read out of a bound sheet or CSV, i.e.
-      // content an outsider can influence — enumerate the user's entire Drive
+      // that reaches the model, including text read out of a bound sheet or CSV, i.e.
+      // content an outsider can influence, enumerate the user's entire Drive
       // (`fullText contains 'password'`), straight past the bind-first ACL that every
       // other Drive/Sheets tool enforces. Only a name substring and a fixed type filter.
       const clauses = ['trashed = false'];
@@ -445,7 +445,7 @@ export function makeToolExecutor({ userEmail, connectedIds, invokeUc, runChannel
         ok: true,
         googleEmail: g.googleEmail,
         files: res.data.files || [],
-        note: 'Discovery only — bind on Connectors before drive_list/download.',
+        note: 'Discovery only, bind on Connectors before drive_list/download.',
       });
     }
     if (tool === 'drive_list' || tool === 'drive_list_folder') {

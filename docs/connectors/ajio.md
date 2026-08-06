@@ -4,13 +4,13 @@
 
 ## Capture checklist
 
-Follow **`HAR-CAPTURE-CHECKLIST.md`** — it is the full handoff contract (4 flows, sanitization rules, what makes a capture sufficient). Send the HAR privately, never via git or `#scm-ops`.
+Follow **`HAR-CAPTURE-CHECKLIST.md`**, it is the full handoff contract (4 flows, sanitization rules, what makes a capture sufficient). Send the HAR privately, never via git or `#scm-ops`.
 
 ## Scaffold state
 
 | Action | Backend | Ready? |
 |---|---|---|
-| `health.ping` | session/RE | **awaiting HAR** — refuses with `{ code: 'AWAITING_HAR' }` |
+| `health.ping` | session/RE | **awaiting HAR**, refuses with `{ code: 'AWAITING_HAR' }` |
 | `orders.search` | session/RE | awaiting HAR |
 | `inventory.get` | session/RE | awaiting HAR |
 
@@ -22,4 +22,4 @@ Which portal Opptra actually sells through (Ajio B2B / seller central variant) �
 
 ## Opptra context
 
-Ajio already exists platform-side as a UC B2B channel mapping (`RELIANCE_AJIO_SOR_B2B → 'AJIO'` in automation-sheet/uc-client) — this connector is the seller-portal side of the same channel.
+Ajio already exists platform-side as a UC B2B channel mapping (`RELIANCE_AJIO_SOR_B2B → 'AJIO'` in automation-sheet/uc-client), this connector is the seller-portal side of the same channel.

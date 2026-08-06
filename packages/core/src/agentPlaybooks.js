@@ -1,8 +1,8 @@
-// Agent playbooks — saved sheet/drive/UC workflows (daily or manual).
+// Agent playbooks, saved sheet/drive/UC workflows (daily or manual).
 //
 // Schedule model: the operator picks a wall-clock time in a named zone (hour +
 // schedule_minute + timezone). BullMQ's job scheduler converts via `tz`, so "9:00 IST"
-// — which is 03:30 UTC and therefore unrepresentable as a whole UTC hour — is expressible.
+//, which is 03:30 UTC and therefore unrepresentable as a whole UTC hour, is expressible.
 // `hour_utc` keeps its column name for back-compat; rows created before timezones carry
 // minute 0 / zone UTC and fire exactly when they always did.
 import { randomUUID } from 'node:crypto';
@@ -16,7 +16,7 @@ const clampHour = (h) => Math.min(23, Math.max(0, Number(h) || 0));
 const clampMinute = (m) => Math.min(59, Math.max(0, Number(m) || 0));
 
 /**
- * Accept an IANA zone only if this Node build can actually resolve it — an unknown zone
+ * Accept an IANA zone only if this Node build can actually resolve it, an unknown zone
  * would make the scheduler silently fall back and fire at the wrong hour every day.
  */
 export function normalizeTimezone(tz) {
@@ -132,7 +132,7 @@ export async function markPlaybookRun(playbookUid, { ok, error = null }) {
  * Active daily playbooks whose OWNER is still an active user.
  *
  * Deactivating a user correctly cuts their HTTP access, but their scheduled playbook has
- * no requesting user to authorize — the worker re-registers it on every boot and it keeps
+ * no requesting user to authorize, the worker re-registers it on every boot and it keeps
  * writing to sheets under a departed employee's stored Google grant, with no UI left for
  * them to pause it. Ownership is therefore re-checked here, on every re-registration.
  */

@@ -68,7 +68,7 @@ export default function ConnectorDetail({ connector: c, onClose, onChanged }) {
               <div className="conn-platform">
                 <p className="lead">
                   {c.systemReady
-                    ? 'Configured by the platform and shared by everyone — nothing for you to connect.'
+                    ? 'Configured by the platform and shared by everyone, nothing for you to connect.'
                     : 'Not configured yet. An admin sets this up once for the whole team.'}
                 </p>
                 {c.id === 'unicommerce' && !c.systemReady && (
@@ -103,13 +103,13 @@ export default function ConnectorDetail({ connector: c, onClose, onChanged }) {
         {!c.live && c.connectMode === 'capture' && <CaptureGuide connector={c} />}
         {!c.live && c.connectMode === 'official-api' && (
           <p className="lead">
-            This channel publishes a real seller API — we build against that rather than
+            This channel publishes a real seller API, we build against that rather than
             recording a login. Needs API credentials from their onboarding team.
           </p>
         )}
         {!c.live && c.connectMode === 'via-noon' && (
           <p className="lead">
-            Runs on the same platform as noon — one connection serves both marketplaces,
+            Runs on the same platform as noon, one connection serves both marketplaces,
             so connect noon and this comes with it.
           </p>
         )}
@@ -121,7 +121,7 @@ export default function ConnectorDetail({ connector: c, onClose, onChanged }) {
         )}
         {!c.live && c.connectMode === 'email-po' && (
           <p className="lead">
-            No vendor API exists. Purchase orders arrive by email as PDF/XLSX — the
+            No vendor API exists. Purchase orders arrive by email as PDF/XLSX, the
             connector parses the mailbox, and Unicommerce already ingests this channel
             too. The work worth doing here is appointments, GRN reconciliation and
             fill-rate, not fetching the PO.
@@ -132,9 +132,9 @@ export default function ConnectorDetail({ connector: c, onClose, onChanged }) {
           <div className="capture-summary">
             <h4>Latest capture</h4>
             <KeyValues pairs={[
-              ['Endpoints found', capture.endpoints ?? '—'],
-              ['Requests recorded', capture.entries ?? '—'],
-              ['API host', capture.primaryHost || '—'],
+              ['Endpoints found', capture.endpoints ?? '-'],
+              ['Requests recorded', capture.entries ?? '-'],
+              ['API host', capture.primaryHost || '-'],
               ['Session captured', capture.sessionSaved ? 'yes' : 'no'],
               ['When', fmtRelative(capture.capturedAt)],
             ]}

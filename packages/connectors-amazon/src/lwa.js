@@ -1,4 +1,4 @@
-// Login-with-Amazon plumbing for SP-API — the "connect once, hold the refresh token
+// Login-with-Amazon plumbing for SP-API, the "connect once, hold the refresh token
 // forever" flow. One LWA application (client id/secret) serves every marketplace; the
 // seller authorizes once per Seller Central region and we keep that region's refresh
 // token in the connector vault.
@@ -75,7 +75,7 @@ export function makeAccessTokenSource({ clientId, clientSecret, httpFetch = fetc
   const cache = new Map(); // refreshToken → { token, expiresAt }
 
   return async function accessTokenFor(refreshToken) {
-    if (!refreshToken) throw new Error('no Amazon refresh token — connect the marketplace first');
+    if (!refreshToken) throw new Error('no Amazon refresh token, connect the marketplace first');
     const hit = cache.get(refreshToken);
     if (hit && hit.expiresAt > now()) return hit.token;
     const body = await lwaPost({

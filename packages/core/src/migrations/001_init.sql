@@ -10,7 +10,7 @@ CREATE TABLE users (
   last_login  timestamptz
 );
 
--- Runs: one row per automation action — THE attribution/audit record.
+-- Runs: one row per automation action, THE attribution/audit record.
 CREATE TABLE runs (
   id           bigserial PRIMARY KEY,
   run_uid      text NOT NULL UNIQUE,

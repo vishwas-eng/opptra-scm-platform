@@ -1,6 +1,6 @@
 // Generic connector credential vault. Secrets stay server-side; callers never get the
 // secret unless they explicitly ask via getConnectorSecret (worker / invoke path only).
-// secret_enc is sealed with secretBox (AES-256-GCM) — never store the raw value.
+// secret_enc is sealed with secretBox (AES-256-GCM), never store the raw value.
 import { query } from './db.js';
 import { sealSecret, openSecret, isSealed } from './secretBox.js';
 
@@ -8,7 +8,7 @@ function owner(ownerKey = 'shared') {
   return String(ownerKey || 'shared').trim().toLowerCase() || 'shared';
 }
 
-/** Metadata only — never includes secret_enc. */
+/** Metadata only, never includes secret_enc. */
 export async function getConnectorCredentialMeta(connectorId, ownerKey = 'shared') {
   const { rows } = await query(
     `SELECT connector_id, owner_key, auth_kind, meta, status, source, updated_by, updated_at,
@@ -40,7 +40,7 @@ export async function listConnectorCredentialMeta({ connectorIds } = {}) {
   return rows;
 }
 
-/** Worker/invoke only — returns the OPENED secret. Never send to browser. */
+/** Worker/invoke only, returns the OPENED secret. Never send to browser. */
 export async function getConnectorSecret(connectorId, ownerKey = 'shared') {
   const { rows } = await query(
     `SELECT secret_enc, auth_kind, meta, status FROM connector_credentials
@@ -109,7 +109,7 @@ export async function markConnectorAlive(connectorId, ownerKey = 'shared') {
 
 /**
  * One-shot boot backfill: seal any legacy plaintext secrets sitting at rest
- * (connector vault + UC session cookies). Idempotent — sealed rows are skipped
+ * (connector vault + UC session cookies). Idempotent, sealed rows are skipped
  * by the prefix check, so calling this on every worker boot costs one SELECT.
  * @returns {{ credentials: number, sessions: number }} rows sealed
  */

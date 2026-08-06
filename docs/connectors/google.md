@@ -1,4 +1,4 @@
-# Google Sheets & Drive — per-user OAuth for Agent
+# Google Sheets & Drive, per-user OAuth for Agent
 
 **Audience:** Opptra SCM Agent · Beta (admin UI today; token model is per-user for future ops users).  
 **Does not replace** the shared service-account / shared OAuth used by platform Sheet Update & packing shared Drive reads.
@@ -15,7 +15,7 @@ See **`docs/connectors/RESOURCE-CONNECTORS.md`** for how individual sheet/drive 
 
 Per-user refresh tokens are AES-256-GCM encrypted at rest (`enc1:` prefix, key derived from `JWT_SECRET`). Legacy plaintext rows still decrypt/read; re-connect rewrites encrypted. Tokens never leave the API/worker to the browser.
 
-Agent tools **never** fall back to the service account. If the user has no personal grant, tools return “Connect Google” with `/auth/google/connect?return=connectors`. After OAuth, **bind** each spreadsheet/folder the Agent may use — discovery (`sheets_list_spreadsheets`) does not unlock read/write.
+Agent tools **never** fall back to the service account. If the user has no personal grant, tools return “Connect Google” with `/auth/google/connect?return=connectors`. After OAuth, **bind** each spreadsheet/folder the Agent may use, discovery (`sheets_list_spreadsheets`) does not unlock read/write.
 
 ## Connect flow
 
@@ -27,7 +27,7 @@ Agent tools **never** fall back to the service account. If the user has no perso
 
 Same grant covers Packing Mail (Gmail compose/send) + Agent Sheets + Agent Drive.
 
-## Google Cloud Console — exact URLs
+## Google Cloud Console, exact URLs
 
 OAuth client type: **Web application**
 
@@ -61,12 +61,12 @@ From `@opptra/integrations-google` `SCOPES`:
 | Rate limits / quota | Existing `withGoogleRetry` + tool error `rateLimited` |
 | Multi-tab OAuth | In-memory `state` map (10 min TTL); expired state → “open Connect from one tab” |
 | Disconnect | Clears `user_google_oauth` for that user (also removes Packing Gmail grant) |
-| Platform Sheet Update | Unchanged — still shared SA / shared OAuth |
+| Platform Sheet Update | Unchanged, still shared SA / shared OAuth |
 
 ## API
 
-- `GET /api/me/google/status` — connected, scopes, mismatch, `connectUrl`
-- `POST /api/me/google/disconnect` — revoke per-user token
+- `GET /api/me/google/status`, connected, scopes, mismatch, `connectUrl`
+- `POST /api/me/google/disconnect`, revoke per-user token
 - Agent: `POST /api/agent/connectors/google-sheets/connect` enables both Sheets+Drive prefs once OAuth exists
 - Resources: `GET|POST /api/agent/connectors/{google-sheets|google-drive}/resources`, `DELETE …/resources/:resourceUid`
 

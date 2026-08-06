@@ -74,8 +74,8 @@ export default function Connectors() {
   useEffect(() => { load(); }, [load]);
 
   const live = connectors.filter((c) => c.live);
-  // Quick commerce is separated because it genuinely works differently — no vendor
-  // APIs, POs arrive by email — and grouping it with marketplaces hid that.
+  // Quick commerce is separated because it genuinely works differently, no vendor
+  // APIs, POs arrive by email, and grouping it with marketplaces hid that.
   const quick = connectors.filter((c) => !c.live && c.group === 'quickcommerce');
   const soon = connectors.filter((c) => !c.live && c.group !== 'quickcommerce');
   const open = connectors.find((c) => c.id === openId) || null;
@@ -108,7 +108,7 @@ export default function Connectors() {
         <section className="conn-section">
           <h4 className="conn-section-title">Quick commerce</h4>
           <p className="meta conn-section-note">
-            None of these publish a vendor API — purchase orders arrive by email, and
+            None of these publish a vendor API, purchase orders arrive by email, and
             Unicommerce already ingests most of them. The work here is appointments,
             GRN reconciliation and fill-rate, not fetching the PO.
           </p>

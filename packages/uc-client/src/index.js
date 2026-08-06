@@ -30,10 +30,10 @@ const clients = new Map();
  *
  * Account policy (2026-08):
  *   india   → UC_USER only (sc.automations@opptra.com)
- *   uae     → HC_UC_UAE_USER / UC_UAE_USER only (scuae.automations@opptra.com) — never India bot
- *   ksa     → HC_UC_KSA_USER / UC_KSA_USER only (scksa.automations@opptra.com) — never India bot
- *   DL emails need a real UC user password or Admin JSESSIONID paste — see docs/UC-SESSIONS.md
- *   staging → HC_UC_STAGING_USER only (personal / staging bot for tests) — never India bot
+ *   uae     → HC_UC_UAE_USER / UC_UAE_USER only (scuae.automations@opptra.com), never India bot
+ *   ksa     → HC_UC_KSA_USER / UC_KSA_USER only (scksa.automations@opptra.com), never India bot
+ *   DL emails need a real UC user password or Admin JSESSIONID paste, see docs/UC-SESSIONS.md
+ *   staging → HC_UC_STAGING_USER only (personal / staging bot for tests), never India bot
  */
 export function ucClient(instanceId = 'india') {
   const id = normalizeInstanceId(instanceId);
@@ -76,7 +76,7 @@ export function ucClient(instanceId = 'india') {
   return clients.get(id);
 }
 
-/** @deprecated Prefer ucClient('india') — kept as the historical singleton entry. */
+/** @deprecated Prefer ucClient('india'), kept as the historical singleton entry. */
 export function indiaUcClient() {
   return ucClient('india');
 }

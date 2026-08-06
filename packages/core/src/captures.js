@@ -1,5 +1,5 @@
 // Capture-session persistence. Entries arriving here are ALREADY redacted by the route
-// (packages/capture); this module never sees live session material — that is sealed
+// (packages/capture); this module never sees live session material, that is sealed
 // into connector_credentials before storage.
 import { randomUUID } from 'node:crypto';
 import { query } from './db.js';
@@ -19,7 +19,7 @@ export async function createCaptureSession({ connectorId, label = '', ownerEmail
 
 /**
  * Append redacted entries. Returns the running count. Caps total entries so a runaway
- * recorder cannot fill the table — the surplus is dropped and reported, never silently
+ * recorder cannot fill the table, the surplus is dropped and reported, never silently
  * lost (a capture that "looks complete" but is missing the flow you need is worse than
  * one that says it truncated).
  */

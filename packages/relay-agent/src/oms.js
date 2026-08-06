@@ -1,13 +1,13 @@
-// IBM Sterling OMS document fetch — runs ONLY inside the relay agent, on a machine
+// IBM Sterling OMS document fetch, runs ONLY inside the relay agent, on a machine
 // already connected to the VPN.
 //
 // The exact request shapes are not decoded yet (no HAR has been captured from inside
-// the tunnel — see docs/connectors/6thstreet-VPN.md). Two modes therefore exist:
+// the tunnel, see docs/connectors/6thstreet-VPN.md). Two modes therefore exist:
 //
-//   1. FILE MODE (works today, no reverse-engineering needed) — the operator drops the
+//   1. FILE MODE (works today, no reverse-engineering needed), the operator drops the
 //      picklist/invoice/label into a watched folder and the agent uploads them. This is
 //      the documented "Path B", finally reachable through the API.
-//   2. HTTP MODE (unlocks once a HAR exists) — the agent logs into the OMS and fetches
+//   2. HTTP MODE (unlocks once a HAR exists), the agent logs into the OMS and fetches
 //      the documents directly. Wire the real paths into fetchViaHttp below.
 //
 // Mode 1 exists because it removes the human from the *transport*, which is the slow
@@ -59,7 +59,7 @@ async function fetchFromDropFolder({ orderIds = [], dropDir }, { log } = {}) {
   }
 
   if (!artifacts.length) {
-    throw new Error(`no files in ${dropDir} matched orders ${wanted.join(', ')} — download them from the OMS first`);
+    throw new Error(`no files in ${dropDir} matched orders ${wanted.join(', ')}, download them from the OMS first`);
   }
 
   // Move consumed files aside so a re-run does not re-upload them. Failure to archive
@@ -80,7 +80,7 @@ async function fetchFromDropFolder({ orderIds = [], dropDir }, { log } = {}) {
  */
 async function fetchViaHttp() {
   throw new Error(
-    'OMS HTTP mode is not wired yet — no HAR has been captured from inside the VPN. '
+    'OMS HTTP mode is not wired yet, no HAR has been captured from inside the VPN. '
     + 'Use drop-folder mode (set STREET6_DROP_DIR), or capture a HAR per docs/connectors/6thstreet-VPN.md.',
   );
 }

@@ -1,6 +1,6 @@
 // Client-side mirror of packages/core/src/validate.js.
 //
-// This exists to fail fast in the browser, NOT to be the authority — the server
+// This exists to fail fast in the browser, NOT to be the authority, the server
 // re-validates everything. Keep the rules in step with core; when they drift, the
 // server's answer is the correct one.
 

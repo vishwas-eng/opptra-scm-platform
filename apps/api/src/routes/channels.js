@@ -1,4 +1,4 @@
-// Channel operations — one uniform surface for every marketplace connector.
+// Channel operations, one uniform surface for every marketplace connector.
 //
 // Three things an operator can do with a channel, per region:
 //   1. run an inventory sync now

@@ -1,8 +1,8 @@
 # Running cost
 
 The workload is I/O-bound HTTP orchestration with a handful of concurrent users and a
-few scheduled sweeps. It is not CPU-hungry, has no GPU, and — since the whitelist
-removed the CAPTCHA problem — runs no headless browser. Almost all of the bill is the
+few scheduled sweeps. It is not CPU-hungry, has no GPU, and, since the whitelist
+removed the CAPTCHA problem, runs no headless browser. Almost all of the bill is the
 VM sitting idle waiting for work, so that is where the savings are.
 
 ## Where the money goes (asia-south1, Mumbai)
@@ -11,35 +11,35 @@ VM sitting idle waiting for work, so that is where the savings are.
 |---|---|---|---|
 | VM `e2-medium` (2 vCPU, 4 GB) | on-demand, 24×7 | ~2,450 | The dominant cost |
 | Boot disk 50 GB pd-balanced | | ~500 | Provisioned, not used |
-| Static external IP | in use | ~250 | Non-negotiable — it is what UC whitelists |
+| Static external IP | in use | ~250 | Non-negotiable, it is what UC whitelists |
 | Egress | small | ~50 | JSON and a few PDFs |
 | **Total** | | **~3,250** | ≈ $39 |
 
 ## The four changes worth making
 
-### 1. Commit to the VM you keep — 1-year CUD (biggest single win)
+### 1. Commit to the VM you keep, 1-year CUD (biggest single win)
 A committed-use discount on the running VM is a ~37% cut for a 1-year commit, ~55% for
 3 years, with **no technical change and no downtime**. If the platform is staying
-(it is — nine automations depend on it), this is free money.
+(it is, nine automations depend on it), this is free money.
 
 > `~2,450 → ~1,550/mo` (1yr) · `→ ~1,100/mo` (3yr)
 
 ### 2. Shrink the boot disk 50 GB → 20 GB
 Nothing on the box needs 50 GB. Postgres holds runs and audit rows (kilobytes per run),
 Redis is capped at 256 MB, and artifacts are streamed rather than kept. Check before
-resizing — `df -h` and `docker system df` — and note a GCP boot disk can grow but
+resizing, `df -h` and `docker system df`, and note a GCP boot disk can grow but
 **never shrink**, so this is a decision to take at rebuild time, not in place.
 
 > `~500 → ~200/mo`
 
-### 3. Reconsider e2-medium → e2-small (2 GB) — measure first
+### 3. Reconsider e2-medium → e2-small (2 GB), measure first
 The plan already flagged 2 GB as "possible but tight during report sweeps". With
 Postgres + Redis + api + worker + Caddy on one box, 2 GB is genuinely tight and the
 failure mode is the OOM killer taking down Postgres mid-run. **Do not do this blind.**
 Watch peak RSS across a full reports-digest sweep first; if peak stays under ~1.4 GB
 there is room, otherwise stay on e2-medium and take the CUD instead.
 
-> `~2,450 → ~1,200/mo` if it fits — but correctness first
+> `~2,450 → ~1,200/mo` if it fits, but correctness first
 
 ### 4. Stop paying for staging around the clock
 If a second environment exists, it does not need to be up at night. A start/stop
@@ -67,7 +67,7 @@ gcloud compute resource-policies create instance-schedule opptra-stg-hours \
 
 ## Guardrails worth setting once
 
-1. **Billing budget + alert** at ₹4,000/month — catches a runaway before the invoice.
+1. **Billing budget + alert** at ₹4,000/month, catches a runaway before the invoice.
    Billing → Budgets & alerts, scoped to this project.
 2. **Delete unattached disks and old snapshots.** These accumulate silently after
    rebuilds and nobody notices a stopped resource still billing.
@@ -80,7 +80,6 @@ gcloud compute resource-policies create instance-schedule opptra-stg-hours \
 
 ## Realistic target
 
-Taking the CUD, the smaller disk and log rotation — the three that carry no risk —
-lands at roughly **₹1,800–2,000/month (~$22)**, a ~40% reduction, with no change to how
+Taking the CUD, the smaller disk and log rotation, the three that carry no risk, lands at roughly **₹1,800–2,000/month (~$22)**, a ~40% reduction, with no change to how
 the platform behaves. The e2-small move could take it to ~₹1,500 but only if the
 measurements support it.

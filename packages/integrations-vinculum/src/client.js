@@ -1,4 +1,4 @@
-// Vinculum VIN eRetail (Home Centre seller portal) — Node client.
+// Vinculum VIN eRetail (Home Centre seller portal), Node client.
 // Proven 2026-06-22: RSA login (no OTP) + commonJsonSearch order pull.
 // Portal: https://landmarkgroup.vinsupplier.com/eRetailWeb/
 //
@@ -35,7 +35,7 @@ export function extractPublicKeyPem(html) {
   const text = String(html || '');
   const match = text.match(/-----BEGIN PUBLIC KEY-----([\s\S]+?)-----END PUBLIC KEY-----/);
   if (!match) throw new Error('Vinculum login page: RSA public key not found (page layout may have changed)');
-  // Page embeds the key in a JS template literal with leading tabs/spaces per line — strip them.
+  // Page embeds the key in a JS template literal with leading tabs/spaces per line, strip them.
   const body = match[1]
     .replace(/\\n/g, '\n')
     .split(/\r?\n/)
@@ -57,7 +57,7 @@ export function encryptPasswordRsaPkcs1(plaintext, publicKeyPem) {
  * Decide whether a Vinculum import actually succeeded.
  *
  * Struts apps answer HTTP 200 with an HTML error page, so "2xx and not a login page"
- * reported success for a rejected file — the inventory would look pushed and would not
+ * reported success for a rejected file, the inventory would look pushed and would not
  * be. An import we cannot positively confirm is reported as unconfirmed, not as done:
  * for a live stock write, a false success is far worse than a false alarm.
  *
@@ -71,7 +71,7 @@ export function classifyImportResponse(status, body) {
     return { ok: false, confirmed: true, reason: `HTTP ${status}`, preview };
   }
   if (/Invalid Login|Login Failed|sellerPanalLogin/i.test(text)) {
-    return { ok: false, confirmed: true, reason: 'session expired — bounced to login', preview };
+    return { ok: false, confirmed: true, reason: 'session expired, bounced to login', preview };
   }
   // Explicit failure wording from the importer.
   const failure = text.match(/(error|failed|failure|invalid|not\s+uploaded|rejected)[^<>{]{0,120}/i);
@@ -85,7 +85,7 @@ export function classifyImportResponse(status, body) {
   return {
     ok: false,
     confirmed: false,
-    reason: 'upload accepted but Vinculum did not confirm the import — verify in the portal before trusting the stock levels',
+    reason: 'upload accepted but Vinculum did not confirm the import, verify in the portal before trusting the stock levels',
     preview,
   };
 }
@@ -154,7 +154,7 @@ export function makeVinculumClient(cfg = {}) {
     const actionPath = jsid
       ? `sellerPanalHomeAction.action;jsessionid=${jsid}`
       : 'sellerPanalHomeAction.action';
-    // Minimal payload — matches the June 2026 proven curl (userName + encrypted password only).
+    // Minimal payload, matches the June 2026 proven curl (userName + encrypted password only).
     const home = await raw(actionPath, {
       method: 'POST',
       headers: { Referer: `${baseUrl}/sellerPanalLogin.action` },
@@ -333,7 +333,7 @@ export function makeVinculumClient(cfg = {}) {
   }
 
   /**
-   * Upload inventory/price xlsx to Vinculum (LIVE write — caller must gate).
+   * Upload inventory/price xlsx to Vinculum (LIVE write, caller must gate).
    * Form field name from sellerPriceUpdateBS: importFileName.
    */
   async function uploadInventoryWorkbook(buffer, filename = 'hc-inventory.xlsx') {

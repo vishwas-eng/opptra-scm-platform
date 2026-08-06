@@ -1,4 +1,4 @@
-// Agent chat + connectors panel — ADMIN ONLY · Beta.
+// Agent chat + connectors panel, ADMIN ONLY · Beta.
 import {
   config, audit,
   createAgentThread, listAgentThreads, getAgentThread, touchAgentThread,
@@ -113,8 +113,7 @@ export default async function agentRoutes(app) {
     if (body.session || body.secret) {
       const secret = String(body.session || body.secret || '').trim();
       if (secret.length < 8) return reply.code(400).send({ error: 'session/secret too short' });
-      // Never allow pasting onto non-live (already blocked). UC uses Admin paste, not here —
-      // except we allow enabling the agent pref when system is ready.
+      // Never allow pasting onto non-live (already blocked). UC uses Admin paste, not here, // except we allow enabling the agent pref when system is ready.
       if (['amazon', 'flipkart', 'myntra', 'nykaa', 'zepto', 'blinkit', 'instamart', 'meesho'].includes(id)) {
         return reply.code(403).send({ error: 'Marketplace connectors are coming soon.' });
       }
@@ -132,7 +131,7 @@ export default async function agentRoutes(app) {
 
     // System readiness gates
     if (id === 'unicommerce') {
-      // Pref only — actual cookie stays in Admin UC session vault
+      // Pref only, actual cookie stays in Admin UC session vault
     } else if (id === 'waypoint' && !cfg.WAYPOINT_DB_URL) {
       return reply.code(400).send({ error: 'WAYPOINT_DB_URL is not configured on the server.' });
     } else if ((id === 'google-sheets' || id === 'google-drive')) {
@@ -147,7 +146,7 @@ export default async function agentRoutes(app) {
           needsOAuth: true,
         });
       }
-      // One Google OAuth powers both Sheets + Drive — enable both prefs.
+      // One Google OAuth powers both Sheets + Drive, enable both prefs.
       await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-sheets', enabled: true });
       await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-drive', enabled: true });
       await audit(req.user.email, 'agent-connector-connect', { connector: id, googleEmail: tok.google_email || tok.granted_by });
@@ -303,7 +302,7 @@ export default async function agentRoutes(app) {
       if (/invalid_grant|revoked/i.test(msg)) {
         await markUserGoogleOAuthError(req.user.email, 'refresh token revoked').catch(() => {});
         return reply.code(400).send({
-          error: 'Google access revoked — reconnect on Connectors.',
+          error: 'Google access revoked, reconnect on Connectors.',
           oauthUrl: '/auth/google/connect?return=connectors',
           reconnect: true,
         });
@@ -314,7 +313,7 @@ export default async function agentRoutes(app) {
           permissionDenied: true,
         });
       }
-      // Still allow bind if metadata fetch fails for other reasons — store id + given name.
+      // Still allow bind if metadata fetch fails for other reasons, store id + given name.
       if (!displayName) displayName = parsed.externalId;
       meta = { ...meta, resolveWarning: msg.slice(0, 200) };
     }
@@ -478,7 +477,7 @@ export default async function agentRoutes(app) {
     };
   });
 
-  // Streaming twin of /api/agent/chat. Same persistence and same result — the only
+  // Streaming twin of /api/agent/chat. Same persistence and same result, the only
   // difference is that the turn's lifecycle (thinking, each tool starting/finishing)
   // reaches the browser as it happens, so a 30-second multi-tool turn shows its work
   // instead of a spinner. Clients that cannot stream keep using POST /api/agent/chat.

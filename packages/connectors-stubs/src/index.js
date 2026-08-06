@@ -1,10 +1,10 @@
-// @opptra/connectors-stubs — channels not yet cracked, with an honest record of HOW
+// @opptra/connectors-stubs, channels not yet cracked, with an honest record of HOW
 // each one can actually be reached.
 //
 // The `transport` field is the important part. Research (2026-08-06, see
 // docs/CONNECTOR-DOCTRINE.md) established that most of these channels have no seller
 // API at all, and that the industry-standard transport for Indian quick commerce is
-// email PO parsing — not portal scraping. Recording that here stops a future session
+// email PO parsing, not portal scraping. Recording that here stops a future session
 // from burning a week reverse-engineering a portal whose data arrives by email anyway.
 //
 // When a channel gets real endpoints it graduates to its own package (the
@@ -13,15 +13,15 @@ import { createStubConnector } from '@opptra/connectors-sdk';
 
 /**
  * transport:
- *   'official'  — a documented seller API exists; build against it, never scrape.
- *   'partner'   — an API exists but access is granted per-integrator/vendor-id.
- *   'email-po'  — POs arrive as emailed PDF/XLSX. Parse the mailbox; the portal is
+ *   'official', a documented seller API exists; build against it, never scrape.
+ *   'partner', an API exists but access is granted per-integrator/vendor-id.
+ *   'email-po', POs arrive as emailed PDF/XLSX. Parse the mailbox; the portal is
  *                 secondary. This is how Unicommerce, EasyEcom and Fynd all do it.
- *   'portal'    — no API and no email feed found; portal session is the only route.
+ *   'portal', no API and no email feed found; portal session is the only route.
  *
  * `viaUnicommerce: true` means Unicommerce already ingests this channel, so riding our
  * existing UC connector beats building a direct one. What UC does NOT give us is
- * appointments, GRN reconciliation, fill-rate/OTIF and debit-note disputes — that gap
+ * appointments, GRN reconciliation, fill-rate/OTIF and debit-note disputes, that gap
  * is the actual product opportunity, not the PO import.
  */
 export const STUB_CHANNELS = Object.freeze([
@@ -97,14 +97,14 @@ export const STUB_CHANNELS = Object.freeze([
     portalHint: 'quick-commerce arm of Flipkart',
     transport: 'email-po',
     viaUnicommerce: true,
-    note: "Do NOT use Flipkart's hyperlocal listings API — that is Flipkart Quick (2018), not Minutes.",
+    note: "Do NOT use Flipkart's hyperlocal listings API, that is Flipkart Quick (2018), not Minutes.",
   },
   {
     id: 'jiomart',
     name: 'JioMart Seller',
     portalHint: 'seller.jiomart.com',
     transport: 'partner',
-    note: 'Credentials issued by the JioMart category manager. Marketplace flow — NOT JioMart Express dark stores.',
+    note: 'Credentials issued by the JioMart category manager. Marketplace flow, NOT JioMart Express dark stores.',
   },
 ]);
 

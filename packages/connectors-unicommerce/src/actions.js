@@ -77,7 +77,7 @@ export function registerOrderActions(register) {
     title: 'Sale order resolve (summary + facility)',
     mutates: false,
     backend: 're',
-    description: 'Summary + facility hop (fetch) — same path ASN/packing use.',
+    description: 'Summary + facility hop (fetch), same path ASN/packing use.',
     inputSchema: {
       type: 'object',
       required: ['saleOrder'],
@@ -141,16 +141,14 @@ export function registerOrderActions(register) {
         saleOrder: so,
         facility,
         shippingPackages: packages,
-        // Without this, a renamed envelope key is indistinguishable from "no packages" —
-        // an operator would read that as "not shipped yet".
+        // Without this, a renamed envelope key is indistinguishable from "no packages", // an operator would read that as "not shipped yet".
         ...(d?.shippingPackages ? {} : shapeHint(d)),
       };
     },
   });
 }
 
-// Columns exactly as captured in the live HAR body for the shipments datatable —
-// the proven request shape (unicommerce-engine endpoints.json, /data/tasks/export/data).
+// Columns exactly as captured in the live HAR body for the shipments datatable, // the proven request shape (unicommerce-engine endpoints.json, /data/tasks/export/data).
 const SHIPMENTS_TAB_COLUMNS = [
   'saleOrderNum', 'displayOrderCode', 'shipment', 'status', 'channel', 'channelName',
   'channelCode', 'invoiceNumber', 'trackingNumber', 'provider', 'providerCode',
@@ -171,7 +169,7 @@ export function registerShipmentSearchActions(register) {
     title: 'Search shipments (datatable)',
     mutates: false,
     backend: 're',
-    description: 'POST /data/tasks/export/data name="DATATABLE SHIPMENTS TAB" — the same grid the UC UI shows. Filter by statuses and created-date text range (TODAY, YESTERDAY, LAST_WEEK…).',
+    description: 'POST /data/tasks/export/data name="DATATABLE SHIPMENTS TAB", the same grid the UC UI shows. Filter by statuses and created-date text range (TODAY, YESTERDAY, LAST_WEEK…).',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -203,7 +201,7 @@ export function registerShipmentSearchActions(register) {
       };
       const opts = params.facility ? { facility: params.facility } : {};
       const d = await uc.data('/data/tasks/export/data', body, opts);
-      // Response shape varies per tenant build — pass rows through untouched and let the
+      // Response shape varies per tenant build, pass rows through untouched and let the
       // caller read the fields it needs; count keys are probed defensively.
       const rows = d?.rows || d?.results || d?.data || [];
       const totalCount = d?.resultCount ?? d?.totalCount ?? d?.count ?? null;
@@ -219,7 +217,7 @@ export function registerChannelActions(register) {
     title: 'List channels',
     mutates: false,
     backend: 're',
-    description: 'POST /data/channel/getChannels {} — every sales channel on this tenant.',
+    description: 'POST /data/channel/getChannels {}, every sales channel on this tenant.',
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     handler: async (uc) => {
       const d = await uc.data('/data/channel/getChannels', {});
@@ -236,7 +234,7 @@ export function registerReturnActions(register) {
     title: 'Bulk return summary',
     mutates: false,
     backend: 're',
-    description: 'POST /data/oms/returns/reversePickup/bulkReturn/fetchSummary — reverse pickups + putaway for one bulk return id (same call Reverse DC uses).',
+    description: 'POST /data/oms/returns/reversePickup/bulkReturn/fetchSummary, reverse pickups + putaway for one bulk return id (same call Reverse DC uses).',
     inputSchema: {
       type: 'object',
       required: ['bulkReturnId'],
@@ -254,7 +252,7 @@ export function registerReturnActions(register) {
         opts,
       );
       // Named fields only. A reverse-pickup summary carries customer name/address/phone,
-      // and this result is persisted verbatim into runs.result — do not echo the body.
+      // and this result is persisted verbatim into runs.result, do not echo the body.
       return {
         ok: d?.successful !== false,
         bulkReturnId: params.bulkReturnId,
@@ -276,7 +274,7 @@ export function registerInventoryActions(register) {
     title: 'Inventory snapshot by SKU',
     mutates: false,
     backend: 're',
-    description: 'Public REST inventorySnapshot/get (bearer) — same call as automation-inventory.',
+    description: 'Public REST inventorySnapshot/get (bearer), same call as automation-inventory.',
     inputSchema: {
       type: 'object',
       required: ['skus'],
@@ -314,7 +312,7 @@ export function registerInventoryActions(register) {
     title: 'Batchwise inventory by SKU',
     mutates: false,
     backend: 're',
-    description: 'GET /data/wms/inventory/batchwise?skuCode= — shelf + batch level availability (flow-proven; feeds B2B smart-fill allocation).',
+    description: 'GET /data/wms/inventory/batchwise?skuCode=, shelf + batch level availability (flow-proven; feeds B2B smart-fill allocation).',
     inputSchema: {
       type: 'object',
       required: ['sku'],
@@ -347,7 +345,7 @@ export function registerOrderDetailActions(register) {
     title: 'Sale order invoice details',
     mutates: false,
     backend: 're',
-    description: 'POST /data/oms/saleorder/fetchInvoiceDetails {saleOrderCode} — invoices[] incl. ISR credit notes (HAR-proven; same call Sheet Update + Return use).',
+    description: 'POST /data/oms/saleorder/fetchInvoiceDetails {saleOrderCode}, invoices[] incl. ISR credit notes (HAR-proven; same call Sheet Update + Return use).',
     inputSchema: {
       type: 'object',
       required: ['saleOrder'],
@@ -384,7 +382,7 @@ export function registerOrderDetailActions(register) {
     title: 'Sale order line items',
     mutates: false,
     backend: 're',
-    description: 'POST /data/oms/saleorder/fetchLineItems {code} — per-SKU lines (HAR-proven).',
+    description: 'POST /data/oms/saleorder/fetchLineItems {code}, per-SKU lines (HAR-proven).',
     inputSchema: {
       type: 'object',
       required: ['saleOrder'],

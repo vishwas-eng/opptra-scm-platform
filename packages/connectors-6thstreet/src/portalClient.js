@@ -1,8 +1,8 @@
-// 6th Street seller-portal client — the half that needs NO VPN.
+// 6th Street seller-portal client, the half that needs NO VPN.
 //
 // Two separate 6th Street systems, and conflating them is the trap:
-//   · seller portal  (this file)      — inventory + pricing. Public internet, bearer JWT.
-//   · IBM Sterling OMS (VPN-gated)    — picklist, invoice, shipping label.
+//   · seller portal  (this file), inventory + pricing. Public internet, bearer JWT.
+//   · IBM Sterling OMS (VPN-gated), picklist, invoice, shipping label.
 //
 // Endpoints were read from the portal's own Flutter bundle
 // (docs/connectors/6thstreet-API-REVERSE.md), not guessed.
@@ -18,7 +18,7 @@ const TOKEN_SKEW_MS = 60_000;
 
 // 6th Street answers a WRONG PASSWORD with HTTP 500 and the reason in the body
 // (observed 2026-08-04). Left alone, the guard sees a 5xx, calls it transient, and
-// retries — repeatedly submitting bad credentials to a login endpoint, which is the
+// retries, repeatedly submitting bad credentials to a login endpoint, which is the
 // fastest way to get a seller account locked. Detect it and relabel it 401 before the
 // retry logic ever sees it, so it fails once, loudly, with the real reason.
 const CREDENTIAL_FAILURE_RE = /incorrect\s+(username|password)|invalid\s+(credential|username|password|login)|bad\s+credential|authentication\s+failed|unauthori[sz]ed/i;
@@ -49,7 +49,7 @@ export function makeStreet6PortalClient({
     const run = await portalGuard.run(async () => {
       const headers = {
         accept: accept === 'json' ? 'application/json' : '*/*',
-        // Honest identification — a forged browser UA buys nothing against real bot
+        // Honest identification, a forged browser UA buys nothing against real bot
         // detection and is the clearest evidence of intent to evade if ever disputed.
         'user-agent': 'OpptraSCM-Connector/1.0 (+ops@opptra.com)',
       };
@@ -87,10 +87,10 @@ export function makeStreet6PortalClient({
     try { data = response.body ? JSON.parse(response.body) : null; } catch { data = { raw: response.body?.slice(0, 400) }; }
 
     if (response.credentialFailure) {
-      // Wrong password, not an expired session — retrying cannot help, and re-submitting
+      // Wrong password, not an expired session, retrying cannot help, and re-submitting
       // bad credentials is what locks the account.
       return connectorError(CONNECTOR_ERROR_CODES.AUTH_REQUIRED,
-        `6th Street portal rejected the credentials: ${data?.message || 'incorrect username or password'}. Confirm STREET6_PORTAL_USER / STREET6_PORTAL_PASS before retrying — repeated attempts can lock the seller account.`,
+        `6th Street portal rejected the credentials: ${data?.message || 'incorrect username or password'}. Confirm STREET6_PORTAL_USER / STREET6_PORTAL_PASS before retrying, repeated attempts can lock the seller account.`,
         { credentialFailure: true, retryable: false });
     }
     if (response.status === 401 || response.status === 403) {
@@ -108,7 +108,7 @@ export function makeStreet6PortalClient({
   async function login() {
     if (!username || !password) {
       return connectorError(CONNECTOR_ERROR_CODES.AUTH_REQUIRED,
-        'Set STREET6_PORTAL_USER / STREET6_PORTAL_PASS (seller portal — this is NOT the OMS login).');
+        'Set STREET6_PORTAL_USER / STREET6_PORTAL_PASS (seller portal, this is NOT the OMS login).');
     }
     const r = await call('api/public/login', {
       method: 'POST', auth: false, body: { username, password },
@@ -120,7 +120,7 @@ export function makeStreet6PortalClient({
     refreshToken = d.refreshToken || d.refresh_token || '';
     if (!accessToken) {
       return connectorError(CONNECTOR_ERROR_CODES.AUTH_REQUIRED,
-        'Portal login returned no accessToken — the response shape changed.', { keys: Object.keys(d) });
+        'Portal login returned no accessToken, the response shape changed.', { keys: Object.keys(d) });
     }
     // The portal does not publish a TTL; assume a conservative 15 min and refresh early.
     expiresAt = now() + (Number(d.expiresIn || d.expires_in || 900) * 1000);
@@ -138,7 +138,7 @@ export function makeStreet6PortalClient({
         expiresAt = now() + (Number(r.data.expiresIn || 900) * 1000);
         return { ok: true };
       }
-      // Refresh failed — fall through to a full login rather than looping on it.
+      // Refresh failed, fall through to a full login rather than looping on it.
     }
     return login();
   }
@@ -175,8 +175,7 @@ export function makeStreet6PortalClient({
     },
 
     /**
-     * Push stock. The portal takes a CSV upload (`Sku,Count`), not a per-SKU call —
-     * one file is also far gentler on the account than N requests.
+     * Push stock. The portal takes a CSV upload (`Sku,Count`), not a per-SKU call, * one file is also far gentler on the account than N requests.
      *
      * @param {Array<{sku: string, count: number}>} rows
      */

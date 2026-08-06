@@ -94,7 +94,7 @@ test('the write surface covers the whole order lifecycle, every action flagged m
 test('every action declares an RE backend and a real input schema', () => {
   const caps = createUnicommerceConnector({ uc: mockUc() }).listCapabilities();
   assert.ok(caps.every((x) => x.backend === 're'));
-  // A schema of bare {} would mean the ajv gate accepts anything — the exact hole that
+  // A schema of bare {} would mean the ajv gate accepts anything, the exact hole that
   // let a 50k-SKU array through before validation was wired in.
   for (const cap of caps) {
     assert.equal(cap.inputSchema.type, 'object', `${cap.id} has no object schema`);

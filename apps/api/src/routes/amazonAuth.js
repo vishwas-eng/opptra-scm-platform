@@ -4,7 +4,7 @@
 //
 // The seller (admin) authorizes the company account ONCE per marketplace; the platform
 // holds that marketplace's refresh token in the connector vault (sealed at rest) and
-// mints short-lived access tokens from it forever after. No cookies, no HAR — this is
+// mints short-lived access tokens from it forever after. No cookies, no HAR, this is
 // the official grant, so it survives password changes and never idles out.
 import { config, audit, logger, setConnectorCredential, getConnectorCredentialMeta } from '@opptra/core';
 import { buildConsentUrl, exchangeAuthCode, normalizeMarketplace, AMAZON_MARKETPLACES } from '@opptra/connectors-amazon';
@@ -71,7 +71,7 @@ export default async function amazonAuthRoutes(app) {
     const fail = (msg) => reply.redirect(`${base()}/?amazonConnect=${encodeURIComponent(msg)}&tab=connectors`);
 
     const entry = consumeState(String(req.query.state || ''), req.user.email);
-    if (!entry) return fail('state expired or mismatched — retry Connect');
+    if (!entry) return fail('state expired or mismatched, retry Connect');
     const code = String(req.query.spapi_oauth_code || '');
     if (!code) return fail('Amazon returned no authorization code');
     const sellingPartnerId = String(req.query.selling_partner_id || '');
@@ -86,7 +86,7 @@ export default async function amazonAuthRoutes(app) {
     } catch (err) {
       logger.error({ err: String(err.message || err), marketplace: entry.marketplace }, 'amazon oauth exchange failed');
       await audit(req.user.email, 'amazon-oauth-failed', { marketplace: entry.marketplace, error: String(err.message || err) });
-      return fail('token exchange failed — check LWA client id/secret');
+      return fail('token exchange failed, check LWA client id/secret');
     }
 
     await setConnectorCredential({

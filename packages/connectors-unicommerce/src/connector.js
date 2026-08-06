@@ -45,8 +45,7 @@ const REGISTRARS = [
  *
  * Action handlers are authored as `(uc, params, ctx)` because they are transport-shaped;
  * the shared shell calls `(params, ctx)`. The bind happens here, once per connector
- * instance, which is also what lets two instances (india / uae) coexist in one process —
- * the previous module-level singleton plus `builtinsRegistered` latch made that
+ * instance, which is also what lets two instances (india / uae) coexist in one process, * the previous module-level singleton plus `builtinsRegistered` latch made that
  * impossible and silently handed the second tenant the first tenant's client.
  */
 export function buildUnicommerceRegistry(uc) {
@@ -59,14 +58,13 @@ export function buildUnicommerceRegistry(uc) {
   return registry;
 }
 
-/** Action metadata with no client attached — for docs, catalogs and MCP tool listings. */
+/** Action metadata with no client attached, for docs, catalogs and MCP tool listings. */
 export function listUnicommerceActions() {
   return buildUnicommerceRegistry(null).listRegisteredActions();
 }
 
 /**
- * RE-native Unicommerce connector. Reuses the shared UcClient session vault —
- * do not construct a parallel cookie store.
+ * RE-native Unicommerce connector. Reuses the shared UcClient session vault, * do not construct a parallel cookie store.
  *
  * @param {{ uc: object, logger?: { warn?: Function, error?: Function } }} opts
  */

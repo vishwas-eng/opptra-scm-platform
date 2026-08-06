@@ -12,7 +12,7 @@ import { validateSaleOrder } from '../lib/validate.js';
 // line to trim instead of a rejected 400 after pasting a hundred rows.
 const MAX_PAIRS = 50;
 
-/** `originalSO, correctSO` per line — a single value is the correct SO with nothing to cancel. */
+/** `originalSO, correctSO` per line, a single value is the correct SO with nothing to cancel. */
 function parsePairs(text) {
   return String(text || '')
     .split(/\r?\n/)
@@ -110,7 +110,7 @@ export default function Returns() {
     setBatchInvalid('');
     setBatchBusy(true);
     try {
-      // This route answers as soon as the runs are created — there is no single run to
+      // This route answers as soon as the runs are created, there is no single run to
       // poll, so it deliberately does not go through useRun.
       const res = await api('/api/automations/return/batch', { body: { pairs, returnIn: batchReturnIn } });
       setBatchResult(res);
@@ -145,7 +145,7 @@ export default function Returns() {
                 spellCheck="false"
               />
             </Field>
-            <Field label="Cancel SO" hint="Optional — the wrong order to cancel">
+            <Field label="Cancel SO" hint="Optional, the wrong order to cancel">
               <Input
                 value={cancelSO}
                 onChange={(e) => setCancelSO(e.target.value)}
@@ -217,7 +217,7 @@ export default function Returns() {
               />
               {r.pending && (
                 <p className="meta">
-                  Still working through an async step — this may finish on a later retry.
+                  Still working through an async step, this may finish on a later retry.
                 </p>
               )}
             </>
@@ -228,7 +228,7 @@ export default function Returns() {
 
       <Panel title="Batch queue">
         <p className="lead">
-          One pair per line: <code>originalSO, correctSO</code> — or just the correct SO when
+          One pair per line: <code>originalSO, correctSO</code>, or just the correct SO when
           there is nothing to cancel. Each pair is queued as its own run and processed
           sequentially by the worker.
         </p>

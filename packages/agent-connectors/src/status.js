@@ -1,4 +1,4 @@
-// Connector status for the Connectors page + tool gating. Pure data assembly — no
+// Connector status for the Connectors page + tool gating. Pure data assembly, no
 // portal calls here (live probes run in the worker); this reads vault/env/OAuth state.
 import {
   config, query, getUserGoogleOAuthToken, userGoogleScopeStatus, listConnectorResources,
@@ -31,7 +31,7 @@ async function ucSessionMeta() {
 /**
  * Latest capture per connector, so a not-yet-live channel can show real progress
  * ("blueprint ready · 34 endpoints") instead of a dead "Coming soon" chip. One query
- * for every connector — this runs on each Connectors render and each chat turn.
+ * for every connector, this runs on each Connectors render and each chat turn.
  */
 async function latestCaptureByConnector() {
   try {
@@ -82,7 +82,7 @@ export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) 
     let resources = [];
 
     if (!meta.live) {
-      // Not live yet — but "not live" is a pipeline stage, not a dead end. Report how
+      // Not live yet, but "not live" is a pipeline stage, not a dead end. Report how
       // far this channel has actually got so the operator sees progress and knows the
       // next action: authorize (Amazon) or run a capture (every other portal).
       const capture = captures[meta.id];
@@ -104,7 +104,7 @@ export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) 
       } else if (captureProgress?.status === 'ready') {
         hint = `Blueprint ready · ${captureProgress.endpoints ?? 0} endpoints on ${captureProgress.primaryHost || 'portal'}`;
       } else {
-        hint = 'Log in once with the Capture extension — we map the portal';
+        hint = 'Log in once with the Capture extension, we map the portal';
       }
       return {
         ...meta,
@@ -116,7 +116,7 @@ export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) 
         detail: { disabled: true, capture: captureProgress },
         resources: [],
         beta: true,
-        // The Connect button is live for these — it starts an authorization or explains
+        // The Connect button is live for these, it starts an authorization or explains
         // how to run a capture. Only the TOOLS stay gated until the connector is proven.
         connectEnabled: false,
         connectMode: meta.connectMode,
@@ -147,13 +147,13 @@ export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) 
       if (!userTok.refresh_token) {
         connectHint = 'Connect your personal Google account (OAuth)';
       } else if (!scopeStatus.ok) {
-        connectHint = `Reconnect — missing scopes: ${scopeStatus.missing.join(', ')}`;
+        connectHint = `Reconnect, missing scopes: ${scopeStatus.missing.join(', ')}`;
       } else if (accountMismatch) {
         connectHint = `Connected as ${googleEmail} (differs from login)`;
       } else if (!resources.length) {
         connectHint = meta.id === 'google-sheets'
-          ? `Connected as ${googleEmail || 'you'} — add a spreadsheet to use with Agent`
-          : `Connected as ${googleEmail || 'you'} — add a Drive folder/file to use with Agent`;
+          ? `Connected as ${googleEmail || 'you'}, add a spreadsheet to use with Agent`
+          : `Connected as ${googleEmail || 'you'}, add a Drive folder/file to use with Agent`;
       } else {
         connectHint = `Connected as ${googleEmail || 'your Google account'} · ${resources.length} bound`;
       }
@@ -165,7 +165,7 @@ export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) 
 
     // Platform connectors are the company's own machine identity (our Unicommerce
     // session, our Waypoint DB, our Vinculum login). They are on for everyone the
-    // moment an admin configures them — a per-user enable toggle would only let
+    // moment an admin configures them, a per-user enable toggle would only let
     // someone switch off a credential they do not own and then wonder why their
     // automations stopped.
     const isPlatform = meta.scope === 'platform';

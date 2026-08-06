@@ -6,7 +6,7 @@ import {
 } from '../src/channelSchedules.js';
 
 test('Home Centre is modelled as two independent marketplaces, not one with a toggle', () => {
-  // UAE and KSA have different UC tenants, facilities and currencies — collapsing them
+  // UAE and KSA have different UC tenants, facilities and currencies, collapsing them
   // into one schedule would make it impossible to sync them at different times.
   assert.deepEqual(CHANNEL_REGIONS.homecentre, ['uae', 'ksa']);
   assert.deepEqual(regionsFor('homecentre'), ['uae', 'ksa']);

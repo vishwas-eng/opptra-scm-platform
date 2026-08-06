@@ -24,7 +24,7 @@ const FACILITIES = ['Opp_RSG_MH', 'Opp_WIQ_MH_1', 'Opp_BSB_HR_1P', 'Opp_WIQ_KA',
 const HEADER_ROW = 2;
 const DATE_TAB_RE = /^\d{2}-[A-Za-z]{3}-\d{4}(_\d+)?$/;
 // Columns in display order. Appointment ID (and any other col) is dropped from the HTML
-// table when every row in the batch leaves it blank — no empty Appointment ID column.
+// table when every row in the batch leaves it blank, no empty Appointment ID column.
 const MAIL_COLS = [
   { key: 'marketplace', header: 'Marketplace' },
   { key: 'brand', header: 'Brand' },
@@ -97,7 +97,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
 
   const gmailRequired = () => {
     if (!google?.gmail) {
-      return { ok: false, error: 'Connect your Gmail on the Packing Mail tab first — drafts are created in your own mailbox.' };
+      return { ok: false, error: 'Connect your Gmail on the Packing Mail tab first, drafts are created in your own mailbox.' };
     }
     return null;
   };
@@ -197,8 +197,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
     if (mkts.length > 1) return 'Multi-Marketplace';
     return 'Packing';
   }
-  // Body phrase uses the real Marketplace value from the sheet (e.g. AZ Etrade, Blinkit) —
-  // never the old "Amazon UCB" blanket for every Amazon-family channel.
+  // Body phrase uses the real Marketplace value from the sheet (e.g. AZ Etrade, Blinkit), // never the old "Amazon UCB" blanket for every Amazon-family channel.
   const marketplacePhrase = (list) => {
     const label = marketplaceLabel(list);
     if (label === 'Packing') return 'marketplace';
@@ -212,7 +211,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
   };
   const tdCell = (v) => `<td style="border:1px solid #ccc;padding:6px 8px;font-size:12px;">${escapeHtml(v ?? '')}</td>`;
 
-  // The navy-header order table — shared by BOTH emails in the thread so the
+  // The navy-header order table, shared by BOTH emails in the thread so the
   // invoice/e-way follow-up keeps the exact same look as the first packing mail.
   // Columns with no data across the whole batch (e.g. blank Appointment ID) are omitted.
   function orderTableHtml(list) {
@@ -248,7 +247,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
         if (buf) { atts.push({ filename: `Label_${po}.pdf`, contentType: 'application/pdf', buffer: buf }); seen.add(`L:${po.toUpperCase()}`); }
         else missing.push(`shipping label for PO ${po}`);
       }
-      // No appointment ID is normal for many channels — don't flag it as missing, and
+      // No appointment ID is normal for many channels, don't flag it as missing, and
       // don't look for an appointment PDF that does not exist.
       if (appt && !seen.has(`A:${appt.toUpperCase()}`)) {
         const buf = await driveApi.findPdfByName(google.drive, cfg.APPOINTMENT_DRIVE_FOLDER, appt);
@@ -367,7 +366,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
       if (!g.to.length) {
         g.orders.forEach((o) => unresolved.push({
           so: o.so,
-          reason: `No warehouse email for ${g.warehouse} — add it on the warehouse email sheet`,
+          reason: `No warehouse email for ${g.warehouse}, add it on the warehouse email sheet`,
         }));
       }
     }
@@ -446,7 +445,7 @@ export function makePackingPipeline(uc, cfg = {}, google = null, deps = {}) {
       .map((g) => applyRecipients(g, directory, recipients))
       .filter((g) => {
         if (g.to.length) return true;
-        g.orders.forEach((o) => unresolved.push({ so: o.so, reason: `No warehouse email for ${g.warehouse} — add it on the warehouse email sheet` }));
+        g.orders.forEach((o) => unresolved.push({ so: o.so, reason: `No warehouse email for ${g.warehouse}, add it on the warehouse email sheet` }));
         return false;
       });
 

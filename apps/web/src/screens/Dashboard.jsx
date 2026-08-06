@@ -46,10 +46,10 @@ export default function Dashboard() {
 
   const columns = [
     { key: 'when', label: 'When', render: (r) => fmtRelative(r.created_at) },
-    ...(isAdmin ? [{ key: 'user', label: 'User', render: (r) => r.user_email?.split('@')[0] || '—' }] : []),
+    ...(isAdmin ? [{ key: 'user', label: 'User', render: (r) => r.user_email?.split('@')[0] || '-' }] : []),
     { key: 'automation', label: 'Automation', render: (r) => automationLabel(r.automation) },
-    { key: 'action', label: 'Action', render: (r) => r.action || '—' },
-    { key: 'input', label: 'Order', render: (r) => shortInput(r.input) || '—' },
+    { key: 'action', label: 'Action', render: (r) => r.action || '-' },
+    { key: 'input', label: 'Order', render: (r) => shortInput(r.input) || '-' },
     {
       key: 'status',
       label: 'Status',
@@ -60,10 +60,10 @@ export default function Dashboard() {
   return (
     <PageTransition>
       <div className="stat-grid">
-        <StatCard index={0} label="Running now" value={dash?.inflight ?? '—'} sub="live jobs" tone={dash?.inflight ? 'live' : null} />
-        <StatCard index={1} label="Runs this week" value={week.total ?? '—'} sub={week.total ? `${week.succeeded || 0} ok · ${week.failed || 0} failed` : null} />
-        {isAdmin && <StatCard index={2} label="Success rate" value={successRate == null ? '—' : `${successRate}%`} sub="last 7 days" tone={successRate != null && successRate < 90 ? 'warn' : 'ok'} />}
-        {isAdmin && <StatCard index={3} label="Failures" value={week.failed ?? '—'} sub="need a human" tone={week.failed ? 'bad' : null} />}
+        <StatCard index={0} label="Running now" value={dash?.inflight ?? '-'} sub="live jobs" tone={dash?.inflight ? 'live' : null} />
+        <StatCard index={1} label="Runs this week" value={week.total ?? '-'} sub={week.total ? `${week.succeeded || 0} ok · ${week.failed || 0} failed` : null} />
+        {isAdmin && <StatCard index={2} label="Success rate" value={successRate == null ? '-' : `${successRate}%`} sub="last 7 days" tone={successRate != null && successRate < 90 ? 'warn' : 'ok'} />}
+        {isAdmin && <StatCard index={3} label="Failures" value={week.failed ?? '-'} sub="need a human" tone={week.failed ? 'bad' : null} />}
       </div>
 
       {isAdmin && (

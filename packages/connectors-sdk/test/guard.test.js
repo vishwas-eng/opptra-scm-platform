@@ -38,7 +38,7 @@ test('block detection recognises each pushback signal', () => {
 });
 
 test('a JSON payload containing the word captcha is NOT a block', () => {
-  // A product title or field name must never trip the breaker — that would halt a
+  // A product title or field name must never trip the breaker, that would halt a
   // healthy connector on a data coincidence.
   const signal = detectBlock({
     status: 200,
@@ -71,7 +71,7 @@ test('requests are paced with jitter and never run concurrently', async () => {
 
   await Promise.all([make(1), make(2), make(3)]);
   assert.deepEqual(order, ['start-1', 'start-2', 'start-3'], 'calls must serialize');
-  // The first call does not pace — there is no previous request to space away from.
+  // The first call does not pace, there is no previous request to space away from.
   // Each later one waits minDelay + jitter; with random()=0.5 that is 1000 + 200.
   assert.deepEqual(slept, [1200, 1200]);
 });
@@ -101,7 +101,7 @@ test('429 waits exactly the Retry-After the server asked for', async () => {
   assert.equal(calls, 2);
 });
 
-test('403 and CAPTCHA stop immediately — retrying into a block is what causes bans', async () => {
+test('403 and CAPTCHA stop immediately, retrying into a block is what causes bans', async () => {
   for (const res of [
     { status: 403, headers: {}, body: '' },
     { status: 200, headers: { 'content-type': 'text/html' }, body: 'unusual traffic detected' },
@@ -180,7 +180,7 @@ test('repeated blocks open the circuit and every later call is refused without t
   assert.ok(alerts.some((a) => a.breakerOpen), 'a human must be alerted');
 });
 
-test('a success between blocks resets the streak — transient noise must not trip the breaker', async () => {
+test('a success between blocks resets the streak, transient noise must not trip the breaker', async () => {
   const { guard } = harness({ minDelayMs: 0, jitterMs: 0, maxRetries: 0, breakerThreshold: 3 });
   await guard.run(async () => ({ status: 403, headers: {}, body: '' }));
   await guard.run(async () => okRes());
@@ -219,7 +219,7 @@ test('the daily budget caps a runaway loop and refills on a rolling window', asy
   assert.equal((await guard.run(async () => okRes())).ok, true, 'budget refills after 24h');
 });
 
-test('defaults are conservative — a connector must opt in to being noisy', () => {
+test('defaults are conservative, a connector must opt in to being noisy', () => {
   assert.ok(DEFAULT_POLICY.minDelayMs >= 500);
   assert.equal(DEFAULT_POLICY.maxConcurrent, 1);
   assert.ok(DEFAULT_POLICY.breakerThreshold <= 3);

@@ -9,7 +9,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export async function buildApp({ withStatic = true } = {}) {
   // trustProxy: 1, NOT true. `true` trusts the entire X-Forwarded-For chain, so a client
-  // that sends its own XFF header controls req.ip — and every per-IP / per-user rate
+  // that sends its own XFF header controls req.ip, and every per-IP / per-user rate
   // limit keyed on it can be bypassed by rotating a fake value each request. Exactly one
   // proxy sits in front of us (Caddy), which APPENDS the real peer address, so trusting
   // one hop from the right yields the true client and ignores anything the client forged.
@@ -62,8 +62,7 @@ export async function buildApp({ withStatic = true } = {}) {
   await app.register(import('./agent/routes.js'));
 
   if (withStatic) {
-    // The SPA is a Vite build (apps/web/dist). It must exist before the API starts —
-    // the Dockerfile runs `npm run build -w @opptra/web`, and locally `npm run build:web`.
+    // The SPA is a Vite build (apps/web/dist). It must exist before the API starts, // the Dockerfile runs `npm run build -w @opptra/web`, and locally `npm run build:web`.
     // Serving apps/web/public directly would 404 on every route, since there is no
     // hand-written index.html any more.
     const webRoot = path.join(here, '../../web/dist');

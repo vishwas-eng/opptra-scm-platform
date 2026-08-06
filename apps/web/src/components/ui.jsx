@@ -17,8 +17,7 @@ export const Button = forwardRef(function Button(
       aria-busy={loading || undefined}
       {...rest}
     >
-      {/* The label stays in the DOM while loading so the button keeps its width —
-          a button that resizes mid-click moves everything next to it. */}
+      {/* The label stays in the DOM while loading so the button keeps its width, a button that resizes mid-click moves everything next to it. */}
       <span className="btn-label">{children}</span>
       {loading && <span className="btn-spinner" aria-hidden="true" />}
     </button>
@@ -154,7 +153,7 @@ export function Spinner({ label = 'Loading' }) {
   return <span className="spinner" role="status" aria-label={label} />;
 }
 
-/** Skeleton row for first paint — better than a spinner because it shows the shape. */
+/** Skeleton row for first paint, better than a spinner because it shows the shape. */
 export function Skeleton({ w = '100%', h = 14, style }) {
   return <span className="skeleton" style={{ width: w, height: h, ...style }} aria-hidden="true" />;
 }

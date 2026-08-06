@@ -7,13 +7,13 @@ Companion: `docs/connectors/google.md`, `docs/CONNECTOR-MASTER-PLAN.md`.
 ## Model (Cursor-like)
 
 ```
-Layer A — Account connector
+Layer A, Account connector
   Connect Google OAuth (per-user) → Sheets + Drive scopes
         ↓
-Layer B — Resource connectors (this doc)
+Layer B, Resource connectors (this doc)
   Bind specific spreadsheet / folder / file IDs the Agent may touch
         ↓
-Layer D — Agent tools
+Layer D, Agent tools
   sheets_read / sheets_write / drive_list / drive_download
   only resolve against bound resources (+ discovery list tools)
 ```
@@ -57,7 +57,7 @@ OAuth tokens stay in `user_google_oauth`. Resources are only the allow-list.
 | Tool | Scope |
 |---|---|
 | `sheets_list_bound` / `drive_list_bound` | Bound resources only |
-| `sheets_list_spreadsheets` / `drive_search` | OAuth discovery — **does not** unlock read/write |
+| `sheets_list_spreadsheets` / `drive_search` | OAuth discovery, **does not** unlock read/write |
 | `sheets_read` / `sheets_write` / `sheets_append_rows` / `sheets_copy_range` | Bound spreadsheets only |
 | `drive_list` / `drive_download` | Bound folders / files only |
 
@@ -91,13 +91,13 @@ Admin-only (Agent Beta). Disconnecting Google clears bound resources by default 
 | **Can view but not edit** | Read may work; write returns 403 → share edit access or reconnect with correct account |
 | **Revoked / expired refresh token** | Tools return reconnect + `/auth/google/connect?return=connectors`; `last_error` set on `user_google_oauth` |
 | **Missing Sheets/Drive scopes** | Status `needs_reconnect`; bind rejected until reconnect with `prompt=consent` |
-| **Unbound spreadsheetId in tool call** | `{ ok: false, bindRequired: true }` — add under Connectors first |
+| **Unbound spreadsheetId in tool call** | `{ ok: false, bindRequired: true }`, add under Connectors first |
 | **Disconnect Google** | Clears OAuth + Sheets/Drive prefs + bound resources (unless `clearResources: false`) |
-| **Platform Sheet Update** | Unchanged — shared SA / shared OAuth; not this table |
+| **Platform Sheet Update** | Unchanged, shared SA / shared OAuth; not this table |
 
 ## Security
 
 - Per-user tokens encrypted at rest; never returned to the browser
 - Agent never uses shared Master SA for these tools
-- Bound list is per Opptra user email — no cross-user resource share yet
+- Bound list is per Opptra user email, no cross-user resource share yet
 - Marketplace connectors remain coming soon (no fake Amazon login)

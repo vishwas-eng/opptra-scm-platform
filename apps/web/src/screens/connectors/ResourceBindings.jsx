@@ -78,7 +78,7 @@ export default function ResourceBindings({ connector: c, onChanged }) {
           ))}
         </ul>
       ) : (
-        <p className="meta">Nothing bound yet — the agent cannot read anything until you add one.</p>
+        <p className="meta">Nothing bound yet, the agent cannot read anything until you add one.</p>
       )}
 
       <form className="binding-form" onSubmit={add}>

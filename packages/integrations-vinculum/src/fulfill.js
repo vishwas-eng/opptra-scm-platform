@@ -7,7 +7,7 @@
 //   3) Returns clear "not_configured" so runs don't silently invent success
 //
 // Capture with DevTools on Manage Orders (confirm, invoice, ready, ship, print label)
-// then set VINCULUM_FULFILL_ACTIONS_JSON — see docs/HOMECENTRE.md.
+// then set VINCULUM_FULFILL_ACTIONS_JSON, see docs/HOMECENTRE.md.
 
 export function parseFulfillActions(jsonOrObj) {
   if (!jsonOrObj) return null;
@@ -29,7 +29,7 @@ export function makeVinculumFulfill(client, cfg = {}) {
         ok: false,
         skipped: true,
         step: name,
-        error: `Vinculum fulfill step "${name}" not configured — capture HAR and set VINCULUM_FULFILL_ACTIONS_JSON`,
+        error: `Vinculum fulfill step "${name}" not configured, capture HAR and set VINCULUM_FULFILL_ACTIONS_JSON`,
       };
     }
     const form = { ...(spec.form || {}) };

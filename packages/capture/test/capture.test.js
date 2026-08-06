@@ -24,7 +24,7 @@ function entry(over = {}) {
 
 /* ------------------------------- redaction ------------------------------- */
 
-test('secret headers are blanked but their NAMES survive — names are the RE signal', () => {
+test('secret headers are blanked but their NAMES survive, names are the RE signal', () => {
   const h = redactHeaders({ Cookie: SESSION_COOKIE, 'X-CSRF-Token': 'tok', 'Content-Type': 'application/json' });
   assert.equal(h.cookie, '[redacted]');
   assert.equal(h['x-csrf-token'], '[redacted]');
@@ -86,7 +86,7 @@ test('shapeOf describes structure without leaking values', () => {
   const s = shapeOf({ total: 2, rows: [{ sku: 'ABC', qty: 3 }], ok: true, when: null });
   assert.deepEqual(s, {
     total: 'number',
-    // The row schema must survive nesting — this is the payload a connector author maps.
+    // The row schema must survive nesting, this is the payload a connector author maps.
     rows: { array: { sku: 'string', qty: 'number' } },
     ok: 'boolean',
     when: 'null',
@@ -233,7 +233,7 @@ test('a DevTools HAR converts to entries the analyzer understands', () => {
   assert.equal(entries.length, 1);
   assert.equal(entries[0].durationMs, 121);
   assert.deepEqual(entries[0].responseHeaders['set-cookie'], ['JSESSIONID=FRESH; Path=/', 'XSRF=abc'],
-    'repeated headers must not overwrite each other — Set-Cookie is how sessions are born');
+    'repeated headers must not overwrite each other, Set-Cookie is how sessions are born');
 
   const res = analyzeCapture(entries);
   assert.equal(res.summary.primaryHost, 'portal.example.com');

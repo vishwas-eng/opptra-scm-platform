@@ -17,7 +17,7 @@ const DONE = new Set(['INWARD_DONE', 'OUTWARD_DONE', 'FULLCYCLE_DONE']);
 
 /**
  * Full-cycle answers with `{ inward, outward }` nested; inward and outward answer flat.
- * Flattening here keeps one rendering path — outward's fields win because its inventory
+ * Flattening here keeps one rendering path, outward's fields win because its inventory
  * snapshot is the later one.
  */
 function flatten(result) {
@@ -100,7 +100,7 @@ export default function Inventory() {
 
           {op !== 'inward' && (
             <div className="row">
-              <Field label="Order code" hint="Optional — generated when left blank">
+              <Field label="Order code" hint="Optional, generated when left blank">
                 <Input
                   value={orderCode}
                   onChange={(e) => setOrderCode(e.target.value)}

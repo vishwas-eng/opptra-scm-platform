@@ -26,7 +26,7 @@ test('buildToolSpecs only exposes tools for connected live connectors', () => {
   const none = buildToolSpecs([]);
   assert.equal(none.length, 0);
 
-  const ucOnly = buildToolSpecs(['unicommerce', 'amazon' /* not live — ignored */]);
+  const ucOnly = buildToolSpecs(['unicommerce', 'amazon' /* not live, ignored */]);
   assert.ok(ucOnly.every((t) => t.name.startsWith('unicommerce_')));
   assert.ok(ucOnly.some((t) => t.name === 'unicommerce_inventory_snapshot'));
 
@@ -114,8 +114,8 @@ test('executor sanitizes secret-looking keys out of UC results', async () => {
 });
 
 test('SECURITY: drive_search no longer accepts a raw Drive query expression', () => {
-  // A free-form `q` let anything reaching the model — including text read out of a bound
-  // sheet, i.e. content an outsider can influence — enumerate the whole Drive
+  // A free-form `q` let anything reaching the model, including text read out of a bound
+  // sheet, i.e. content an outsider can influence, enumerate the whole Drive
   // (`fullText contains 'password'`), bypassing the bind-first ACL.
   const spec = buildToolSpecs(['google-drive']).find((t) => t.name === 'drive_search');
   assert.ok(!spec.parameters.properties.query, 'raw query parameter must be gone');

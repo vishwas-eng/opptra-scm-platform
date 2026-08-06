@@ -3,14 +3,13 @@
 //
 // Storage format: `enc:v1:<base64(iv || authTag || ciphertext)>`. The prefix makes
 // sealed values self-describing, so openSecret() can pass legacy plaintext rows
-// through unchanged and sealPlaintextAtRest() can find-and-seal them at boot —
-// no flag column, no big-bang migration, rollback-safe.
+// through unchanged and sealPlaintextAtRest() can find-and-seal them at boot, // no flag column, no big-bang migration, rollback-safe.
 //
 // Key resolution (checked once, cached):
-//   1. VAULT_KEY env — 32 bytes as base64 or hex. Set this in production so the
+//   1. VAULT_KEY env, 32 bytes as base64 or hex. Set this in production so the
 //      data-encryption key can rotate independently of JWT signing.
 //   2. Derived from JWT_SECRET via scrypt with a fixed app salt. Means encryption
-//      is ALWAYS on — a deploy that never set VAULT_KEY still never writes
+//      is ALWAYS on, a deploy that never set VAULT_KEY still never writes
 //      plaintext to disk. Rotating JWT_SECRET without VAULT_KEY set will orphan
 //      sealed rows (operators re-paste sessions), which is the documented trade.
 import crypto from 'node:crypto';
@@ -57,8 +56,7 @@ export function sealSecret(plaintext) {
 
 /**
  * Open a stored secret. Legacy plaintext (no prefix) passes through unchanged.
- * A sealed value that fails to open (wrong/rotated key, corrupt row) throws —
- * silently returning ciphertext would send garbage to a vendor as a credential.
+ * A sealed value that fails to open (wrong/rotated key, corrupt row) throws, * silently returning ciphertext would send garbage to a vendor as a credential.
  */
 export function openSecret(stored) {
   const s = String(stored ?? '');
@@ -73,11 +71,11 @@ export function openSecret(stored) {
   try {
     return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
   } catch {
-    throw new Error('sealed secret failed to open — VAULT_KEY/JWT_SECRET changed since it was stored');
+    throw new Error('sealed secret failed to open, VAULT_KEY/JWT_SECRET changed since it was stored');
   }
 }
 
-/** Test helper — forget the cached key so a test can vary config. */
+/** Test helper, forget the cached key so a test can vary config. */
 export function _resetSecretBoxForTests() {
   cachedKey = null;
 }

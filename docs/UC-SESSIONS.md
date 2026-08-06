@@ -11,7 +11,7 @@ Company codes from UC **Choose your company** (authoritative):
 | `opptrauae` | `https://opptrauae.unicommerce.com` | `uae` |
 | `opptraksa` | `https://opptraksa.unicommerce.com` | `ksa` |
 
-> **Do not use** `oppdooruae.unicommerce.com` — wrong company code. Correct UAE tenant is **`opptrauae`**.
+> **Do not use** `oppdooruae.unicommerce.com`, wrong company code. Correct UAE tenant is **`opptrauae`**.
 
 | Instance id | Host | Used by |
 |-------------|------|---------|
@@ -22,7 +22,7 @@ Company codes from UC **Choose your company** (authoritative):
 
 ### Planned: FZE (`scfze`)
 
-Identity DL: **`scfze.automations@opptra.com`**. Not in the india/uae/ksa/staging matrix yet — **no** `UC_*_FZE` keys and **no** Unicommerce host until ops confirms company code / tenant URL. Do not invent a hostname.
+Identity DL: **`scfze.automations@opptra.com`**. Not in the india/uae/ksa/staging matrix yet, **no** `UC_*_FZE` keys and **no** Unicommerce host until ops confirms company code / tenant URL. Do not invent a hostname.
 
 ## Automation identities (DLs + India mailbox)
 
@@ -41,14 +41,14 @@ A Google/Outlook **distribution list can receive status mail** and be the labele
 
 To make UAE/KSA (and later FZE) work, pick one:
 
-1. **UC user** — create a user on that tenant whose username is the DL email (`scuae…` / `scksa…`) and set `*_PASS` accordingly, **or**
-2. **Session paste** — Admin-paste `JSESSIONID` from a real user who can access that tenant, while `UC_UAE_USER` / `UC_KSA_USER` (or `HC_UC_*`) is set to the DL for labeling / alerts.
+1. **UC user**, create a user on that tenant whose username is the DL email (`scuae…` / `scksa…`) and set `*_PASS` accordingly, **or**
+2. **Session paste**, Admin-paste `JSESSIONID` from a real user who can access that tenant, while `UC_UAE_USER` / `UC_KSA_USER` (or `HC_UC_*`) is set to the DL for labeling / alerts.
 
 ## Account isolation (hard rule)
 
 | Instance | Credentials | Never use |
 |----------|-------------|-----------|
-| **india** | `UC_USER` / `UC_PASS` = `sc.automations@opptra.com` | — |
+| **india** | `UC_USER` / `UC_PASS` = `sc.automations@opptra.com` |, |
 | **uae** | `HC_UC_UAE_USER`/`PASS` or `UC_UAE_USER`/`PASS` → `scuae.automations@opptra.com` + UC user password **or** session paste | India bot |
 | **ksa** | `HC_UC_KSA_USER`/`PASS` or `UC_KSA_USER`/`PASS` → `scksa.automations@opptra.com` + UC user password **or** session paste | India bot |
 | **staging** | `HC_UC_STAGING_USER`/`PASS` only (personal account for later testing) | India bot |
@@ -60,7 +60,7 @@ There is **no** fallback from UAE/KSA/staging to `UC_USER` / `sc.automations`.
 | Instance | Host | OAuth password-grant | Session `/data` ping | Notes |
 |----------|------|----------------------|----------------------|-------|
 | **india** | `oppdoor.unicommerce.co.in` | **OK** (200, ~12h) | **OK** (vault `alive`) | India bot only |
-| **staging** | `oppdoorstg.unicommerce.com` | needs `HC_UC_STAGING_*` | paste when ready | Personal/staging bot later — not India |
+| **staging** | `oppdoorstg.unicommerce.com` | needs `HC_UC_STAGING_*` | paste when ready | Personal/staging bot later, not India |
 | **uae** | `opptrauae.unicommerce.com` | needs dedicated UAE bot / session | paste when ready | Facility **`opptrauae`**. Wrong host `oppdooruae` → HTTP 500. Identity DL `scuae.automations@opptra.com` |
 | **ksa** | `opptraksa.unicommerce.com` | needs dedicated KSA bot / session | paste when ready | Facility `opptraksa`; grant `LOOKUP_INVENTORY` on KSA bot. Identity DL `scksa.automations@opptra.com` |
 
@@ -68,8 +68,8 @@ There is **no** fallback from UAE/KSA/staging to `UC_USER` / `sc.automations`.
 
 | Candidate | Result |
 |-----------|--------|
-| `oppdooruae.unicommerce.com` | **Wrong** — use `opptrauae` |
-| `oppdoorsa` / `oppdoorksa` / `oppdoorsaudi` | Dead ends — use `opptraksa` |
+| `oppdooruae.unicommerce.com` | **Wrong**, use `opptrauae` |
+| `oppdoorsa` / `oppdoorksa` / `oppdoorsaudi` | Dead ends, use `opptraksa` |
 
 ## Vault
 
@@ -85,7 +85,7 @@ Postgres `uc_session` PK `instance_id`:
 
 ## Status-mail recipients (future)
 
-Today HC owner / 6th Street To: are personal (`HC_OWNER_EMAIL`, `STREET6_EMAIL_TO`). Regional DLs (`scuae` / `scksa` / later `scfze`) are the intended To: for GCC status mail once ops switches them — leave live lists unchanged until then.
+Today HC owner / 6th Street To: are personal (`HC_OWNER_EMAIL`, `STREET6_EMAIL_TO`). Regional DLs (`scuae` / `scksa` / later `scfze`) are the intended To: for GCC status mail once ops switches them, leave live lists unchanged until then.
 
 ## Home Centre auth note
 

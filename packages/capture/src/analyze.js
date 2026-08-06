@@ -1,11 +1,11 @@
-// Capture analysis — turn a recorded browsing session into a connector blueprint.
+// Capture analysis, turn a recorded browsing session into a connector blueprint.
 //
 // This is the step that used to be a human reading a 100 MB HAR for an afternoon. It
 // answers the four questions every new connector needs:
 //   1. which host is the API (vs the CDN, analytics, fonts…),
 //   2. how the session is carried (cookie name? bearer? CSRF/tenant header?),
 //   3. which endpoints exist, in path-template form, with their payload shapes,
-//   4. which of those look like orders / inventory / shipments — i.e. what to register.
+//   4. which of those look like orders / inventory / shipments, i.e. what to register.
 //
 // Everything here is pure: entries in, blueprint out. No network, no DB.
 
@@ -24,7 +24,7 @@ function templatizeSegment(seg) {
   if (/^[0-9a-f]{24,}$/i.test(seg)) return '{hash}';
   if (/^\d{4}-\d{2}-\d{2}$/.test(seg)) return '{date}';
   // Mixed alphanumeric with digits and length > 8 is nearly always an identifier
-  // (order numbers, SKUs in a path). Keep short words — those are route names.
+  // (order numbers, SKUs in a path). Keep short words, those are route names.
   if (seg.length > 8 && /\d/.test(seg) && /[a-z]/i.test(seg)) return '{code}';
   return seg;
 }
@@ -37,11 +37,11 @@ export function templatizePath(pathname) {
 }
 
 /**
- * Describe a JSON value as a compact type tree — the shape, never the data.
+ * Describe a JSON value as a compact type tree, the shape, never the data.
  *
  * Arrays become `{ array: <element shape> }` rather than a string like `array<…>`:
  * an element shape is usually an object, and interpolating it into a string collapses
- * the whole row schema to "[object Object]" — which is exactly the part of the capture
+ * the whole row schema to "[object Object]", which is exactly the part of the capture
  * a connector author needs.
  */
 export function shapeOf(value, depth = 0) {
@@ -138,9 +138,9 @@ export function detectAuth(entries = []) {
     loginRequest: loginPost,
     // Chrome's "Save all as HAR (sanitized)" strips Cookie/Set-Cookie entirely, so a
     // capture can be perfect for endpoint discovery yet carry no session at all. Say so
-    // loudly — otherwise the connector gets built and then fails to authenticate.
+    // loudly, otherwise the connector gets built and then fails to authenticate.
     warning: (!cookies.length && !bearer)
-      ? 'No cookie or bearer captured — this looks like a sanitized HAR export. Endpoint discovery is still valid, but use the Opptra Capture extension (or an unsanitized export) to obtain a usable session.'
+      ? 'No cookie or bearer captured, this looks like a sanitized HAR export. Endpoint discovery is still valid, but use the Opptra Capture extension (or an unsanitized export) to obtain a usable session.'
       : null,
   };
 }
@@ -220,7 +220,7 @@ export function analyzeCapture(entries = [], { maxEndpoints = 120 } = {}) {
     auth: detectAuth(entries),
     endpoints: endpointList.slice(0, maxEndpoints),
     truncatedEndpoints: Math.max(0, endpointList.length - maxEndpoints),
-    // Endpoints that map to a capability we know how to register — the shortlist a
+    // Endpoints that map to a capability we know how to register, the shortlist a
     // human (or the agent) reviews first.
     suggestedActions: endpointList
       .filter((e) => e.suggestedAction)

@@ -2,7 +2,7 @@
 // from the Admin tab). Tests use the in-memory store.
 //
 // Rows are keyed by instance_id ('india' | 'uae' | 'ksa' | 'staging') so each UC tenant
-// keeps its own JSESSIONID — logging into staging must never overwrite India.
+// keeps its own JSESSIONID, logging into staging must never overwrite India.
 import { query, sealSecret, openSecret } from '@opptra/core';
 import { normalizeInstanceId } from './instances.js';
 

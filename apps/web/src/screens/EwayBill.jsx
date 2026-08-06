@@ -82,7 +82,7 @@ function pickCell(row, aliases) {
 /** One result row's PDF. Its own component so each object URL is created and revoked once. */
 function RowFile({ file }) {
   const url = useObjectUrl(file);
-  if (!url) return <span className="meta">—</span>;
+  if (!url) return <span className="meta">-</span>;
   return <a href={url} download={file.filename}>↓ PDF</a>;
 }
 
@@ -109,10 +109,10 @@ function EwayResults({ data }) {
               </Badge>
             ),
           },
-          { key: 'ewb', label: 'E-way bill', render: (r) => r.ewb || '—' },
-          { key: 'invoiceCode', label: 'Invoice', render: (r) => r.invoiceCode || '—' },
-          { key: 'note', label: 'Note', render: (r) => r.error || r.pdfError || '—' },
-          { key: 'file', label: 'PDF', render: (r) => (r.file ? <RowFile file={r.file} /> : <span className="meta">—</span>) },
+          { key: 'ewb', label: 'E-way bill', render: (r) => r.ewb || '-' },
+          { key: 'invoiceCode', label: 'Invoice', render: (r) => r.invoiceCode || '-' },
+          { key: 'note', label: 'Note', render: (r) => r.error || r.pdfError || '-' },
+          { key: 'file', label: 'PDF', render: (r) => (r.file ? <RowFile file={r.file} /> : <span className="meta">-</span>) },
         ]}
         rows={results}
       />
@@ -212,7 +212,7 @@ export default function EwayBill() {
         )}
       >
         <p className="lead eway-lead">
-          One row per sale order. Everything except the Sale Order is optional — leave a cell
+          One row per sale order. Everything except the Sale Order is optional, leave a cell
           blank and Unicommerce keeps whatever it already holds.
         </p>
 
@@ -264,7 +264,7 @@ export default function EwayBill() {
           <span className="meta">
             {dryRun
               ? 'Validates and builds the payload without touching the GST portal.'
-              : 'Live — this generates real e-way bills.'}
+              : 'Live, this generates real e-way bills.'}
           </span>
           <Button
             variant={dryRun ? 'primary' : 'danger'}

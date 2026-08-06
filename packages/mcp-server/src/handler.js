@@ -1,4 +1,4 @@
-// MCP (Model Context Protocol) message handler — the editor side of the bridge.
+// MCP (Model Context Protocol) message handler, the editor side of the bridge.
 //
 // Claude Code / Cursor speak JSON-RPC 2.0 over stdio to this process; every tool is
 // fetched from and executed by the deployed platform API (apps/api/src/routes/mcp.js),

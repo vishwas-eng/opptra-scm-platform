@@ -46,7 +46,7 @@ code, kbd {
   color: var(--ink-2);
 }
 
-/* Focus is never removed, only restyled — keyboard users must always see where
+/* Focus is never removed, only restyled, keyboard users must always see where
    they are. :focus-visible keeps the ring off mouse clicks. */
 :focus { outline: none; }
 :focus-visible {

@@ -89,7 +89,7 @@ export function mapMarketplaceDropdown(raw) {
   const u = v.toUpperCase();
   if (MARKETPLACE_MAP[u]) return MARKETPLACE_MAP[u];
   // Waypoint Customer codes (customer_code) are the real marketplace signal for Amazon
-  // family and several 1P channels — match those before falling back to the raw string.
+  // family and several 1P channels, match those before falling back to the raw string.
   if (/AJIO/i.test(v)) return 'AJIO';
   if (/ZEPTO|B2B0000\d/i.test(v)) return 'Zepto';
   if (/BLINKIT/i.test(v)) return 'Blinkit';
@@ -119,7 +119,7 @@ export function marketplaceLabelFromCustomer(customer, channel = '') {
   const src = `${c} ${ch}`.trim();
   if (!src) return '';
 
-  // Amazon UCB family — only these four short names
+  // Amazon UCB family, only these four short names
   if (/ETRADE/i.test(src)) return 'E-Trade';
   if (/KKOC/i.test(src)) return 'KKOC';
   if (RE_COCOBLU.test(src)) return 'cocoblu';
@@ -189,7 +189,7 @@ export function phase1Mapper(wpRow, cfg = {}) {
   let brand = firstBrand(wpRow['Brand(s)'] || wpRow['Brand'] || '');
   if (brand.replace(/\s+/g, '').toLowerCase() === 'jack&jones') brand = 'Jack & Jones';
 
-  // Origin City must NOT be filled with the warehouse code — Pickup Wh Name already
+  // Origin City must NOT be filled with the warehouse code, Pickup Wh Name already
   // holds that. Only keep a distinct city value if one was supplied explicitly.
   const origin = String(wpRow['Origin City'] || '').trim();
   const warehouse = String(wpRow['Warehouse'] || wpRow['Pickup Wh Name'] || '').trim();

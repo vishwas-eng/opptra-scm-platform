@@ -1,4 +1,4 @@
-# Test Report — Opptra SCM Platform
+# Test Report, Opptra SCM Platform
 
 **78 tests · 0 failures · ~22s** (full serial suite, run against real local Postgres + Redis).
 
@@ -39,25 +39,25 @@ a real Redis instance.
 ## Reliability & load results
 
 **Throughput.** 200 queued jobs processed in **~180ms (~1,100 jobs/s)** with `maxConcurrent = 1`
-held throughout — the concurrency-1 guarantee holds under load, and a run row is written per job.
+held throughout, the concurrency-1 guarantee holds under load, and a run row is written per job.
 
 **Rate limiting.** 100 concurrent Unicommerce calls are paced to the configured rate
-(50/s → ~1.9s) — the platform physically cannot exceed the throttle.
+(50/s → ~1.9s), the platform physically cannot exceed the throttle.
 
 **Session-death storm.** 50 concurrent calls all hitting a dead session collapse into **exactly
-one** re-login (the refresh mutex), then succeed — no login stampede.
+one** re-login (the refresh mutex), then succeed, no login stampede.
 
 **Backpressure.** The queue-depth guard rejects work past the cap with a 503 rather than letting
 an unbounded queue take Redis down.
 
 **Fail-fast, not silent.** Session death mid-batch (e-way bill) stops cleanly: the failing row is
-marked `session expired` and the remaining rows are `skipped` — the worker does not keep hammering
+marked `session expired` and the remaining rows are `skipped`, the worker does not keep hammering
 a dead session.
 
 ## Security & correctness, verified end-to-end
 
-- **Auth precedes validation:** an unauthenticated caller gets `401` even with an invalid body — the request schema never leaks to anonymous callers.
-- **RBAC enforced:** a `viewer` gets `403` on ops automations and admin routes; a deactivated user is rejected **immediately** (`403`, cookie cleared), not at token expiry — the guard re-reads the DB.
+- **Auth precedes validation:** an unauthenticated caller gets `401` even with an invalid body, the request schema never leaks to anonymous callers.
+- **RBAC enforced:** a `viewer` gets `403` on ops automations and admin routes; a deactivated user is rejected **immediately** (`403`, cookie cleared), not at token expiry, the guard re-reads the DB.
 - **Session cookie never leaks:** `/api/uc-session` exposes `has_cookie`, never the value.
 - **Idempotency under concurrency:** five concurrent first-runs of the same step produce exactly one ledger row and one side effect.
 - **Reverse DC upload:** a real multipart PDF upload returns a valid edited PDF; a non-PDF is rejected `400`.

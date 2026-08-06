@@ -16,7 +16,7 @@ export default function Extensions() {
         </a>
 
         <ol className="steps">
-          <li>Unzip the download into a folder you will keep — Chrome loads the extension from that folder every time it starts.</li>
+          <li>Unzip the download into a folder you will keep, Chrome loads the extension from that folder every time it starts.</li>
           <li>Open <code>chrome://extensions</code> in Chrome.</li>
           <li>Enable <b>Developer mode</b> (top right).</li>
           <li>Click <b>Load unpacked</b> and select the unzipped folder.</li>
@@ -24,7 +24,7 @@ export default function Extensions() {
           <li>Pick the channel you are about to capture.</li>
           <li>Click <b>Start</b>.</li>
           <li>Log in to Unicommerce as you normally would.</li>
-          <li>Click through <b>Orders</b>, <b>Inventory</b> and open <b>one shipment</b> — that is the minimum the capture needs.</li>
+          <li>Click through <b>Orders</b>, <b>Inventory</b> and open <b>one shipment</b>, that is the minimum the capture needs.</li>
           <li>Click <b>Stop</b>. The capture uploads itself; nothing else to do.</li>
         </ol>
       </Panel>
@@ -45,7 +45,7 @@ export default function Extensions() {
           <li>Enable <b>Developer mode</b>, then click <b>Load unpacked</b> and select the unzipped folder.</li>
           <li>Open Unicommerce and sign in.</li>
           <li>Go to the invoice list and filter it down to exactly what you want.</li>
-          <li>Click the extension — it downloads all the PDFs on that list to your Downloads folder.</li>
+          <li>Click the extension, it downloads all the PDFs on that list to your Downloads folder.</li>
         </ol>
       </Panel>
     </PageTransition>

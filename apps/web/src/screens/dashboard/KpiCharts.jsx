@@ -102,7 +102,7 @@ export default function KpiCharts({ days, onDaysChange }) {
   } : null, [features]);
 
   const userColumns = [
-    { key: 'user', label: 'User', render: (r) => r.user_email?.split('@')[0] || '—' },
+    { key: 'user', label: 'User', render: (r) => r.user_email?.split('@')[0] || '-' },
     { key: 'total', label: 'Runs' },
     { key: 'ok', label: 'OK' },
     { key: 'failed', label: 'Failed' },

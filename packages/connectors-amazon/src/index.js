@@ -14,10 +14,10 @@ const MARKETPLACE_PARAM = {
 };
 
 /**
- * Amazon connector — official SP-API, authorized once per marketplace.
+ * Amazon connector, official SP-API, authorized once per marketplace.
  *
  * Refresh-token resolution per marketplace, in order:
- *   1. the connector vault (one-time OAuth connect flow — /auth/amazon/connect)
+ *   1. the connector vault (one-time OAuth connect flow, /auth/amazon/connect)
  *   2. AMAZON_SP_REFRESH_TOKEN env (legacy single-marketplace escape hatch, 'in' only)
  *
  * @param {{
@@ -45,7 +45,7 @@ export function createAmazonConnector({ cfg = {}, getRefreshToken, httpFetch = f
     return '';
   }
 
-  /** Resolve auth or explain exactly what is missing — never a vague failure. */
+  /** Resolve auth or explain exactly what is missing, never a vague failure. */
   async function requireAuth(marketplace) {
     if (!hasLwaApp) {
       return { error: connectorError(CONNECTOR_ERROR_CODES.AUTH_REQUIRED,
@@ -54,7 +54,7 @@ export function createAmazonConnector({ cfg = {}, getRefreshToken, httpFetch = f
     const refreshToken = await refreshTokenFor(marketplace);
     if (!refreshToken) {
       return { error: connectorError(CONNECTOR_ERROR_CODES.AUTH_REQUIRED,
-        `Amazon ${AMAZON_MARKETPLACES[marketplace].label} is not connected yet — use Connect on the Connectors page (one-time Seller Central authorization).`,
+        `Amazon ${AMAZON_MARKETPLACES[marketplace].label} is not connected yet, use Connect on the Connectors page (one-time Seller Central authorization).`,
         { marketplace, connectUrl: `/auth/amazon/connect?marketplace=${marketplace}` }) };
     }
     return { refreshToken };

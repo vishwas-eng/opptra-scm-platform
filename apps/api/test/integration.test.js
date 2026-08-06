@@ -209,7 +209,7 @@ test('deactivated user is rejected immediately (DB re-check, not token TTL)', as
     ON CONFLICT (email) DO UPDATE SET is_active=false`);
   const token = app.jwt.sign({ email: 'gone@opptra.com', name: 'G', role: 'ops' });
   const res = await app.inject({ method: 'GET', url: '/api/me', headers: { cookie: `opptra_session=${token}` } });
-  // 403 (authenticated but not active) + cookie cleared — rejected immediately, not at TTL.
+  // 403 (authenticated but not active) + cookie cleared, rejected immediately, not at TTL.
   assert.equal(res.statusCode, 403);
 });
 

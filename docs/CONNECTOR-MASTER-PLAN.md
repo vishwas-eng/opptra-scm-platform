@@ -7,7 +7,7 @@ Companion docs: `MASTER-BACKEND-PLAN.md` (parent repo), `docs/AGENT-PLATFORM-PLA
 
 ---
 
-## 0. Doctrine — reverse-engineering first
+## 0. Doctrine, reverse-engineering first
 
 **Primary path for every seller / ops portal:** reverse-engineer the portal’s own XHR/fetch traffic (cookies, CSRF, headers, request/response shapes) from HAR captures, then implement typed connector actions that replay those calls through a session vault.
 
@@ -16,7 +16,7 @@ Companion docs: `MASTER-BACKEND-PLAN.md` (parent repo), `docs/AGENT-PLATFORM-PLA
 | Rule | Meaning |
 |---|---|
 | Same interface | `listCapabilities` / `invoke` / `health` whether backed by RE session calls or official REST |
-| Ship RE now | Opptra uses these portals daily — do not wait on developer registration |
+| Ship RE now | Opptra uses these portals daily, do not wait on developer registration |
 | Unicommerce is the reference | Built RE-first (`uc-client` + admin session paste + keepalive + HAR/`unicommerce-engine`); every new portal copies that pattern |
 | Official = Phase “replace adapter” | Capability ids and Run ledger stay stable; only transport/auth inside the connector changes |
 | No parallel auth inventions | Reuse the existing session vault / paste / keepalive model per portal; do not invent a second cookie store |
@@ -29,13 +29,13 @@ See **`docs/REVERSE-ENGINEERING-PLAYBOOK.md`** for the repeatable HAR → action
 
 ## 1. Vision
 
-Opptra SCM becomes an **agentic workspace** where every marketplace, OMS/WMS, sheet, and courier is a **connector** that exposes typed capabilities over API. Operators and agents invoke actions (`searchOrders`, `downloadReport`, `adjustInventory`, …) with tenant credentials — they do **not** need to click through seller-portal UIs for day-to-day work.
+Opptra SCM becomes an **agentic workspace** where every marketplace, OMS/WMS, sheet, and courier is a **connector** that exposes typed capabilities over API. Operators and agents invoke actions (`searchOrders`, `downloadReport`, `adjustInventory`, …) with tenant credentials, they do **not** need to click through seller-portal UIs for day-to-day work.
 
 **Auth is per platform, RE-primary:** session cookie / portal XHR (primary for seller portals), with official bearer/OAuth as a future drop-in when keys exist. Google Sheets is the hybrid exception (OAuth official already). Credentials live in a vault; every invocation is a **Run** with audit.
 
 **Compile later into one control plane:** today's hard-wired `automation-*` packages and `/api/automations/*` routes become thin playbooks on top of a uniform connector registry. The live app at `scm.opptra.com` keeps working; connectors are additive. Eventually agents compose connectors via tool manifests (see `AGENT-PLATFORM-PLAN.md`); this document owns the **connector layer itself**.
 
-**North star (one sentence):** one URL, one run ledger, many platforms — capabilities callable by humans, Slack ops agents, and (later) LLM planners without portal UI dependency.
+**North star (one sentence):** one URL, one run ledger, many platforms, capabilities callable by humans, Slack ops agents, and (later) LLM planners without portal UI dependency.
 
 ---
 
@@ -43,20 +43,20 @@ Opptra SCM becomes an **agentic workspace** where every marketplace, OMS/WMS, sh
 
 Priority legend: **P0** = build now (foundation), **P1** = next after UC + Sheets stabilize, **P2** = later / access-gated.
 
-Auth column: **Session/RE (primary)** vs **Official API (future swap)** — both may exist; RE ships first unless noted.
+Auth column: **Session/RE (primary)** vs **Official API (future swap)**, both may exist; RE ships first unless noted.
 
 | Platform | Auth (primary) | Official API (future swap) | RE status | Core capabilities to expose | Priority | Risks |
 |---|---|---|---|---|---|---|
-| **Unicommerce (OMS/WMS)** | **Session/RE (primary)** — JSESSIONID `/data/*` + admin paste + keepalive; bearer already used for some public REST | Public OAuth password-grant `/services/rest/v1` already in `uc-client` (keep dual; not a gate) | **Reference — scaffold in progress** (`packages/connectors-unicommerce`); 975 endpoints mined in sibling `unicommerce-engine/` | Orders/SO, allocate, invoice, cancel; inventory snapshot/adjust/ATP; returns/CN; putaway/picklists; shipments/labels; facilities/channels/SKUs; report export jobs | **P0 FIRST BUILD** | Shared bot session → serial `/data`; facility session-global; session death ≠ `successful:false`; rate limits; ToS on internal APIs; CAPTCHA when cookie dies |
-| **Amazon Seller Central** | **Session/RE (primary)** — Seller Central XHR/cookie until SP-API app approved | LWA + SP-API (SigV4) when developer registration completes | **Not started** — need HAR of orders / inventory / labels | Orders, inventory/FBA, shipments, feeds, reports, listings (ops subset) | **P1** | Portal churn; ToS; later SP-API quota/region scoping |
-| **Flipkart Seller** | **Session/RE (primary)** — seller portal session | Seller API keys/OAuth after approval (3–5 days) as swap | **Not started** — HAR of orders / inventory / shipments / returns | Orders, inventory, listings, shipments, returns, ASN companions | **P1** | Portal vs API gaps; rate limits; approval lead time (non-blocking) |
+| **Unicommerce (OMS/WMS)** | **Session/RE (primary)**, JSESSIONID `/data/*` + admin paste + keepalive; bearer already used for some public REST | Public OAuth password-grant `/services/rest/v1` already in `uc-client` (keep dual; not a gate) | **Reference, scaffold in progress** (`packages/connectors-unicommerce`); 975 endpoints mined in sibling `unicommerce-engine/` | Orders/SO, allocate, invoice, cancel; inventory snapshot/adjust/ATP; returns/CN; putaway/picklists; shipments/labels; facilities/channels/SKUs; report export jobs | **P0 FIRST BUILD** | Shared bot session → serial `/data`; facility session-global; session death ≠ `successful:false`; rate limits; ToS on internal APIs; CAPTCHA when cookie dies |
+| **Amazon Seller Central** | **Session/RE (primary)**, Seller Central XHR/cookie until SP-API app approved | LWA + SP-API (SigV4) when developer registration completes | **Not started**, need HAR of orders / inventory / labels | Orders, inventory/FBA, shipments, feeds, reports, listings (ops subset) | **P1** | Portal churn; ToS; later SP-API quota/region scoping |
+| **Flipkart Seller** | **Session/RE (primary)**, seller portal session | Seller API keys/OAuth after approval (3–5 days) as swap | **Not started**, HAR of orders / inventory / shipments / returns | Orders, inventory, listings, shipments, returns, ASN companions | **P1** | Portal vs API gaps; rate limits; approval lead time (non-blocking) |
 | **Myntra Partner** | **Session/RE (primary)** | Partner API if granted (swap) | **Not started** | Orders/PO/ASN paths; inventory where available | **P2** | Partner access gated; ASN files already in-repo |
 | **Nykaa** | **Session/RE (primary)** | Partner API if/when available (swap) | **Not started** | Orders, inventory, returns (ops subset) | **P2** | Undocumented; brittle session |
-| **Zepto** | **Session/RE (primary)** — vendor portal | Partner feed if offered (swap) | **Not started** — ASN CSV already from UC; portal write-back next | Orders/PO status, inventory, ASN upload companion | **P1** (after Sheets) | No stable public API; format churn |
+| **Zepto** | **Session/RE (primary)**, vendor portal | Partner feed if offered (swap) | **Not started**, ASN CSV already from UC; portal write-back next | Orders/PO status, inventory, ASN upload companion | **P1** (after Sheets) | No stable public API; format churn |
 | **Blinkit** | **Session/RE (primary)** | Partner API if offered (swap) | **Not started** | Orders, inventory, dispatch status | **P1–P2** | Access + ToS |
 | **Swiggy Instamart** | **Session/RE (primary)** | Partner API if offered (swap) | **Not started** | Orders, inventory, slot/dispatch | **P1–P2** | Same class as Zepto/Blinkit |
-| **Google Sheets** | **Official OAuth (already)** — hybrid: OAuth refresh / SA+DWD is primary; **Agent uses per-user OAuth + bound resources** | N/A (already official) | **Hybrid** — not RE; `user_google_oauth` + `connector_resources` | Read/write ranges on **bound** sheets; discovery list; Master/B2B still via platform SA | **P0** | Never overwrite IMPORTRANGE mirrors; Agent never uses shared SA |
-| **Vinculum / Home Centre** | **Session/RE (primary)** — RSA login + session (existing) | — | **Partial** — `integrations-vinculum`; fulfill needs more HAR | Order list → UC B2C punch; fulfill/label | **P2** | Creds often invalid; GCC-only |
+| **Google Sheets** | **Official OAuth (already)**, hybrid: OAuth refresh / SA+DWD is primary; **Agent uses per-user OAuth + bound resources** | N/A (already official) | **Hybrid**, not RE; `user_google_oauth` + `connector_resources` | Read/write ranges on **bound** sheets; discovery list; Master/B2B still via platform SA | **P0** | Never overwrite IMPORTRANGE mirrors; Agent never uses shared SA |
+| **Vinculum / Home Centre** | **Session/RE (primary)**, RSA login + session (existing) |, | **Partial**, `integrations-vinculum`; fulfill needs more HAR | Order list → UC B2C punch; fulfill/label | **P2** | Creds often invalid; GCC-only |
 | **Couriers** | API keys / OAuth | Official aggregator APIs | Prefer official when keys exist; RE only for gaps | Tracking, manifest, label fetch | **P2** | Multi-courier mapping |
 | **E-way / GST** | Via UC RE/public path today | Direct NIC/GSP only if UC insufficient | UC path is P0 capability | Generate/download EWB | **P2** (UC path P0) | Transporter GSTIN; dry-run mandatory |
 
@@ -66,8 +66,8 @@ Ordered for Opptra daily ops. For each portal after UC: capture **login + sessio
 
 | # | Portal | Capture first (in order) | Notes |
 |---|---|---|---|
-| 0 | **Unicommerce** | Already done — extend from `unicommerce-engine` + live HARs | Reference connector |
-| 1 | **Google Sheets** | Skip RE — OAuth vault + Sheets API already | Hybrid; resource ids next |
+| 0 | **Unicommerce** | Already done, extend from `unicommerce-engine` + live HARs | Reference connector |
+| 1 | **Google Sheets** | Skip RE, OAuth vault + Sheets API already | Hybrid; resource ids next |
 | 2 | **Amazon Seller Central** | (1) Orders list/detail (2) Inventory / FBA qty (3) Labels / packing slip (4) Returns | SP-API = later adapter swap |
 | 3 | **Flipkart Seller** | (1) Orders (2) Inventory (3) Labels/shipments (4) Returns | ASN file emit already exists |
 | 4 | **Zepto** | (1) PO/orders status (2) Inventory (3) ASN/label upload if UI does it (4) Returns | Companion to Zepto CSV from UC |
@@ -88,10 +88,10 @@ Grounded in what already exists: `@opptra/uc-client`, `@opptra/core` runs/audit,
 
 | Layer | What | Status |
 |---|---|---|
-| **A — Account** | Google OAuth (per-user), UC session, Waypoint env, Home Centre env | Live |
-| **B — Resource** | Bound spreadsheet / Drive folder / file rows in `connector_resources`; Agent tools scoped to them | Live (Sheets/Drive) |
-| **C — Channel marketplace** | All portals listed; live unlock after RE/HAR; Amazon etc. stay disabled | Scaffold + docs |
-| **D — Agent** | Chat tools + daily playbooks reference `resourceId` | Live (admin Beta) |
+| **A, Account** | Google OAuth (per-user), UC session, Waypoint env, Home Centre env | Live |
+| **B, Resource** | Bound spreadsheet / Drive folder / file rows in `connector_resources`; Agent tools scoped to them | Live (Sheets/Drive) |
+| **C, Channel marketplace** | All portals listed; live unlock after RE/HAR; Amazon etc. stay disabled | Scaffold + docs |
+| **D, Agent** | Chat tools + daily playbooks reference `resourceId` | Live (admin Beta) |
 
 See `docs/connectors/RESOURCE-CONNECTORS.md`.
 
@@ -126,7 +126,7 @@ Connector = {
 | Google: shared refresh + `user_google_oauth` | Generalize to `connector_credentials(workspace_id, connector_id, kind, ciphertext, meta)` |
 | Vinculum env vars | Vault entry when enabled |
 | Future portals (Amazon, Flipkart, …) | Same vault row kind `session` (RE) and later `oauth2`/`apikey` without renaming capabilities |
-| `OPS_AGENT_TOKEN` | Machine auth to *our* API — not a marketplace credential |
+| `OPS_AGENT_TOKEN` | Machine auth to *our* API, not a marketplace credential |
 
 Rules: encrypt at rest; never log cookies/tokens; never commit `.env`; admin paste flows verify before overwrite (already true for UC session paste).
 
@@ -157,13 +157,13 @@ Proven today:
 - Home Centre: dry-run sync/fulfill; empty list is honest success (`empty: true`), not fake progress.
 - Return: resumable `pending_retry` when UC state not ready.
 
-**Connector standard:** every mutating capability accepts `dryRun` where meaningful; money/customer-facing actions support `requireApproval` → Run parks (`pending_approval` — new status when agent runtime lands; until then use draft/dry-run + explicit second API call).
+**Connector standard:** every mutating capability accepts `dryRun` where meaningful; money/customer-facing actions support `requireApproval` → Run parks (`pending_approval`, new status when agent runtime lands; until then use draft/dry-run + explicit second API call).
 
 ---
 
-## 4. Unicommerce complete connector — detailed build plan (FIRST)
+## 4. Unicommerce complete connector, detailed build plan (FIRST)
 
-### 4.1 Inventory — what already exists in repo
+### 4.1 Inventory, what already exists in repo
 
 | Asset | Location | What it gives the connector |
 |---|---|---|
@@ -180,18 +180,18 @@ Proven today:
 | **Inward / Outward / Full-cycle** | `automation-inventory` | PO/GRN/putaway/adjust + B2C SO create/allocate/invoice |
 | **Home Centre punch** | `automation-homecentre` + `integrations-vinculum` | UC customer + SO create via bearer |
 | **Endpoint mine** | Sibling `unicommerce-engine/endpoints.json` (**975** paths), `FLOWS.md`, HARs | Discovery source for Phase 0 |
-| **FMCG daily reports** | `uc-fmcg-daily-reports` (sibling Python) | Inventory datatable + batch details download pattern + GCS session store — port as UC report actions |
+| **FMCG daily reports** | `uc-fmcg-daily-reports` (sibling Python) | Inventory datatable + batch details download pattern + GCS session store, port as UC report actions |
 | **API surface today** | `/api/automations/*`, `/api/uc-session`, `/api/ops/summary` | Playbook-level; not yet capability registry |
 | **Connector scaffold** | `packages/connectors-unicommerce` | RE-native capability layer on top of `uc-client` |
 
 **Hard constraints already encoded (do not violate):**
 
 1. Only the worker process calls Unicommerce.
-2. Session death = HTTP 401 / login-redirect / `USER_NOT_LOGGED_IN` only — not `successful:false` or 403.
+2. Session death = HTTP 401 / login-redirect / `USER_NOT_LOGGED_IN` only, not `successful:false` or 403.
 3. Internal `/data` calls serialized (facility session-global).
 4. Every action = a Run row.
 5. Mutating UC calls never blind-retry.
-6. **Do not invent parallel UC auth** — reuse admin paste + `uc_session` + keepalive.
+6. **Do not invent parallel UC auth**, reuse admin paste + `uc_session` + keepalive.
 
 ### 4.2 Full capability backlog
 
@@ -213,7 +213,7 @@ Group by domain. Status: **Have** = wired in automation/client today; **Partial*
 | Get summary | Scaffold | `saleOrder.getSummary` |
 | Get full DTO (facility hop) | Scaffold | `saleOrder.get` |
 | Fetch shipping package details | Scaffold | `saleOrder.getShippingPackages` |
-| Fetch invoice details | Have | Sheet, return — add action next |
+| Fetch invoice details | Have | Sheet, return, add action next |
 | Create B2C SO | Have | Inventory outward, Home Centre |
 | Create B2B SO | Partial | Return channel `CUSTOM_B2B`; FLOWS.md B2B path |
 | Allocate inventory (B2C) | Have | `/data/oms/saleorder/allocate/inventory` |
@@ -270,11 +270,11 @@ Group by domain. Status: **Have** = wired in automation/client today; **Partial*
 
 | Phase | Goal | Exit criteria |
 |---|---|---|
-| **Phase 0 — Discover** | Inventory endpoints from `unicommerce-engine`, live HARs, and every path already called in `packages/**`. Produce `docs/uc-capability-map.md` (action → path → auth layer → facility scope → mutate?) | Map covers backlog rows; gaps labeled; no production deploy required |
-| **Phase 1 — Read APIs** | Action registry for all **read** capabilities: health, facilities, SO get/summary/packages/invoices, inventory snapshot, channel/SKU search, report job status | `/api/connectors/unicommerce/invoke` serves reads via worker; tests with mocks; dry-run N/A |
-| **Phase 2 — Write / mutate** | Wrap proven mutates: allocate, invoice, cancel, adjust, PO/GRN/putaway, bulk return, e-way (with dry-run), Homecentre SO create | Each mutate has dry-run or idempotent `memoStep`; parity with existing automations; no blind retry |
-| **Phase 3 — Reports bulk** | Port FMCG daily reports + generalize export-job download; schedule via BullMQ | GCS/Sheets destinations configurable; facility loop; honest partial failure |
-| **Phase 4 — Stable SDK** | `@opptra/connectors-unicommerce` versioned surface; deprecate direct pipeline imports from apps; generate types from capability map; optional MCP expose | Semver; changelog; agent `toolManifest()` ready |
+| **Phase 0, Discover** | Inventory endpoints from `unicommerce-engine`, live HARs, and every path already called in `packages/**`. Produce `docs/uc-capability-map.md` (action → path → auth layer → facility scope → mutate?) | Map covers backlog rows; gaps labeled; no production deploy required |
+| **Phase 1, Read APIs** | Action registry for all **read** capabilities: health, facilities, SO get/summary/packages/invoices, inventory snapshot, channel/SKU search, report job status | `/api/connectors/unicommerce/invoke` serves reads via worker; tests with mocks; dry-run N/A |
+| **Phase 2, Write / mutate** | Wrap proven mutates: allocate, invoice, cancel, adjust, PO/GRN/putaway, bulk return, e-way (with dry-run), Homecentre SO create | Each mutate has dry-run or idempotent `memoStep`; parity with existing automations; no blind retry |
+| **Phase 3, Reports bulk** | Port FMCG daily reports + generalize export-job download; schedule via BullMQ | GCS/Sheets destinations configurable; facility loop; honest partial failure |
+| **Phase 4, Stable SDK** | `@opptra/connectors-unicommerce` versioned surface; deprecate direct pipeline imports from apps; generate types from capability map; optional MCP expose | Semver; changelog; agent `toolManifest()` ready |
 
 ### 4.4 Package layout
 
@@ -310,7 +310,7 @@ Prefer a clear dual path during migration:
 | `POST /api/connectors/unicommerce/invoke` | `{ action, params, dryRun? }` → create Run → enqueue → `{ runUid }` |
 | `GET /api/runs/:runUid` | Existing run poll |
 
-**Alias (ergonomic):** `POST /api/uc/:action` → same invoke handler for the highest-traffic actions (e.g. `/api/uc/saleOrder.get`) — later.
+**Alias (ergonomic):** `POST /api/uc/:action` → same invoke handler for the highest-traffic actions (e.g. `/api/uc/saleOrder.get`), later.
 
 **Keep** `/api/automations/*` until each playbook is re-homed; they become wrappers that call connector actions. **Keep** `/api/ops/summary` for Slack/Cursor agents (no SSO).
 
@@ -331,7 +331,7 @@ Order is **ops value × capture readiness**, with UC as the RE reference spine. 
 | **Week 9–12** | **Amazon + Flipkart RE** (HAR capture → read actions); official API swap when keys land | Orders/inventory/labels into Runs |
 | **Week 13–16** | **Quick commerce RE:** Zepto → Blinkit → Instamart | Ops-critical subset only |
 | **After** | Myntra, Nykaa, Vinculum/HC polish, couriers, direct e-way/GST | P2 backlog |
-| **Ongoing** | Agent runtime (`AGENT-PLATFORM-PLAN`) consumes connector `toolManifest()` | Control plane compile — not a blocker for connector SDK |
+| **Ongoing** | Agent runtime (`AGENT-PLATFORM-PLAN`) consumes connector `toolManifest()` | Control plane compile, not a blocker for connector SDK |
 
 **Rule:** each window leaves production automations green. No big-bang cutover. No deploy from this plan doc alone.
 
@@ -342,9 +342,9 @@ Order is **ops value × capture readiness**, with UC as the RE reference spine. 
 1. **No fake success.** Empty lists, `configured: false`, dry-run previews, and partial failures must be explicit in Run results (Home Centre pattern is the template). Never mark a Run succeeded when the platform call did not happen.
 2. **No secrets in git.** `.env`, JSESSIONID, OAuth refresh tokens, `OPS_AGENT_TOKEN`, Vinculum passwords stay on VM/secrets only. Docs show placeholders only. HAR fixtures must be sanitized.
 3. **Session security.** Cookies httpOnly on UC side; we store encrypted/server-side only; admin paste verifies before overwrite; never return raw JSESSIONID from `/api/ops/summary` or health endpoints.
-4. **Respect ToS and rate limits.** RE session automation is **ops-owned**, rate-limited, and minimized. Prefer official APIs **when they exist and are unlocked** — until then RE is the product path. Read-mostly first; mutates only with explicit approval.
+4. **Respect ToS and rate limits.** RE session automation is **ops-owned**, rate-limited, and minimized. Prefer official APIs **when they exist and are unlocked**, until then RE is the product path. Read-mostly first; mutates only with explicit approval.
 5. **No second worker talking to UC** until a second whitelisted bot account exists.
-6. **No Playwright CAPTCHA bypass.** Human solves CAPTCHA (paste, extension, or future remote browser — `SESSION-CAPTURE-OPTIONS.md`).
+6. **No Playwright CAPTCHA bypass.** Human solves CAPTCHA (paste, extension, or future remote browser, `SESSION-CAPTURE-OPTIONS.md`).
 7. **Master sheet IMPORTRANGE mirrors** are never overwritten (existing sheet pipeline rule).
 8. **Do not break production.** Scaffold and new routes ship behind tests; deploy only with explicit human approve per `AGENTS.md`.
 
@@ -352,7 +352,7 @@ Order is **ops value × capture readiness**, with UC as the RE reference spine. 
 
 ## 7. Immediate next engineering task
 
-**Unicommerce connector scaffold** (`packages/connectors-unicommerce`) — RE-native reference.
+**Unicommerce connector scaffold** (`packages/connectors-unicommerce`), RE-native reference.
 
 ### Scope (concrete)
 
@@ -401,4 +401,4 @@ Mutating actions, report bulk port, MCP, LLM agent loop, multi-tenant vault migr
 
 ---
 
-*End of Connector Master Plan v1.1 — update this file when platform priorities or UC capability map change; do not fork into chat-only plans.*
+*End of Connector Master Plan v1.1, update this file when platform priorities or UC capability map change; do not fork into chat-only plans.*

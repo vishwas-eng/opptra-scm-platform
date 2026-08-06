@@ -1,4 +1,4 @@
-/* Opptra Connector Capture — popup.
+/* Opptra Connector Capture, popup.
  * Two jobs: start/stop a portal recording (background.js does the work), and the
  * legacy one-click Unicommerce JSESSIONID capture. */
 
@@ -9,7 +9,7 @@ const UC_DOMAINS = [
   { url: 'https://opptraksa.unicommerce.com', label: 'ksa', instanceId: 'ksa' },
 ];
 
-/* Portals we can record. `hosts` are the domains whose traffic is recorded — keep them
+/* Portals we can record. `hosts` are the domains whose traffic is recorded, keep them
  * tight so a capture never sweeps up unrelated browsing. */
 const CHANNELS = [
   { id: 'amazon', name: 'Amazon Seller Central', open: 'https://sellercentral.amazon.in', hosts: ['amazon.in', 'amazon.ae', 'amazon.sa', 'sellercentral.amazon.com'] },
@@ -79,7 +79,7 @@ function renderStatus(st) {
   $('stop').disabled = !recording;
   sel.disabled = recording;
   $('stats').innerHTML = recording
-    ? `<span class="rec"></span>recording ${st.connectorId} — ${st.seen} requests seen, ${st.sent} uploaded${st.dropped ? `, ${st.dropped} dropped` : ''}${st.lastError ? `<br>⚠ ${st.lastError}` : ''}`
+    ? `<span class="rec"></span>recording ${st.connectorId}, ${st.seen} requests seen, ${st.sent} uploaded${st.dropped ? `, ${st.dropped} dropped` : ''}${st.lastError ? `<br>⚠ ${st.lastError}` : ''}`
     : '';
 }
 
@@ -117,7 +117,7 @@ $('stop').addEventListener('click', () => {
     const s = r.capture?.analysis?.summary || {};
     show(
       `✓ Capture complete.\n${s.entries || 0} requests → ${s.endpoints || 0} endpoints on ${s.primaryHost || 'unknown host'}.\n`
-      + `${r.capture?.session_saved ? 'Session sealed into the vault.' : 'No session found — check you were logged in.'}\n`
+      + `${r.capture?.session_saved ? 'Session sealed into the vault.' : 'No session found, check you were logged in.'}\n`
       + 'Open the Connectors page to review the blueprint.',
       true,
     );

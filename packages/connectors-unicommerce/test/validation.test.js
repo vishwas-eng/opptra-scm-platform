@@ -4,7 +4,7 @@ import { createUnicommerceConnector } from '../src/index.js';
 
 // inputSchema used to be display-only metadata. The HTTP invoke route's body schema is
 // just `params: { type: 'object' }`, so nothing enforced maxItems/maxLength/enum on the
-// way to Unicommerce — an ops user could post a 50k-SKU array against the tenant bearer.
+// way to Unicommerce, an ops user could post a 50k-SKU array against the tenant bearer.
 function spyUc() {
   const calls = [];
   return {
@@ -38,7 +38,7 @@ test('unknown params are rejected (additionalProperties: false is now enforced)'
   assert.equal(uc.calls.length, 0);
 });
 
-test('enum params are enforced — a bogus shipment status never reaches the datatable', async () => {
+test('enum params are enforced, a bogus shipment status never reaches the datatable', async () => {
   const uc = spyUc();
   const c = createUnicommerceConnector({ uc });
   const r = await c.invoke('shipments.search', { statuses: ['NOT_A_REAL_STATUS'] });
