@@ -45,6 +45,12 @@ gcloud compute scp "$TARBALL" "$VM_NAME:/tmp/opptra-scm.tar.gz" --zone "$ZONE" -
 gcloud compute ssh "$VM_NAME" --zone "$ZONE" --command '
   set -e
   cd /opt/opptra-scm
+  # tar overwrites files but never REMOVES ones that no longer exist upstream, so a
+  # deleted workspace package lingers here forever — and npm globs packages/* , so its
+  # stale package.json breaks `npm ci` with "missing from lock file". Wipe the trees the
+  # tarball fully owns before extracting. .env, .env.bak.* and docker volumes live
+  # outside these paths and are untouched.
+  sudo rm -rf packages apps scripts extensions
   tar -xzf /tmp/opptra-scm.tar.gz && rm /tmp/opptra-scm.tar.gz
   sudo docker compose up -d --build
   sleep 5
