@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker, Queue } from 'bullmq';
 import IORedis from 'ioredis';
-import { config, logger, migrate, closeDb, markRunning, markPendingRetry, finishRun, alert, memoStep, getGoogleOAuthToken, getUserGoogleOAuthToken, savePackingThread, latestPackingThread, query } from '@opptra/core';
+import { config, logger, migrate, closeDb, markRunning, markPendingRetry, finishRun, alert, memoStep, getGoogleOAuthToken, getUserGoogleOAuthToken, savePackingThread, latestPackingThread, query, sealPlaintextSecretsAtRest } from '@opptra/core';
 import { ucClient, SessionError, ConfigError } from '@opptra/uc-client';
 import { createUnicommerceConnector } from '@opptra/connectors-unicommerce';
 import { makeReturnPipeline } from '@opptra/automation-return';
@@ -26,6 +26,12 @@ const cfg = config();
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 await migrate(path.join(here, '../../../packages/core/src/migrations'));
+
+// Seal any legacy plaintext secrets at rest (pre-secretBox rows). Idempotent.
+const sealed = await sealPlaintextSecretsAtRest();
+if (sealed.credentials || sealed.sessions) {
+  logger.info(sealed, 'sealed legacy plaintext secrets at rest');
+}
 
 const connection = new IORedis(cfg.REDIS_URL, { maxRetriesPerRequest: null });
 const queue = new Queue('automations', { connection });

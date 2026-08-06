@@ -19,8 +19,9 @@ export {
 export {
   getConnectorCredentialMeta, listConnectorCredentialMeta,
   getConnectorSecret, setConnectorCredential, clearConnectorCredential,
-  markConnectorAlive, markConnectorDead,
+  markConnectorAlive, markConnectorDead, sealPlaintextSecretsAtRest,
 } from './connectorVault.js';
+export { sealSecret, openSecret, isSealed } from './secretBox.js';
 export {
   createAgentPlaybook, listAgentPlaybooks, getAgentPlaybook,
   updateAgentPlaybook, markPlaybookRun, listActiveDailyPlaybooks,

@@ -86,7 +86,7 @@ export function createSixthStreetConnector({ cfg = {}, getSecret, httpFetch = fe
         out.probes.vpnHostNote = 'Private IP 10.61.1.11 requires FortiClient / public SSL VPN host; not probed from public network.';
       }
       const sec = getSecret ? await getSecret() : null;
-      out.hasSessionVault = !!sec?.secret_enc;
+      out.hasSessionVault = !!sec?.secret;
       return out;
     },
   });

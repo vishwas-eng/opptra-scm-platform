@@ -3,7 +3,7 @@
 //
 // Rows are keyed by instance_id ('india' | 'uae' | 'ksa' | 'staging') so each UC tenant
 // keeps its own JSESSIONID — logging into staging must never overwrite India.
-import { query } from '@opptra/core';
+import { query, sealSecret, openSecret } from '@opptra/core';
 import { normalizeInstanceId } from './instances.js';
 
 export class PgSessionStore {
@@ -16,7 +16,9 @@ export class PgSessionStore {
       'SELECT jsessionid, source, base_url FROM uc_session WHERE instance_id = $1',
       [this.instanceId],
     );
-    return rows[0] || { jsessionid: '', source: 'none', base_url: '' };
+    const row = rows[0];
+    if (!row) return { jsessionid: '', source: 'none', base_url: '' };
+    return { ...row, jsessionid: openSecret(row.jsessionid) };
   }
 
   async set(cookie, source, actor, { baseUrl } = {}) {
@@ -38,7 +40,7 @@ export class PgSessionStore {
            WHEN EXCLUDED.base_url <> '' THEN EXCLUDED.base_url
            ELSE uc_session.base_url
          END`,
-      [this.instanceId, cookie, source, actor, baseUrl || ''],
+      [this.instanceId, sealSecret(cookie), source, actor, baseUrl || ''],
     );
   }
 

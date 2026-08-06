@@ -20,7 +20,7 @@ export function createMyntraConnector({ getSecret } = {}) {
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     handler: async () => {
       const sec = getSecret ? await getSecret() : null;
-      if (!sec?.secret_enc) {
+      if (!sec?.secret) {
         return { ok: false, awaitingHar: true, error: 'Connect Myntra: paste Partner portal session cookie. See docs/connectors/myntra.md' };
       }
       return {

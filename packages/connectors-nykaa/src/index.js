@@ -17,7 +17,7 @@ export function createNykaaConnector({ getSecret } = {}) {
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     handler: async () => {
       const sec = getSecret ? await getSecret() : null;
-      if (!sec?.secret_enc) {
+      if (!sec?.secret) {
         return { ok: false, awaitingHar: true, error: 'Connect Nykaa Seller: paste portal session cookie. See docs/connectors/nykaa.md' };
       }
       return { ok: false, awaitingHar: true, hasSession: true, error: 'Session stored; map XHR via HAR (docs/connectors/nykaa.md).' };

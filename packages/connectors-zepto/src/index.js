@@ -17,7 +17,7 @@ export function createZeptoConnector({ getSecret } = {}) {
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     handler: async () => {
       const sec = getSecret ? await getSecret() : null;
-      if (!sec?.secret_enc) {
+      if (!sec?.secret) {
         return { ok: false, awaitingHar: true, error: 'Connect Zepto Vendor: paste portal session cookie. See docs/connectors/zepto.md' };
       }
       return { ok: false, awaitingHar: true, hasSession: true, error: 'Session stored; map XHR via HAR (docs/connectors/zepto.md).' };

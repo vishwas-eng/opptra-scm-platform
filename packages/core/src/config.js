@@ -72,6 +72,10 @@ const Env = z.object({
   ALLOWED_DOMAIN: z.string().default('opptra.com'),
   ADMIN_EMAILS: z.string().default(''), // comma-separated; bootstrap admins
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 chars'),
+  // Data-encryption key for secrets at rest (connector vault, UC session cookies).
+  // 32 bytes, base64 or hex. Optional: when empty the key is derived from JWT_SECRET,
+  // so encryption is always on — but set it in prod so the two can rotate independently.
+  VAULT_KEY: z.string().default(''),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
 
   // --- Alerting ---
@@ -254,4 +258,9 @@ export function config() {
       || '',
   });
   return cached;
+}
+
+/** Test helper — forget the parsed env so a test can vary process.env. */
+export function _resetConfigForTests() {
+  cached = null;
 }

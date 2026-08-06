@@ -64,7 +64,7 @@ export function createAmazonConnector({ cfg = {}, getSecret, httpFetch = fetch }
         return { ...r, backend: 'official', marketplaceId: cfg.AMAZON_SP_MARKETPLACE_ID || MARKETPLACE_IN };
       }
       const sec = getSecret ? await getSecret() : null;
-      if (!sec?.secret_enc) return { ok: false, awaitingHar: true, error: 'Connect Amazon: paste Seller Central session cookie, or set AMAZON_SP_* env for SP-API.' };
+      if (!sec?.secret) return { ok: false, awaitingHar: true, error: 'Connect Amazon: paste Seller Central session cookie, or set AMAZON_SP_* env for SP-API.' };
       return { ok: false, awaitingHar: true, hasSession: true, error: 'Session stored but Seller Central XHR paths need a sanitized HAR (orders/inventory). See docs/connectors/amazon.md' };
     },
   });

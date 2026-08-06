@@ -15,7 +15,7 @@ export function createFlipkartConnector({ cfg = {}, getSecret, httpFetch = fetch
   async function accessToken() {
     if (cfg.FLIPKART_ACCESS_TOKEN) return cfg.FLIPKART_ACCESS_TOKEN;
     const sec = getSecret ? await getSecret() : null;
-    if (sec?.secret_enc && sec.auth_kind === 'bearer') return sec.secret_enc;
+    if (sec?.secret && sec.auth_kind === 'bearer') return sec.secret;
     if (cfg.FLIPKART_APP_ID && cfg.FLIPKART_APP_SECRET) {
       const basic = Buffer.from(`${cfg.FLIPKART_APP_ID}:${cfg.FLIPKART_APP_SECRET}`).toString('base64');
       const res = await httpFetch('https://api.flipkart.net/oauth-service/oauth/token?grant_type=client_credentials&scope=Seller_Api', {
@@ -61,7 +61,7 @@ export function createFlipkartConnector({ cfg = {}, getSecret, httpFetch = fetch
         }
       }
       const sec = getSecret ? await getSecret() : null;
-      if (!sec?.secret_enc) {
+      if (!sec?.secret) {
         return { ok: false, awaitingHar: true, error: 'Connect Flipkart: paste Seller Hub session or set FLIPKART_* API creds.' };
       }
       return { ok: false, awaitingHar: true, hasSession: true, error: 'Session stored; map Seller Hub XHR via HAR (docs/connectors/flipkart.md).' };

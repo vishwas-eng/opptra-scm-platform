@@ -1,6 +1,6 @@
 // Admin-only: session cookie paste + helper-extension ingest, user management.
 import { randomBytes, createHash } from 'node:crypto';
-import { query, audit, config, logger } from '@opptra/core';
+import { query, audit, config, logger, sealSecret } from '@opptra/core';
 import {
   normalizeInstanceId,
   resolveInstanceBaseUrl,
@@ -87,7 +87,7 @@ async function persistSession({ cookie, instanceId, actor, facility, baseUrl }) 
          WHEN EXCLUDED.base_url <> '' THEN EXCLUDED.base_url
          ELSE uc_session.base_url
        END`,
-    [id, resolvedBase, cookie, actor, facility || ''],
+    [id, resolvedBase, sealSecret(cookie), actor, facility || ''],
   );
 }
 
