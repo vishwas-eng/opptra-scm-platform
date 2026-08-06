@@ -27,6 +27,38 @@ Copy the client ID into `.env` → `GOOGLE_CLIENT_ID`.
 ./deploy/update.sh YOUR_PROJECT_ID
 ```
 
+`update.sh` now builds the SPA and runs `scripts/preflight.js` first, so a broken
+bundle or a missing env key fails on your laptop instead of after the running
+containers have been replaced. To check without deploying:
+
+```bash
+node scripts/preflight.js .env.production
+```
+
+### ⚠️ Set VAULT_KEY before the first deploy of the encryption change
+
+Connector credentials and UC session cookies are now sealed at rest (AES-256-GCM).
+The key comes from `VAULT_KEY`; if it is unset, one is derived from `JWT_SECRET`
+instead. That fallback works — but it means **sealing data first and setting
+`VAULT_KEY` afterwards orphans every row already sealed**, and operators have to
+re-paste sessions and re-connect channels.
+
+```bash
+openssl rand -base64 32     # → VAULT_KEY in /opt/opptra-scm/.env on the VM
+```
+
+`update.sh` deliberately does not ship `.env`, so add it on the VM before redeploying.
+On first boot after the upgrade the worker seals any existing plaintext rows in place
+and logs `sealed legacy plaintext secrets at rest`; the step is idempotent and safe to
+repeat.
+
+### The image now builds the web app
+
+`apps/web` is a Vite SPA served from `apps/web/dist`. The Dockerfile is multi-stage:
+the build stage installs devDependencies (Vite lives there) and zips the extensions
+*before* the Vite build so `publicDir` carries them into `dist`. Nothing extra to run —
+but if you build the image by hand, do not pass `--target base`.
+
 ## Moving to a real domain (recommended, enables HTTPS)
 1. DNS A-record: `scm.opptra.com → <STATIC_IP>`
 2. `.env`: `SITE_ADDRESS=scm.opptra.com`, `PUBLIC_URL=https://scm.opptra.com`

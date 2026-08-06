@@ -7,3 +7,6 @@ deploy
 docs
 *.md
 .DS_Store
+# The image builds the SPA itself (webbuild stage). Shipping a local dist would only
+# be copied over, and a stale one could mask a build that no longer succeeds.
+apps/web/dist
