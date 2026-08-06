@@ -177,11 +177,61 @@ test('the region chosen in the UI beats the env default', async () => {
   assert.equal(dflt.ucTarget.label, 'india', 'with no region requested, the env default still applies');
 });
 
-test('a sync with no SKU list explains why, instead of saying nothing was given', async () => {
+test('with no portal login it says so, instead of blaming a missing parameter', async () => {
   const p = makeSixthStreetPipeline(null, { HC_UC_KSA_USER: 'u', HC_UC_KSA_PASS: 'p' }, null);
   const r = await p.syncInventory({ dryRun: true, region: 'ksa' });
   assert.equal(r.ok, false);
   assert.equal(r.needsPortalLogin, true);
-  assert.match(r.message, /portal login is not working/i);
-  assert.match(r.message, /which SKUs it sells/i, 'must say where the list comes from');
+  assert.match(r.message, /download the current inventory/i);
+});
+
+test('download, fill, upload: the portal list drives the sync', async () => {
+  // 6th Street publishes what it sells; we fill our quantities against exactly those
+  // rows. The operator never supplies a SKU list.
+  const portalClient = {
+    liveInventory: async () => ({ ok: true, data: { items: [
+      { sku: 'A1', count: 3 }, { sku: 'B2', count: 7 }, { sku: 'GONE', count: 1 },
+    ] } }),
+    uploaded: null,
+    uploadInventory: async function (rows) { this.uploaded = rows; return { ok: true, data: { importId: 99 } }; },
+  };
+  const uc = {
+    public: async (_path, body) => ({
+      inventorySnapshots: body.itemTypeSKUs
+        .filter((s) => s !== 'GONE')
+        .map((sku) => ({ itemTypeSKU: sku, inventory: 10, openSale: sku === 'A1' ? 4 : 0 })),
+    }),
+  };
+  const cfg = { STREET6_UC_INSTANCE: 'india', UC_USER: 'bot', UC_BASE_URL: 'https://x', STREET6_LIVE: 'true' };
+  const p = makeSixthStreetPipeline(uc, cfg, null, { portalClient });
+
+  const dry = await p.syncInventory({ dryRun: true });
+  assert.equal(dry.ok, true);
+  assert.equal(dry.listSource, 'portal', 'the SKU list came from the portal, not the caller');
+  assert.equal(dry.skuCount, 3);
+  assert.equal(dry.notInUc, 1, 'GONE is not in UC');
+  assert.equal(portalClient.uploaded, null, 'a preview must never upload');
+
+  const live = await p.syncInventory({ dryRun: false });
+  assert.equal(live.uploaded, true);
+  assert.equal(live.importRef, 99);
+  // Sellable = on hand minus already promised, so A1 is 10-4, and a SKU UC does not
+  // know becomes 0 rather than being dropped (dropping it leaves 6th Street selling
+  // stock we do not have).
+  assert.deepEqual(
+    portalClient.uploaded.map((r) => [r.sku, r.count]),
+    [['A1', 6], ['B2', 10], ['GONE', 0]],
+  );
+});
+
+test('live writes stay behind STREET6_LIVE even when dryRun is false', async () => {
+  const portalClient = {
+    liveInventory: async () => ({ ok: true, data: { items: [{ sku: 'A1', count: 1 }] } }),
+    uploadInventory: async () => { throw new Error('must not upload'); },
+  };
+  const uc = { public: async () => ({ inventorySnapshots: [{ itemTypeSKU: 'A1', inventory: 5 }] }) };
+  const p = makeSixthStreetPipeline(uc, { STREET6_UC_INSTANCE: 'india', UC_USER: 'b', UC_BASE_URL: 'https://x' }, null, { portalClient });
+  const r = await p.syncInventory({ dryRun: false });
+  assert.equal(r.ok, false);
+  assert.match(r.message, /STREET6_LIVE/);
 });

@@ -12,6 +12,7 @@ import { gmailApi } from '@opptra/integrations-google';
 import { UcClient, PgSessionStore, normalizeInstanceId } from '@opptra/uc-client';
 import { extractInvoiceSellingPrice, missingInvoicePrice } from './price.js';
 import { buildPicklistXlsx } from './picklistFile.js';
+import { makeStreet6PortalClient } from '@opptra/connectors-6thstreet';
 import { resolveStreet6UcTarget } from './targets.js';
 import { packAttachmentName, street6OmsHomeUrl } from './artifacts.js';
 
@@ -39,7 +40,46 @@ function makeStreet6UcClient(target) {
   });
 }
 
+// UC caps how many SKUs one inventorySnapshot call accepts.
+const SNAPSHOT_BATCH = 50;
+
+/**
+ * Sellable quantity: what is physically there minus what is already promised.
+ * Publishing raw `inventory` would oversell, because units on unshipped orders are
+ * still counted there. Never negative.
+ */
+function sellableFrom(snap) {
+  if (!snap) return 0;
+  const onHand = Number(snap.inventory) || 0;
+  const promised = Number(snap.openSale ?? snap.allocated ?? snap.blocked ?? 0) || 0;
+  return Math.max(0, Math.trunc(onHand - promised));
+}
+
+/**
+ * 6th Street's inventory list comes back in whatever shape their portal uses. Accept
+ * the common envelopes rather than assuming one, and keep only rows with a SKU.
+ */
+function normalizePortalInventory(data) {
+  const list = Array.isArray(data) ? data
+    : data?.items || data?.data || data?.inventory || data?.rows || data?.content || [];
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((r) => ({
+      sku: String(r?.sku ?? r?.Sku ?? r?.SKU ?? r?.skuCode ?? r?.barcode ?? '').trim(),
+      portalCount: Number(r?.count ?? r?.Count ?? r?.quantity ?? r?.qty ?? 0) || 0,
+    }))
+    .filter((r) => r.sku);
+}
+
 export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) {
+  // A real portal client whenever credentials exist; tests inject their own.
+  const portal = portalClient || ((cfg.STREET6_PORTAL_USER && cfg.STREET6_PORTAL_PASS)
+    ? makeStreet6PortalClient({
+      baseUrl: cfg.STREET6_PORTAL_API_BASE,
+      username: cfg.STREET6_PORTAL_USER,
+      password: cfg.STREET6_PORTAL_PASS,
+    })
+    : null);
   const ownerEmail = cfg.STREET6_OWNER_EMAIL || 'daniyal@opptra.com';
   // Env string "false" must NOT count as live (Boolean("false") === true).
   const live = truthy(cfg.STREET6_LIVE);
@@ -270,37 +310,67 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
       };
     }
 
-    const skuList = Array.isArray(skus) ? skus.map(String).filter(Boolean).slice(0, 50) : [];
-    // Without SKUs this used to make no calls at all and still return ok:true, a
-    // scheduled job would report success forever while doing nothing. Say so instead.
+    // The SKU list is 6th Street's, not ours. Their portal publishes what it sells, we
+    // fill our quantities against exactly those rows and send the same shape back.
+    // Download, fill, upload. An explicit skus[] is only an override for testing.
+    let skuList = Array.isArray(skus) ? skus.map(String).filter(Boolean) : [];
+    let listSource = skuList.length ? 'caller' : '';
+    let portalRows = [];
+
     if (!skuList.length) {
-      // Which SKUs to sync is 6th Street's answer, not ours: the portal lists what it
-      // sells, and we push our stock for exactly those. That list comes from the seller
-      // portal, which needs a working portal login. Until then there is no honest way
-      // to pick a SKU set, so say so plainly rather than syncing nothing and passing.
-      return {
-        ok: false,
-        dryRun,
-        ownerEmail,
-        needsPortalLogin: !portalReady(),
-        ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
-        message: portalReady()
-          ? 'No SKU list yet. Pass skus[] explicitly, or let the sync read the catalogue from the 6th Street portal.'
-          : 'Cannot tell which products to sync. The 6th Street seller portal login is not working, and that portal is what tells us which SKUs it sells. Set STREET6_PORTAL_USER / STREET6_PORTAL_PASS, or pass skus[] by hand to test.',
-        snapshotCount: 0,
-      };
+      if (!portal) {
+        return {
+          ok: false,
+          dryRun,
+          ownerEmail,
+          needsPortalLogin: true,
+          ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
+          message: 'Cannot reach the 6th Street portal to download the current inventory. Set STREET6_PORTAL_USER and STREET6_PORTAL_PASS.',
+          snapshotCount: 0,
+        };
+      }
+      const live = await portal.liveInventory();
+      if (live.ok !== true) {
+        return {
+          ok: false,
+          dryRun,
+          ownerEmail,
+          needsPortalLogin: live.code === 'AUTH_REQUIRED' || live.code === 'AUTH_EXPIRED',
+          ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
+          message: `Could not download the 6th Street inventory list: ${live.error}`,
+          snapshotCount: 0,
+        };
+      }
+      portalRows = normalizePortalInventory(live.data);
+      skuList = portalRows.map((r) => r.sku);
+      listSource = 'portal';
+      if (!skuList.length) {
+        return {
+          ok: false,
+          dryRun,
+          ownerEmail,
+          ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
+          message: '6th Street returned an empty product list, so there is nothing to sync.',
+          snapshotCount: 0,
+        };
+      }
     }
 
     let snapshots = [];
     let sample = null;
     try {
       const fac = target.facility ? { facility: target.facility } : {};
-      const snap = await client.public(
-        '/services/rest/v1/inventory/inventorySnapshot/get',
-        { itemTypeSKUs: skuList },
-        { ...fac, idempotent: true },
-      );
-      snapshots = snap?.inventorySnapshots || [];
+      // UC caps how many SKUs one snapshot call may ask for, so walk the list in
+      // batches rather than truncating it and silently syncing a partial catalogue.
+      for (let i = 0; i < skuList.length; i += SNAPSHOT_BATCH) {
+        const batch = skuList.slice(i, i + SNAPSHOT_BATCH);
+        const snap = await client.public(
+          '/services/rest/v1/inventory/inventorySnapshot/get',
+          { itemTypeSKUs: batch },
+          { ...fac, idempotent: true },
+        );
+        snapshots = snapshots.concat(snap?.inventorySnapshots || []);
+      }
       sample = snapshots[0] || null;
     } catch (err) {
       return {
@@ -309,37 +379,62 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
         ownerEmail,
         ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
         error: String(err.message || err).slice(0, 200),
-        message: 'UC inventory read failed',
-        probedSkus: skuList,
+        message: 'Could not read stock from Unicommerce.',
+        probedSkus: skuList.length,
       };
     }
 
-    if (dryRun || !live) {
-      return {
-        ok: true,
-        dryRun: true,
-        ownerEmail,
-        ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl, note: target.note },
-        sampleSku: skuList[0] || null,
-        samplePresent: !!sample,
-        snapshotCount: snapshots.length,
-        snapshots: snapshots.slice(0, 10).map((s) => ({
-          sku: s.itemTypeSKU,
-          inventory: s.inventory,
-          openSale: s.openSale,
-        })),
-        awaitingHar: true,
-        portalLoginRequired: true,
-        message: 'UC→6th Street inventory push awaiting portal login + upload HAR; dry-run only (STREET6_LIVE gates writes)',
-      };
-    }
+    // Fill every row the portal listed. A SKU UC has never heard of becomes 0 rather
+    // than being dropped: leaving it out would leave 6th Street selling stock we do
+    // not have.
+    const bySku = new Map(snapshots.map((r) => [String(r.itemTypeSKU), r]));
+    const rows = skuList.map((sku) => {
+      const snap = bySku.get(String(sku));
+      return { sku, count: sellableFrom(snap), known: !!snap };
+    });
+    const unknown = rows.filter((r) => !r.known).length;
 
-    return {
-      ok: false,
-      dryRun: false,
-      awaitingHar: true,
+    const preview = {
+      ok: true,
+      dryRun,
       ownerEmail,
-      message: 'Portal inventory update refused, need working portal login + upload HAR; STREET6_LIVE alone is not enough',
+      ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
+      listSource,
+      skuCount: rows.length,
+      matchedInUc: rows.length - unknown,
+      notInUc: unknown,
+      sample: rows.slice(0, 10),
+      message: `Ready to send ${rows.length} products to 6th Street ${target.label.toUpperCase()}.`
+        + (unknown ? ` ${unknown} are not in Unicommerce and would be set to zero.` : ''),
+    };
+
+    if (dryRun) {
+      return { ...preview, message: `${preview.message} Nothing was changed, this was a preview.` };
+    }
+    if (!live) {
+      return {
+        ...preview,
+        ok: false,
+        message: 'Live writes are switched off for 6th Street. Set STREET6_LIVE=true to allow the upload.',
+      };
+    }
+
+    // Everything past here writes to a live storefront.
+    const upload = await portal.uploadInventory(rows);
+    if (upload.ok !== true) {
+      return {
+        ...preview,
+        ok: false,
+        uploaded: false,
+        message: `Stock was read from Unicommerce but 6th Street rejected the upload: ${upload.error}`,
+      };
+    }
+    return {
+      ...preview,
+      uploaded: true,
+      importRef: upload.data?.importId || upload.data?.id || null,
+      message: `Sent ${rows.length} products to 6th Street ${target.label.toUpperCase()}.`
+        + (unknown ? ` ${unknown} were set to zero because Unicommerce has no stock record for them.` : ''),
     };
   }
 

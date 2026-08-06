@@ -177,3 +177,5 @@ export function createSixthStreetConnector({ cfg = {}, getSecret, httpFetch = fe
 }
 
 export default { createSixthStreetConnector, CONNECTOR_ID, CONNECTOR_NAME };
+
+export { makeStreet6PortalClient } from './portalClient.js';
