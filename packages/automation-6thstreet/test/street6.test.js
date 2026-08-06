@@ -157,3 +157,31 @@ test('resolveStreet6UcTarget ksa note recommends ksa for sample EAN', () => {
   assert.equal(t.configured, true);
   assert.equal(t.facility, 'OPP_SLS_ML_KSA');
 });
+
+test('the region chosen in the UI beats the env default', async () => {
+  // Choosing KSA and silently reading India stock would push the wrong warehouse's
+  // numbers to a KSA storefront, which is worse than failing.
+  const cfg = {
+    STREET6_UC_INSTANCE: 'india',
+    UC_BASE_URL: 'https://oppdoor.unicommerce.co.in',
+    UC_USER: 'india-bot',
+    HC_UC_KSA_USER: 'ksa-bot',
+    HC_UC_KSA_PASS: 'x',
+  };
+  const p = makeSixthStreetPipeline(null, cfg, null);
+
+  const ksa = await p.syncInventory({ dryRun: true, region: 'ksa' });
+  assert.equal(ksa.ucTarget.label, 'ksa', 'must follow the requested region, not the env default');
+
+  const dflt = await p.syncInventory({ dryRun: true });
+  assert.equal(dflt.ucTarget.label, 'india', 'with no region requested, the env default still applies');
+});
+
+test('a sync with no SKU list explains why, instead of saying nothing was given', async () => {
+  const p = makeSixthStreetPipeline(null, { HC_UC_KSA_USER: 'u', HC_UC_KSA_PASS: 'p' }, null);
+  const r = await p.syncInventory({ dryRun: true, region: 'ksa' });
+  assert.equal(r.ok, false);
+  assert.equal(r.needsPortalLogin, true);
+  assert.match(r.message, /portal login is not working/i);
+  assert.match(r.message, /which SKUs it sells/i, 'must say where the list comes from');
+});

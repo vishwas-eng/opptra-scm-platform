@@ -418,6 +418,10 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       const result = await street6Pipeline.syncInventory({
         dryRun: input.dryRun !== false,
         skus: input.skus || null,
+        // The region chosen in the UI must reach the pipeline, or it silently reads
+        // whatever STREET6_UC_INSTANCE happens to be set to.
+        region: input.region || '',
+        ucInstance: input.ucInstance || '',
       });
       if (runUid) await finishRun(runUid, { ok: result.ok !== false, result });
       return result;

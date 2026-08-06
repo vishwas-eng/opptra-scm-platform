@@ -2,8 +2,11 @@
  * Map STREET6_UC_INSTANCE → UC credentials.
  * india → UC_USER only; uae/ksa → dedicated bots; never cross-fall back to India for GCC.
  */
-export function resolveStreet6UcTarget(cfg = {}) {
-  const instance = String(cfg.STREET6_UC_INSTANCE || 'india').toLowerCase();
+export function resolveStreet6UcTarget(cfg = {}, requested = '') {
+  // The region the operator picked wins over the env default. Without this, choosing
+  // KSA in the UI still read India stock and pushed it to a KSA storefront, which is
+  // worse than failing.
+  const instance = String(requested || cfg.STREET6_UC_INSTANCE || 'india').toLowerCase();
   if (instance === 'uae') {
     return {
       label: 'uae',

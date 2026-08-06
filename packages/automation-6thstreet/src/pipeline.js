@@ -239,8 +239,8 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
    * Reads from STREET6_UC_INSTANCE (prefer ksa, sample invoice SKU lives there).
    * Never writes to portal unless STREET6_LIVE + not dry-run (still awaiting working login + HAR).
    */
-  async function syncInventory({ dryRun = true, skus = null } = {}) {
-    const target = resolveStreet6UcTarget(cfg);
+  async function syncInventory({ dryRun = true, skus = null, region = '', ucInstance = '' } = {}) {
+    const target = resolveStreet6UcTarget(cfg, ucInstance || region);
     if (!target.configured) {
       return {
         ok: true,
@@ -274,12 +274,19 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
     // Without SKUs this used to make no calls at all and still return ok:true, a
     // scheduled job would report success forever while doing nothing. Say so instead.
     if (!skuList.length) {
+      // Which SKUs to sync is 6th Street's answer, not ours: the portal lists what it
+      // sells, and we push our stock for exactly those. That list comes from the seller
+      // portal, which needs a working portal login. Until then there is no honest way
+      // to pick a SKU set, so say so plainly rather than syncing nothing and passing.
       return {
         ok: false,
         dryRun,
         ownerEmail,
+        needsPortalLogin: !portalReady(),
         ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
-        message: 'No SKUs given, pass skus[] to read UC inventory. Nothing was checked.',
+        message: portalReady()
+          ? 'No SKU list yet. Pass skus[] explicitly, or let the sync read the catalogue from the 6th Street portal.'
+          : 'Cannot tell which products to sync. The 6th Street seller portal login is not working, and that portal is what tells us which SKUs it sells. Set STREET6_PORTAL_USER / STREET6_PORTAL_PASS, or pass skus[] by hand to test.',
         snapshotCount: 0,
       };
     }
