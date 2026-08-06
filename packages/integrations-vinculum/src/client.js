@@ -64,28 +64,68 @@ export function encryptPasswordRsaPkcs1(plaintext, publicKeyPem) {
  * @returns {{ ok: boolean, confirmed: boolean, reason: string, preview: string }}
  */
 export function classifyImportResponse(status, body) {
-  const text = String(body || '');
-  const preview = text.slice(0, 400);
+  const raw = String(body || '');
+  const preview = raw.slice(0, 400);
 
   if (status < 200 || status >= 400) {
     return { ok: false, confirmed: true, reason: `HTTP ${status}`, preview };
   }
-  if (/Invalid Login|Login Failed|sellerPanalLogin/i.test(text)) {
+
+  // Scan VISIBLE TEXT only. Vinculum returns the whole Update Price/Inventory page,
+  // whose markup contains ids like `failedGridTab` for the Error tab and onclick
+  // handlers mentioning errors. Matching raw HTML flagged a successful upload as
+  // failed, so strip scripts, styles and every tag before looking for wording.
+  const text = raw
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (/Invalid Login|Login Failed/i.test(text) || /sellerPanalLogin\.action/i.test(raw)) {
     return { ok: false, confirmed: true, reason: 'session expired, bounced to login', preview };
   }
-  // Explicit failure wording from the importer.
-  const failure = text.match(/(error|failed|failure|invalid|not\s+uploaded|rejected)[^<>{]{0,120}/i);
+
+  // Vinculum answers an accepted import with a batch number. That is the only
+  // positive signal worth trusting, and it is what lets us verify the result later.
+  const batch = raw.match(/(?:import\s*batch\s*(?:no|number)?|batchNo|importBatchNo)\D{0,20}(\d{3,})/i);
+  if (batch) {
+    return { ok: true, confirmed: true, batchNo: batch[1], reason: `import accepted, batch ${batch[1]}`, preview };
+  }
+
+  // A real error message is more useful than "not processed", so look for one first.
+  // The pattern deliberately does NOT match a bare "Error": that is the page's own tab
+  // label and appears on every normal render.
+  const failure = text.match(/(?:error\s*[:\-]\s*|invalid\b|rejected\b|not\s+uploaded\b|failed\s+to\b|failure\s*[:\-])[^.]{0,120}/i);
   if (failure) {
     return { ok: false, confirmed: true, reason: `import reported: ${failure[0].trim().slice(0, 120)}`, preview };
   }
-  // Positive confirmation from the importer.
-  if (/(success|uploaded\s+successfully|import(ed)?\s+successfully|records?\s+processed)/i.test(text)) {
+
+  // Check this BEFORE any generic wording scan. The page's own tab labels are
+  // "Successful | Error | Pending", so "Error" appears as visible text on a perfectly
+  // normal render and a keyword scan would call every response a failure.
+  // Struts re-renders this page for a POST it did not act on; getting it back with no
+  // batch number is a definite "not processed", not an ambiguous result.
+  if (/failedGridTab|successGridTab|genricSearchGrid/i.test(raw)
+    || /Update\s*Price\s*\/?\s*Inventory/i.test(text)) {
+    return {
+      ok: false,
+      confirmed: true,
+      notProcessed: true,
+      reason: 'Vinculum returned the Update Price/Inventory page without creating an import batch, so the file was not processed. The upload request shape needs to be captured from a manual import.',
+      preview,
+    };
+  }
+
+  if (/(uploaded successfully|imported successfully|records? processed|success)/i.test(text)) {
     return { ok: true, confirmed: true, reason: 'import confirmed', preview };
   }
+
   return {
     ok: false,
     confirmed: false,
-    reason: 'upload accepted but Vinculum did not confirm the import, verify in the portal before trusting the stock levels',
+    reason: 'upload accepted but Vinculum did not confirm the import. Check Update Price/Inventory in the portal before trusting the stock levels.',
     preview,
   };
 }

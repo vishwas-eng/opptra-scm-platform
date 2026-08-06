@@ -473,7 +473,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
         await step(`Signing in to Home Centre (${creds.region.toUpperCase()})`, 'running');
         await step('Downloading the seller product list from Home Centre', 'running');
         const listed = await vin.listAllSellerSkus({ vendorCode: vinVendor });
-        await step('Downloading the seller product list from Home Centre', 'done', `${listed?.length ?? 0} products`);
+        await step('Downloading the seller product list from Home Centre', 'done', `${listed?.skus?.length ?? listed?.length ?? 0} products`);
         hcSkus = listed.skus || [];
       } else {
         return {

@@ -90,3 +90,47 @@ test('a row with no order number is mapped but identifiable as empty', () => {
   assert.equal(mapOrderRow({}).webOrderNo, '');
   assert.equal(mapOrderRow({}).qty, 1, 'quantity defaults to 1, never 0 or NaN');
 });
+
+test('the Error tab in the page markup is not mistaken for a failed import', () => {
+  // This is the exact response shape that wrongly failed a real upload: Vinculum
+  // returns the whole Update Price/Inventory page, whose Error tab has id
+  // "failedGridTab". Matching raw HTML saw the word "failed" and called it an error.
+  const page = `<html><body>
+    <ul class="nav">
+      <li id="successGridTab" data-toggle="tab" onclick="genricSearchGrid(1);">Successful</li>
+      <li id="failedGridTab" data-toggle="tab" onclick="genricSearchGrid(2);pageResized();">Error</li>
+      <li id="pendingGridTab" data-toggle="tab">Pending</li>
+    </ul>
+    <div>Import Batch No 884512</div>
+  </body></html>`;
+
+  const r = classifyImportResponse(200, page);
+  assert.equal(r.ok, true, 'tab markup must not be read as a failure');
+  assert.equal(r.batchNo, '884512', 'the batch number is the real signal of acceptance');
+});
+
+test('a genuine error in the page TEXT is still caught', () => {
+  const r = classifyImportResponse(200, '<html><body><div id="failedGridTab">Error</div><p>Invalid file format, import rejected</p></body></html>');
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /invalid file format|rejected/i);
+});
+
+test('script and style contents never influence the verdict', () => {
+  const r = classifyImportResponse(200,
+    '<html><script>var failedRows=[];function showError(){}</script><body>Import Batch No 12345</body></html>');
+  assert.equal(r.ok, true);
+  assert.equal(r.batchNo, '12345');
+});
+
+test('getting the import page back with no batch number means nothing was imported', () => {
+  // The exact production response: HTTP 200, the whole Update Price/Inventory page,
+  // no batch number. Struts re-renders on a POST it did not act on, so this is a
+  // definite "not processed", not an ambiguous result.
+  const r = classifyImportResponse(200,
+    '<html><body><h1>Update Price/Inventory</h1><li id="failedGridTab" onclick="genricSearchGrid(2)">Error</li></body></html>');
+  assert.equal(r.ok, false);
+  assert.equal(r.confirmed, true);
+  assert.equal(r.notProcessed, true);
+  assert.match(r.reason, /was not processed/i);
+  assert.match(r.reason, /captured from a manual import/i, 'must say what would fix it');
+});
