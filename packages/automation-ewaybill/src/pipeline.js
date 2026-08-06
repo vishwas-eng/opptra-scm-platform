@@ -65,17 +65,41 @@ export function makeEwaybillPipeline(uc) {
     };
   }
 
-  /** Try each facility until the SO's invoice is found. */
-  async function resolveInvoice(so) {
+  // The facility list is identical for every row in a batch, and each /data call is
+  // facility-scoped, serialized behind the session mutex and paced at UC_MAX_RPS. So a
+  // 50-row batch was paying 50 list fetches plus up to 50 x (facilities) probes.
+  let facilityOrder = null;
+  // Orders in one upload are nearly always from the same warehouse. Remembering where
+  // the last one was found turns the usual case into a single probe instead of a walk.
+  let lastGoodFacility = null;
+
+  async function facilities() {
+    if (facilityOrder) return facilityOrder;
     const facs = await uc.dataGet('/data/user/facilities');
     const current = facs?.currentFacilityCode || null;
     const all = (facs?.facilityDTOList || []).map((f) => f.code);
-    const order = [current, ...all.filter((f) => f && f !== current)].filter(Boolean);
+    facilityOrder = [current, ...all.filter((f) => f && f !== current)].filter(Boolean);
+    return facilityOrder;
+  }
+
+  /** Try each facility until the SO's invoice is found. */
+  async function resolveInvoice(so) {
+    const all = await facilities();
+    if (!all.length) return { ok: false, error: 'no facilities available' };
+
+    // Most recent hit first, then the rest in their normal order.
+    const order = lastGoodFacility
+      ? [lastGoodFacility, ...all.filter((f) => f !== lastGoodFacility)]
+      : all;
+
     let lastErr = 'no facilities available';
     for (const fac of order) {
       const inv = await resolveInFacility(so, fac);
-      if (inv.ok) return { ...inv, facility: fac };
-      if (!inv.notHere) { lastErr = inv.error; break; } // here but not invoiced → stop
+      if (inv.ok) {
+        lastGoodFacility = fac;
+        return { ...inv, facility: fac };
+      }
+      if (!inv.notHere) { lastErr = inv.error; break; } // here but not invoiced, stop
       lastErr = inv.error;
     }
     return { ok: false, error: lastErr };

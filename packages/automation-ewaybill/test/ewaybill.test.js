@@ -189,3 +189,51 @@ test('keeps an explicit positive distance', async () => {
     assert.equal(gen.body.transporterDetail.transDistance, '42');
   } finally { restore(); }
 });
+
+test('a batch fetches the facility list once, not once per row', async () => {
+  // Every /data call is facility-scoped, serialized behind the session mutex and paced
+  // at UC_MAX_RPS, so a per-row list fetch was pure latency on every upload.
+  let facilityFetches = 0;
+  const uc = {
+    dataGet: async () => {
+      facilityFetches += 1;
+      return { currentFacilityCode: 'A', facilityDTOList: [{ code: 'A' }, { code: 'B' }, { code: 'C' }] };
+    },
+    data: async (path, body, opts) => {
+      if (path.includes('fetchShippingPackageDetails')) {
+        return opts.facility === 'B'
+          ? { shippingPackages: [{ code: 'SP1', invoiceCode: 'INV1', statusCode: 'DISPATCHED' }] }
+          : { shippingPackages: [] };
+      }
+      return { successful: true, ewayBillNo: '123456789012' };
+    },
+  };
+  const p = makeEwaybillPipeline(uc);
+  for (const so of ['SO1', 'SO2', 'SO3']) await p.resolveInvoice(so);
+  assert.equal(facilityFetches, 1, `expected one facility fetch for the batch, got ${facilityFetches}`);
+});
+
+test('after one order is located, the rest try that warehouse first', async () => {
+  // Orders in a single upload almost always share a warehouse, so remembering the last
+  // hit turns an N-facility walk into one probe for every row after the first.
+  const probes = [];
+  const uc = {
+    dataGet: async () => ({ currentFacilityCode: 'A', facilityDTOList: [{ code: 'A' }, { code: 'B' }, { code: 'C' }] }),
+    data: async (path, body, opts) => {
+      if (path.includes('fetchShippingPackageDetails')) {
+        probes.push(opts.facility);
+        return opts.facility === 'C'
+          ? { shippingPackages: [{ code: 'SP', invoiceCode: 'INV', statusCode: 'DISPATCHED' }] }
+          : { shippingPackages: [] };
+      }
+      return { successful: true, ewayBillNo: '123456789012' };
+    },
+  };
+  const p = makeEwaybillPipeline(uc);
+  await p.resolveInvoice('SO1');
+  await p.resolveInvoice('SO2');
+
+  // SO1 walks A, B, C. SO2 should go straight to C.
+  assert.deepEqual(probes, ['A', 'B', 'C', 'C'],
+    `expected the second order to hit C first, probes were ${probes.join(',')}`);
+});
