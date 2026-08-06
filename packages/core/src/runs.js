@@ -44,3 +44,29 @@ export async function listRuns({ limit = 50, userEmail = null, automation = null
 export async function audit(actor, event, detail = {}) {
   await query('INSERT INTO audit_log (actor, event, detail) VALUES ($1, $2, $3)', [actor, event, JSON.stringify(detail)]);
 }
+
+/**
+ * Append one progress step to a running job, so the UI can show what is happening
+ * rather than a spinner. Best-effort by design: a failed progress write must never
+ * abort the actual work.
+ *
+ * @param {string} runUid
+ * @param {{ step: string, state?: 'running'|'done'|'failed', detail?: string }} entry
+ */
+export async function addRunProgress(runUid, entry) {
+  if (!runUid || !entry?.step) return;
+  const row = {
+    step: String(entry.step).slice(0, 120),
+    state: entry.state || 'done',
+    detail: entry.detail ? String(entry.detail).slice(0, 200) : '',
+    at: new Date().toISOString(),
+  };
+  try {
+    await query(
+      `UPDATE runs SET progress = progress || $2::jsonb WHERE run_uid = $1`,
+      [runUid, JSON.stringify([row])],
+    );
+  } catch {
+    // Progress is a convenience. Never let it break the job it is describing.
+  }
+}

@@ -60,3 +60,44 @@
   .op-head { flex-direction: column; align-items: flex-start; }
   .op-schedule { flex-direction: column; align-items: flex-start; }
 }
+
+/* ------------------------- live run progress ------------------------- */
+
+.op-progress {
+  margin-top: var(--s-4);
+  padding: var(--s-5);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid var(--glass-border);
+}
+
+.step-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.step { display: flex; align-items: baseline; gap: var(--s-3); font-size: 12.5px; color: var(--muted); }
+.step-mark {
+  width: 15px; height: 15px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 9px; font-weight: 700;
+  background: var(--green-soft); color: var(--green);
+}
+.step-running .step-mark { background: var(--orange-soft); color: var(--orange-deep); animation: step-pulse 1.1s ease-in-out infinite; }
+.step-failed .step-mark { background: rgba(196, 90, 70, 0.14); color: var(--red); }
+.step-text { color: var(--ink-2); }
+.step-detail { color: var(--muted-2); font-size: 11.5px; }
+
+@keyframes step-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+
+.op-outcome {
+  margin-top: var(--s-5);
+  padding: var(--s-4) var(--s-5);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12.5px;
+}
+.op-outcome strong { font-size: 13px; }
+.op-outcome.good { background: var(--yellow); color: var(--yellow-ink); }
+.op-outcome.bad { background: rgba(196, 90, 70, 0.1); color: var(--red); }
+.op-hint { opacity: 0.85; }

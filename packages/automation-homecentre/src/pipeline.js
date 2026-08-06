@@ -402,7 +402,14 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
    * Download Vinculum seller SKU list → merge UAE UC quantities → optional upload.
    * Identity match on seller skuCode (not archive LAND*). Upload only when HC_LIVE.
    */
-  async function syncInventory({ dryRun, sellerCode = null, skus = null, region = 'uae' } = {}) {
+  async function syncInventory({
+    dryRun, sellerCode = null, skus = null, region = 'uae', onProgress = null,
+  } = {}) {
+    // Narrates what the job is doing so the screen can show it live. Never throws:
+    // a reporting failure must not stop the sync it is describing.
+    const step = async (name, state = 'done', detail = '') => {
+      try { await onProgress?.({ step: name, state, detail }); } catch { /* ignore */ }
+    };
     const mode = resolveHcMode(cfg, { dryRun });
     // Stock for a region lives in that region's own UC tenant, and its seller account
     // is a different Vinculum login. Both must follow the region or KSA quantities end
@@ -463,7 +470,10 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
           skuColor: '',
         }));
       } else if (typeof vin.listAllSellerSkus === 'function') {
+        await step(`Signing in to Home Centre (${creds.region.toUpperCase()})`, 'running');
+        await step('Downloading the seller product list from Home Centre', 'running');
         const listed = await vin.listAllSellerSkus({ vendorCode: vinVendor });
+        await step('Downloading the seller product list from Home Centre', 'done', `${listed?.length ?? 0} products`);
         hcSkus = listed.skus || [];
       } else {
         return {
@@ -528,7 +538,9 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
 
     let snapBySku = {};
     try {
+      await step(`Reading stock from Unicommerce (${invTarget.label.toUpperCase()})`, 'running', `${ucSkuList.length} SKUs`);
       snapBySku = await inventorySnapshotBySku(uc, ucSkuList, invFacility);
+      await step(`Reading stock from Unicommerce (${invTarget.label.toUpperCase()})`, 'done', `${Object.keys(snapBySku || {}).length} matched`);
       // Fallback: if configured inv facility yields nothing, try the session facility once.
       if (!Object.keys(snapBySku).length && invTarget.facility && invTarget.facility !== invFacility) {
         snapBySku = await inventorySnapshotBySku(uc, ucSkuList, invTarget.facility);
@@ -579,7 +591,9 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
     let upload = { skipped: true, reason: 'dry-run or HC_LIVE=false' };
     let workbookBytes = 0;
     try {
+      await step('Filling the Home Centre inventory template', 'running', `${rows.length} rows`);
       const buf = await buildInventoryXlsx(rows);
+      await step('Filling the Home Centre inventory template', 'done', `${rows.length} rows`);
       workbookBytes = buf.length;
       if (mode.allowVinculumInventoryWrite) {
         catalog = await catalogMatchSkus(uc, ucSkuList);
@@ -596,7 +610,9 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
             validationErrors: validation.errors,
           };
         } else {
+          await step('Uploading the updated file to Home Centre', 'running');
           upload = await vin.uploadInventoryWorkbook(buf, `hc-inv-${creds.region}-${effectiveSellerCode || vinVendor || 'seller'}.xlsx`);
+          await step('Uploading the updated file to Home Centre', upload?.ok ? 'done' : 'failed', upload?.reason || '');
         }
       }
     } catch (err) {

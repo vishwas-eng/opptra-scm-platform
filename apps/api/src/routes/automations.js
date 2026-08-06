@@ -480,7 +480,7 @@ export default async function automationRoutes(app) {
     const isAdmin = req.user.role === 'admin';
     const { rows } = await query(
       `SELECT run_uid, user_email, automation, action, input, status, result, error,
-              created_at, started_at, finished_at
+              progress, created_at, started_at, finished_at
        FROM runs
        WHERE run_uid = $1 AND ($2::text IS NULL OR user_email = $2)`,
       [req.params.runUid, isAdmin ? null : req.user.email],

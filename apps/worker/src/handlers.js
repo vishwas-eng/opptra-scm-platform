@@ -4,6 +4,7 @@
 // The contract every job follows: `job.data = { runUid, input }`. `input` is the
 // automation's own payload. return.process additionally carries `retryCount` for
 // its self-re-enqueue loop.
+import { addRunProgress } from '@opptra/core';
 import { SessionError } from '@opptra/uc-client';
 
 export const RETURN_MAX_PENDING_RETRIES = 40;   // resumable pipeline: ~40 × 90s ≈ 1h of patience
@@ -332,6 +333,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
         // UAE and KSA are separate seller accounts and separate UC tenants; without
         // this the region chosen in the UI is ignored and UAE always runs.
         region: input.region || input.ucInstance || 'uae',
+        onProgress: (entry) => addRunProgress(runUid, entry),
       });
       if (runUid) await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
       return result;

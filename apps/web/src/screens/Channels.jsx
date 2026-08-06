@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   Badge, Button, Checkbox, DataTable, EmptyState, PageTransition, Panel, Select,
 } from '../components/ui.jsx';
-import { api } from '../lib/api.js';
+import { api, pollRun } from '../lib/api.js';
 import { fmtRelative } from '../lib/format.js';
 import { useToast } from '../lib/toast.jsx';
 import { humanError, humanSummary } from '../lib/humanError.js';
@@ -36,6 +36,8 @@ function OperationRow({ channelId, region, entry, onChanged }) {
   });
   // A run started from here is a deliberate act, so the live/dry choice is explicit.
   const [runDry, setRunDry] = useState(true);
+  const [steps, setSteps] = useState([]);
+  const [outcome, setOutcome] = useState(null);
 
   const runNow = async () => {
     setRunning(true);
@@ -110,6 +112,37 @@ function OperationRow({ channelId, region, entry, onChanged }) {
           </Button>
         </div>
       </div>
+
+      {(steps.length > 0 || outcome) && (
+        <div className="op-progress">
+          <ol className="step-list">
+            {steps.map((st, i) => (
+              <li key={`${st.step}-${i}`} className={`step step-${st.state}`}>
+                <span className="step-mark" aria-hidden="true">
+                  {st.state === 'failed' ? '\u00d7' : st.state === 'running' ? '\u2022' : '\u2713'}
+                </span>
+                <span className="step-text">{st.step}</span>
+                {st.detail && <span className="step-detail">{st.detail}</span>}
+              </li>
+            ))}
+            {running && <li className="step step-running"><span className="step-mark">\u2022</span><span className="step-text">Working...</span></li>}
+          </ol>
+
+          {outcome && (
+            <div className={`op-outcome ${outcome.ok ? 'good' : 'bad'}`}>
+              <strong>
+                {outcome.dryRun
+                  ? 'Preview only. Nothing was sent to the channel.'
+                  : outcome.ok ? 'Sent to the channel.' : 'Did not finish.'}
+              </strong>
+              {outcome.summary && <span>{outcome.summary}</span>}
+              {outcome.dryRun && outcome.ok && (
+                <span className="op-hint">Untick Dry run and run again to actually send it.</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {open && (
         <div className="op-schedule">
