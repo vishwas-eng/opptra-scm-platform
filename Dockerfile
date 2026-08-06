@@ -1,4 +1,22 @@
 # One image, two commands (api / worker) — keeps versions in lockstep.
+
+# ---------- build stage: the SPA needs devDependencies (Vite), the runtime does not ----------
+FROM node:20-slim AS webbuild
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends zip && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+COPY packages ./packages
+COPY apps ./apps
+COPY extensions ./extensions
+COPY scripts ./scripts
+# Full install (including dev) so Vite is available; this whole stage is discarded.
+RUN npm ci --no-audit --no-fund
+# Zip the extensions FIRST: they land in apps/web/public/downloads, and Vite copies
+# publicDir into dist. Build them after and they would be missing from the served app.
+RUN bash scripts/build-extensions.sh
+RUN npm run build -w @opptra/web
+
+# ---------- runtime ----------
 FROM node:20-slim AS base
 ENV NODE_ENV=production
 WORKDIR /app
@@ -9,13 +27,11 @@ COPY packages ./packages
 COPY apps ./apps
 RUN npm ci --omit=dev --no-audit --no-fund
 
+# The built SPA (including the extension zips under downloads/). The API serves this.
+COPY --from=webbuild /app/apps/web/dist ./apps/web/dist
+
 COPY extensions ./extensions
 COPY scripts ./scripts
-
-# Package the browser extensions into the web downloads folder (self-contained image).
-RUN apt-get update && apt-get install -y --no-install-recommends zip \
-    && bash scripts/build-extensions.sh \
-    && apt-get purge -y zip && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # Non-root runtime.
 USER node

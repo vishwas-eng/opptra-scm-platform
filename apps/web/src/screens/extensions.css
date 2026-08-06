@@ -1,0 +1,55 @@
+.ext-dl {
+  text-decoration: none !important;
+  margin: var(--s-6) 0 var(--s-7);
+}
+
+/* Numbered steps with a counter chip. list-style is dropped so the marker can be a real
+   styled element rather than the browser's, which cannot be positioned. */
+.steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: step;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 38px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--orange-soft);
+  border: 1px solid var(--line-strong);
+  color: var(--orange-deep);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Connective line between the markers, so the list reads as a sequence. */
+.steps li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 11.5px;
+  top: 25px;
+  bottom: calc(-1 * var(--s-4));
+  border-left: 1px dashed var(--line-strong);
+}
+
+.steps b { color: var(--ink); font-weight: 700; }

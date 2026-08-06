@@ -60,7 +60,30 @@ export async function buildApp({ withStatic = true } = {}) {
   await app.register(import('./agent/routes.js'));
 
   if (withStatic) {
-    await app.register(import('@fastify/static'), { root: path.join(here, '../../web/public'), prefix: '/' });
+    // The SPA is a Vite build (apps/web/dist). It must exist before the API starts —
+    // the Dockerfile runs `npm run build -w @opptra/web`, and locally `npm run build:web`.
+    // Serving apps/web/public directly would 404 on every route, since there is no
+    // hand-written index.html any more.
+    const webRoot = path.join(here, '../../web/dist');
+    await app.register(import('@fastify/static'), {
+      root: webRoot,
+      prefix: '/',
+      // Own the header entirely: with the plugin's cacheControl on, it writes
+      // `max-age=0` after setHeaders runs and the immutable hint below is lost.
+      cacheControl: false,
+      // Vite emits content-hashed asset names, so those are safe to cache forever.
+      // index.html must NOT be cached, or a deploy leaves browsers pinned to a stale
+      // bundle that references assets which no longer exist.
+      setHeaders(res, filePath) {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('cache-control', 'no-cache, must-revalidate');
+        } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+        } else {
+          res.setHeader('cache-control', 'public, max-age=3600');
+        }
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) return reply.code(404).send({ error: 'not found' });
       return reply.sendFile('index.html');

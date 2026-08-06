@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -14,6 +16,9 @@
     "migrate": "node packages/core/src/migrate.js",
     "test:unit": "node --test \"packages/*/test/*.test.js\" \"apps/*/test/*.test.js\"",
     "test": "node --test --test-concurrency=1 \"packages/*/test/*.test.js\" \"apps/*/test/*.test.js\"",
-    "check": "node scripts/syntax-check.js"
+    "check": "node scripts/syntax-check.js",
+    "build:web": "npm run build -w @opptra/web",
+    "dev:web": "npm run dev -w @opptra/web",
+    "build": "npm run build:web"
   }
 }

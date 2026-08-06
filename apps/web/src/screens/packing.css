@@ -1,0 +1,43 @@
+.pk-gmail { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-4); }
+.pk-gmail-account { flex: 1 1 200px; font-size: 13px; color: var(--muted); }
+
+.pk-steps { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-4); }
+.pk-steps .meta { flex: 1 1 240px; }
+
+.pk-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--s-5);
+  margin-top: var(--s-5);
+}
+
+.pk-group, .pk-draft {
+  border: 1px solid var(--line-solid);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.7);
+  padding: var(--s-5) var(--s-6);
+}
+
+.pk-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-4); }
+.pk-group-head h4 { font-size: 15px; }
+
+.pk-sos { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: var(--s-4) 0; }
+
+.pk-roles { display: flex; flex-direction: column; gap: var(--s-4); }
+.pk-role { display: flex; flex-direction: column; gap: var(--s-2); }
+.pk-role .checkbox { font-size: 12.5px; word-break: break-all; }
+
+.pk-draft > .meta { margin-top: var(--s-3); word-break: break-word; }
+.pk-draft-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-5); }
+.pk-draft-actions .btn { text-decoration: none !important; }
+
+.pk-unresolved {
+  margin-top: var(--s-6);
+  padding: var(--s-5) var(--s-6);
+  border-radius: var(--radius-sm);
+  background: var(--yellow);
+  color: var(--yellow-ink);
+  font-size: 12.5px;
+}
+.pk-unresolved ul { margin: var(--s-3) 0 0; padding-left: var(--s-8); }
+.pk-unresolved li { margin-bottom: var(--s-1); }

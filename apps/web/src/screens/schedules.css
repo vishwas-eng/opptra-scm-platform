@@ -1,0 +1,31 @@
+.sch-skeleton { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.sch-jobs { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--s-5); }
+
+.sch-job {
+  border: 1px solid var(--line-solid);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.68);
+  padding: var(--s-5) var(--s-6);
+}
+.sch-job-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-4); }
+.sch-job-head h4 { font-size: 15px; margin-bottom: 2px; }
+.sch-job-badges { display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: flex-end; }
+
+.sch-job-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
+.sch-job .steps-flow { margin: var(--s-4) 0 0; }
+
+.sch-last { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-top: var(--s-5); }
+
+.sch-paste { margin-top: var(--s-4); }
+.sch-helper { margin-top: var(--s-4); }
+
+.sch-instance { display: inline-flex; align-items: center; gap: var(--s-3); font-weight: 600; }

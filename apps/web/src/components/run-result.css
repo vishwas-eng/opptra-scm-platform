@@ -1,0 +1,58 @@
+.run-surface {
+  margin-top: var(--s-6);
+  padding: var(--s-7) var(--s-8);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+.run-busy { display: flex; align-items: flex-start; gap: var(--s-5); }
+.run-busy strong { color: var(--ink); font-size: 14px; }
+.run-error { border-color: rgba(196, 90, 70, 0.28); }
+.run-idle { background: transparent; border: 1px dashed rgba(20, 20, 20, 0.12); box-shadow: none; }
+
+.result-head { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-5); }
+.result-title { font-family: var(--font-display); font-size: 17px; color: var(--ink); }
+
+.steps-flow { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: var(--s-5) 0; }
+.step-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--chip-bg);
+  font-size: 11.5px;
+}
+.step-name { font-weight: 600; color: var(--ink-2); }
+.step-detail { color: var(--muted-2); font-family: var(--font-mono); font-size: 10.5px; }
+
+.file-result { margin-top: var(--s-5); display: flex; flex-direction: column; gap: var(--s-4); align-items: flex-start; }
+.file-preview {
+  width: 100%;
+  max-width: 640px;
+  height: 420px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  object-fit: contain;
+}
+.dl-btn { text-decoration: none !important; }
+
+.raw-details { margin-top: var(--s-5); }
+.raw-details summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-2);
+  user-select: none;
+}
+.raw-details summary:hover { color: var(--orange-deep); }
+.raw-details .output { margin-top: var(--s-4); max-height: 380px; overflow: auto; }
+
+.route-loading { display: grid; place-items: center; padding: var(--s-12); }
+.route-loading.boot { min-height: 100vh; }

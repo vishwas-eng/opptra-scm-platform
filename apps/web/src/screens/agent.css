@@ -1,0 +1,227 @@
+.agent-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  height: calc(100vh - 190px);
+  min-height: 520px;
+}
+
+.agent-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-5); flex-wrap: wrap; }
+.agent-head-title { display: flex; align-items: baseline; gap: var(--s-3); }
+.agent-head-title h3 { font-size: 20px; }
+.agent-head-actions { display: flex; gap: var(--s-2); align-items: center; }
+.agent-head-actions .btn-sm { text-decoration: none !important; }
+
+/* ------------------------------ tools strip ------------------------------ */
+
+.agent-tools-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  align-items: center;
+  padding-bottom: var(--s-1);
+}
+.tools-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--glass-border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.tools-chip em {
+  font-style: normal;
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: var(--radius-pill);
+  background: var(--orange-soft);
+  color: var(--orange-deep);
+}
+
+/* ------------------------------- threads ------------------------------- */
+
+.agent-threads { display: flex; gap: var(--s-2); overflow-x: auto; padding-bottom: var(--s-1); }
+.thread-chip {
+  flex: 0 0 auto;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 5px 11px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.thread-chip:hover { border-color: var(--line-strong); color: var(--ink); }
+.thread-chip.active { background: var(--ink); color: #fff; }
+
+/* ------------------------------- messages ------------------------------- */
+
+.agent-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-7);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  scroll-behavior: smooth;
+}
+
+.agent-msg { display: flex; flex-direction: column; gap: var(--s-3); max-width: 78%; }
+.agent-user { align-self: flex-end; align-items: flex-end; }
+.agent-assistant { align-self: flex-start; }
+
+.agent-bubble {
+  padding: var(--s-4) var(--s-6);
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.agent-user .agent-bubble {
+  background: linear-gradient(180deg, var(--orange-h), var(--orange));
+  color: #fff;
+  border-bottom-right-radius: 3px;
+  box-shadow: var(--shadow-primary);
+}
+.agent-assistant .agent-bubble {
+  background: var(--surface-solid);
+  color: var(--ink-2);
+  border: 1px solid var(--glass-border);
+  border-bottom-left-radius: 3px;
+}
+
+.thinking { display: inline-flex; align-items: center; gap: 3px; color: var(--muted-2); }
+.thinking i {
+  width: 4px; height: 4px; border-radius: 50%; background: var(--orange);
+  display: inline-block; animation: blink 1.2s var(--ease) infinite;
+}
+.thinking i:nth-child(2) { animation-delay: 0.18s; }
+.thinking i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes blink { 0%, 60%, 100% { opacity: 0.25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+
+/* ------------------------------ tool trace ------------------------------ */
+
+.agent-trace { display: flex; flex-direction: column; gap: var(--s-2); }
+
+.tool-call {
+  border: 1px solid rgba(20, 20, 20, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+}
+.tool-failed { border-color: rgba(196, 90, 70, 0.3); background: rgba(196, 90, 70, 0.04); }
+.tool-running { border-color: var(--orange-ring); }
+
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: 6px 10px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 11.5px;
+}
+.tool-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: 0 0 auto; }
+.tool-failed .tool-dot { background: var(--red); }
+.tool-dot.spin {
+  background: transparent;
+  border: 2px solid var(--orange);
+  border-top-color: transparent;
+  width: 10px; height: 10px;
+  animation: spin 0.7s linear infinite;
+}
+.tool-name { font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.tool-summary {
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.tool-caret { color: var(--faint); font-size: 9px; }
+
+.tool-body { padding: 0 10px 10px; display: flex; flex-direction: column; gap: var(--s-2); overflow: hidden; }
+.tool-body .output { max-height: 260px; overflow: auto; font-size: 11px; }
+.tool-args { background: var(--code-bg-2) !important; }
+
+/* ------------------------------ suggestions ------------------------------ */
+
+.agent-suggestions { display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: center; margin-top: var(--s-6); }
+.suggestion {
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.suggestion:hover { border-color: var(--orange); background: var(--orange-soft); transform: translateY(-1px); }
+
+/* ------------------------------- composer ------------------------------- */
+
+.agent-composer { display: flex; gap: var(--s-3); align-items: flex-end; }
+.agent-composer .textarea { min-height: 56px; }
+
+/* ------------------------------ schedule bar ------------------------------ */
+
+.schedule-bar {
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr auto;
+  gap: var(--s-4);
+  align-items: end;
+  padding: var(--s-6);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid var(--glass-border);
+}
+.schedule-actions { display: flex; gap: var(--s-2); }
+.schedule-hint { grid-column: 1 / -1; margin: 0; }
+
+/* ------------------------------- playbooks ------------------------------- */
+
+.playbooks { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
+.playbooks-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--muted-2);
+}
+.playbook-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 3px 4px 3px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--glass-border);
+  font-size: 11px;
+}
+.playbook-chip.active { border-color: var(--orange-ring); }
+.pb-title { font-weight: 600; color: var(--ink-2); }
+.pb-time { color: var(--muted-2); font-variant-numeric: tabular-nums; }
+.pb-ok { color: var(--green); }
+.pb-bad { color: var(--red); }
+
+@media (max-width: 900px) {
+  .agent-shell { height: auto; }
+  .agent-messages { min-height: 380px; }
+  .agent-msg { max-width: 92%; }
+  .schedule-bar { grid-template-columns: 1fr; }
+}

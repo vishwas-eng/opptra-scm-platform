@@ -1,0 +1,45 @@
+/* Segmented operation picker. Real radios stay in the DOM (keyboard + screen readers
+   get a proper radiogroup); only their default rendering is swapped for the pill. */
+
+.seg-field { border: 0; padding: 0; margin: 0 0 var(--s-6); }
+.seg-field legend { padding: 0; margin-bottom: var(--s-3); }
+
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--chip-bg);
+  border: 1px solid var(--glass-border);
+}
+
+.seg-opt {
+  position: relative;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.seg-opt:hover { color: var(--ink); }
+
+.seg-opt input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.seg-opt:focus-within { box-shadow: 0 0 0 3px var(--orange-ring); }
+
+.seg-opt.is-active {
+  background: linear-gradient(180deg, var(--orange-h), var(--orange));
+  color: #fff;
+  box-shadow: var(--shadow-primary);
+}
+
+.seg-blurb { margin-top: var(--s-3); }
+
+.inv-table { margin-top: var(--s-5); display: flex; flex-direction: column; gap: var(--s-3); }

@@ -1,0 +1,30 @@
+.eway-lead { margin-bottom: var(--s-5); max-width: 62ch; }
+
+/* The grid is wider than any sensible viewport; it scrolls inside its own wrapper so
+   the page itself never scrolls sideways. */
+.eway-wrap { max-height: 58vh; overflow: auto; }
+
+.eway-grid { min-width: 1180px; }
+.eway-grid th { position: sticky; top: 0; z-index: 1; background: rgba(255, 255, 255, 0.92); }
+.eway-grid td { padding: 6px 8px; vertical-align: middle; }
+
+.eway-cell {
+  min-width: 110px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.92);
+}
+.eway-grid td:first-child .eway-cell { min-width: 130px; font-weight: 600; }
+
+.eway-x { color: var(--faint); line-height: 1; }
+.eway-x:hover { color: var(--red); background: rgba(196, 90, 70, 0.10); }
+
+.eway-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-5);
+  margin-top: var(--s-6);
+}
+.eway-actions .meta { flex: 1 1 220px; }
+.eway-go { margin-left: auto; }
