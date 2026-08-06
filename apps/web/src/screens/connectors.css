@@ -184,3 +184,5 @@
   .conn-detail-inner, .binding-form, .har-upload { flex-direction: column; align-items: stretch; }
   .market-row { flex-wrap: wrap; }
 }
+
+.conn-section-note { max-width: 640px; margin: calc(var(--s-4) * -1) 0 var(--s-5); }

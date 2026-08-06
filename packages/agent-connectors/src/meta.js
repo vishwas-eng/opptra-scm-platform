@@ -35,10 +35,15 @@ export const CONNECTOR_META = Object.freeze([
   { id: 'amazon', name: 'Amazon Seller Central', group: 'marketplace', icon: 'AZ', authKind: 'oauth2', connectMode: 'oauth-amazon', live: false, blurb: 'SP-API · India, UAE, KSA' },
   { id: 'flipkart', name: 'Flipkart Seller Hub', group: 'marketplace', icon: 'FK', authKind: 'dual', connectMode: 'capture', live: false, blurb: 'Seller Hub / Seller API' },
   { id: 'myntra', name: 'Myntra Partner', group: 'marketplace', icon: 'MY', authKind: 'session', connectMode: 'capture', live: false, blurb: 'Partner portal + ASN' },
-  { id: 'zepto', name: 'Zepto Vendor', group: 'marketplace', icon: 'ZP', authKind: 'session', connectMode: 'capture', live: false, blurb: 'Vendor portal' },
-  { id: 'blinkit', name: 'Blinkit Seller', group: 'marketplace', icon: 'BK', authKind: 'session', connectMode: 'capture', live: false, blurb: 'Quick-commerce seller' },
-  { id: 'instamart', name: 'Swiggy Instamart', group: 'marketplace', icon: 'IM', authKind: 'session', connectMode: 'capture', live: false, blurb: 'Partner portal' },
   { id: 'nykaa', name: 'Nykaa Seller', group: 'marketplace', icon: 'NY', authKind: 'session', connectMode: 'capture', live: false, blurb: 'Seller portal' },
+  // Quick commerce is its own group because it works differently: no vendor APIs, POs
+  // arrive by email, and Unicommerce already ingests most of them.
+  { id: 'blinkit', name: 'Blinkit', group: 'quickcommerce', icon: 'BK', authKind: 'session', connectMode: 'partner', live: false, blurb: 'Partner API · vendor ID whitelisted' },
+  { id: 'zepto', name: 'Zepto', group: 'quickcommerce', icon: 'ZP', authKind: 'email', connectMode: 'email-po', live: false, blurb: 'PO by email (PDF)' },
+  { id: 'instamart', name: 'Swiggy Instamart', group: 'quickcommerce', icon: 'IM', authKind: 'email', connectMode: 'email-po', live: false, blurb: 'PO by email (PDF)' },
+  { id: 'bigbasket', name: 'BigBasket', group: 'quickcommerce', icon: 'BB', authKind: 'email', connectMode: 'email-po', live: false, blurb: 'BB Sambandh · PO by email (XLSX)' },
+  { id: 'flipkart-minutes', name: 'Flipkart Minutes', group: 'quickcommerce', icon: 'FM', authKind: 'email', connectMode: 'email-po', live: false, blurb: 'PO by email (XLSX)' },
+  { id: 'jiomart', name: 'JioMart Seller', group: 'marketplace', icon: 'JM', authKind: 'session', connectMode: 'partner', live: false, blurb: 'Credentials from category manager' },
   { id: 'meesho', name: 'Meesho Supplier', group: 'marketplace', icon: 'MS', authKind: 'session', connectMode: 'capture', live: false, blurb: 'Supplier portal' },
   { id: 'ajio', name: 'Ajio Seller', group: 'marketplace', icon: 'AJ', authKind: 'session', connectMode: 'capture', live: false, blurb: 'Reliance seller portal' },
   { id: 'noon', name: 'noon Seller Lab', group: 'marketplace', icon: 'NN', authKind: 'session', connectMode: 'capture', live: false, blurb: 'UAE + KSA marketplace' },

@@ -11,15 +11,44 @@ test('every declared channel builds a connector with the standard stub surface',
     const caps = c.listCapabilities();
     const ids = caps.map((a) => a.id);
     assert.ok(ids.includes('health.ping'), `${def.id} missing health.ping`);
-    assert.ok(ids.includes('orders.search'), `${def.id} missing orders.search`);
+    assert.ok(ids.length > 1, `${def.id} declares no capabilities beyond health`);
     assert.ok(caps.every((a) => a.awaitingHar), `${def.id} stub actions must all be awaitingHar`);
   }
 });
 
 test('the channels the buildout promised are all present', () => {
   const ids = STUB_CHANNELS.map((c) => c.id);
-  for (const want of ['nykaa', 'zepto', 'blinkit', 'instamart', 'meesho', 'ajio', 'noon', 'namshi']) {
+  for (const want of [
+    'nykaa', 'zepto', 'blinkit', 'instamart', 'meesho', 'ajio', 'noon', 'namshi',
+    'bigbasket', 'flipkart-minutes', 'jiomart',
+  ]) {
     assert.ok(ids.includes(want), `missing ${want}`);
+  }
+});
+
+test('every channel declares how it can actually be reached', () => {
+  const valid = new Set(['official', 'partner', 'email-po', 'portal']);
+  for (const c of STUB_CHANNELS) {
+    assert.ok(valid.has(c.transport), `${c.id} has no valid transport (got ${c.transport})`);
+  }
+});
+
+test('email-PO channels expose purchase-order actions, not a fictional orders endpoint', () => {
+  // Zepto/Instamart/BigBasket/Minutes have no vendor API — their POs arrive by email.
+  // Registering `orders.search` on them would invite a build against an endpoint that
+  // does not exist.
+  const emailPo = createAllChannelStubs();
+  for (const def of STUB_CHANNELS.filter((c) => c.transport === 'email-po')) {
+    const ids = emailPo.get(def.id).listCapabilities().map((a) => a.id);
+    assert.ok(ids.includes('purchaseOrders.list'), `${def.id} should ingest POs`);
+    assert.ok(!ids.includes('orders.search'), `${def.id} must not pretend to have an orders API`);
+  }
+});
+
+test('channels Unicommerce already ingests are flagged, so we ride it instead of rebuilding', () => {
+  const viaUc = STUB_CHANNELS.filter((c) => c.viaUnicommerce).map((c) => c.id);
+  for (const want of ['blinkit', 'zepto', 'instamart', 'bigbasket', 'flipkart-minutes']) {
+    assert.ok(viaUc.includes(want), `${want} is covered by Unicommerce and should say so`);
   }
 });
 

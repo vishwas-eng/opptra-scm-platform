@@ -74,7 +74,10 @@ export default function Connectors() {
   useEffect(() => { load(); }, [load]);
 
   const live = connectors.filter((c) => c.live);
-  const soon = connectors.filter((c) => !c.live);
+  // Quick commerce is separated because it genuinely works differently — no vendor
+  // APIs, POs arrive by email — and grouping it with marketplaces hid that.
+  const quick = connectors.filter((c) => !c.live && c.group === 'quickcommerce');
+  const soon = connectors.filter((c) => !c.live && c.group !== 'quickcommerce');
   const open = connectors.find((c) => c.id === openId) || null;
 
   return (
@@ -95,11 +98,25 @@ export default function Connectors() {
       </section>
 
       <section className="conn-section">
-        <h4 className="conn-section-title">Channels being brought online</h4>
+        <h4 className="conn-section-title">Marketplaces being brought online</h4>
         <div className="conn-grid">
           {soon.map((c, i) => <ConnectorCard key={c.id} connector={c} onOpen={setOpenId} index={i} />)}
         </div>
       </section>
+
+      {quick.length > 0 && (
+        <section className="conn-section">
+          <h4 className="conn-section-title">Quick commerce</h4>
+          <p className="meta conn-section-note">
+            None of these publish a vendor API — purchase orders arrive by email, and
+            Unicommerce already ingests most of them. The work here is appointments,
+            GRN reconciliation and fill-rate, not fetching the PO.
+          </p>
+          <div className="conn-grid">
+            {quick.map((c, i) => <ConnectorCard key={c.id} connector={c} onOpen={setOpenId} index={i} />)}
+          </div>
+        </section>
+      )}
 
       <AnimatePresence>
         {open && (
