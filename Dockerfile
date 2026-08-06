@@ -10,18 +10,11 @@ COPY apps ./apps
 COPY extensions ./extensions
 COPY scripts ./scripts
 # Full install (including dev) so Vite is available; this whole stage is discarded.
-#
-# `npm install`, not `npm ci`, and deliberately: Rollup and esbuild ship their native
-# binary as a per-platform optionalDependency, and npm records only the HOST platform's
-# in the lockfile (npm/cli#4828). A lockfile generated on macOS therefore has no
-# @rollup/rollup-linux-x64-gnu, and `npm ci` — which installs strictly from the lock —
-# produces a tree where `vite build` dies on a missing module. `npm install` resolves
-# for the platform it is actually running on.
-#
-# This costs nothing in reproducibility where it matters: everything here is a build
-# tool, the stage is thrown away, and the RUNTIME stage below still uses `npm ci` so
-# the shipped dependency tree remains locked.
-RUN npm install --no-audit --no-fund
+# Works with `npm ci` on Linux only because apps/web declares the Linux Rollup and
+# esbuild binaries as optionalDependencies — npm otherwise records just the host
+# platform's native binary, and a lockfile built on macOS yields a tree where
+# `vite build` dies on a missing module (npm/cli#4828).
+RUN npm ci --no-audit --no-fund
 # Zip the extensions FIRST: they land in apps/web/public/downloads, and Vite copies
 # publicDir into dist. Build them after and they would be missing from the served app.
 RUN bash scripts/build-extensions.sh
