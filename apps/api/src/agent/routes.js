@@ -478,6 +478,101 @@ export default async function agentRoutes(app) {
     };
   });
 
+  // Streaming twin of /api/agent/chat. Same persistence and same result — the only
+  // difference is that the turn's lifecycle (thinking, each tool starting/finishing)
+  // reaches the browser as it happens, so a 30-second multi-tool turn shows its work
+  // instead of a spinner. Clients that cannot stream keep using POST /api/agent/chat.
+  app.post('/api/agent/chat/stream', {
+    preValidation: adminOnly,
+    config: perUser(40, '1 minute'),
+    schema: {
+      body: {
+        type: 'object',
+        required: ['message'],
+        additionalProperties: false,
+        properties: {
+          threadId: { type: 'string', maxLength: 80 },
+          message: { type: 'string', minLength: 1, maxLength: 8000 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const cfg = config();
+    const message = String(req.body.message || '').trim();
+    if (!message) return reply.code(400).send({ error: 'message required' });
+
+    let thread;
+    if (req.body.threadId) {
+      thread = await getAgentThread({ threadUid: req.body.threadId, userEmail: req.user.email });
+      if (!thread) return reply.code(404).send({ error: 'thread not found' });
+    } else {
+      thread = await createAgentThread({ userEmail: req.user.email, title: titleFromMessage(message) });
+    }
+
+    await addAgentMessage({ threadId: thread.id, role: 'user', content: message });
+    if (thread.title === 'New chat') await touchAgentThread(thread.id, titleFromMessage(message));
+
+    const prefs = await listConnectorStates(req.user.email);
+    const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
+    const connectedIds = connectors.filter((c) => c.connected && c.live).map((c) => c.id);
+
+    const historyRows = await listAgentMessages({ threadId: thread.id, limit: 30 });
+    const history = historyRows
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .slice(0, -1)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    reply.raw.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache, no-transform',
+      connection: 'keep-alive',
+      // Caddy/nginx buffer proxied responses by default, which would hold every event
+      // until the turn ends and defeat the entire point of streaming.
+      'x-accel-buffering': 'no',
+    });
+    const send = (event, data) => {
+      if (reply.raw.writableEnded) return;
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    send('start', { threadId: thread.thread_uid, mode: llmModeLabel(cfg), connectedIds });
+
+    let result;
+    try {
+      result = await runAgentTurn({
+        cfg,
+        message,
+        history,
+        tools: buildToolSpecs(connectedIds),
+        executeTool: makeToolExecutor({ userEmail: req.user.email, connectedIds }),
+        connectedIds,
+        onEvent: (e) => send(e.type, e),
+      });
+    } catch (err) {
+      result = { mode: llmModeLabel(cfg), content: `Agent error: ${String(err.message || err)}`, toolCalls: [] };
+      send('error', { error: result.content });
+    }
+
+    // Persist exactly like the non-streaming route: a streamed turn must leave the same
+    // thread history behind, or reloading the page would lose the answer.
+    const assistant = await addAgentMessage({
+      threadId: thread.id,
+      role: 'assistant',
+      content: result.content || '',
+      toolCalls: result.toolCalls || [],
+      meta: { mode: result.mode, beta: true, streamed: true },
+    });
+
+    send('done', {
+      threadId: thread.thread_uid,
+      mode: result.mode,
+      message: assistant,
+      connectedIds,
+      canSaveAutomation: !!(result.toolCalls?.length),
+    });
+    reply.raw.end();
+    return reply;
+  });
+
   // ── Daily automations / playbooks ─────────────────────────────────
   app.get('/api/agent/playbooks', { preValidation: adminOnly }, async (req) => {
     const playbooks = await listAgentPlaybooks({ userEmail: req.user.email });
