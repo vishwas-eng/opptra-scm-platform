@@ -256,6 +256,9 @@ const Env = z.object({
   STREET6_LIVE: zbool(false),
   STREET6_DRY_RUN: zbool(true),
   // Combined scheduled job (pack-email + UC→portal inventory). 0 = manual only.
+  // 6th Street lists barcodes/EANs. Where Unicommerce uses different codes, map them
+  // here as {"6thStreetSku":"ucSku"}. Empty assumes they are identical.
+  STREET6_SKU_MAP_JSON: z.string().default(''),
   STREET6_SYNC_MINUTES: z.coerce.number().int().min(0).max(1440).default(0),
 });
 

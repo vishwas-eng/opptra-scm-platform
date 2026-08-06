@@ -71,7 +71,23 @@ function normalizePortalInventory(data) {
     .filter((r) => r.sku);
 }
 
+function parseSkuMap(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    const p = JSON.parse(raw);
+    if (!p || typeof p !== 'object' || Array.isArray(p)) throw new Error('must be an object');
+    return p;
+  } catch (err) {
+    throw new Error(`STREET6_SKU_MAP_JSON is not valid JSON (${err.message}). Fix it or unset it.`);
+  }
+}
+
 export function makeSixthStreetPipeline(uc, cfg, google, { portalClient, ucClientFor } = {}) {
+  // 6th Street lists barcodes/EANs. Where those are not the UC sku code, this map
+  // translates them. Empty means "assume they are the same", which is true for some
+  // catalogues and provably false for KSA today.
+  const skuMap = parseSkuMap(cfg.STREET6_SKU_MAP_JSON);
   // A real portal client whenever credentials exist; tests inject their own.
   const portal = portalClient || ((cfg.STREET6_PORTAL_USER && cfg.STREET6_PORTAL_PASS)
     ? makeStreet6PortalClient({
@@ -345,7 +361,8 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient, ucClien
           snapshotCount: 0,
         };
       }
-      skuList = live.skus || [];
+      // Translate through the map where one is configured, else pass through.
+      skuList = (live.skus || []).map((s0) => skuMap[s0] || s0);
       portalRows = live.rows || [];
       listSource = 'portal';
       if (!skuList.length) {
@@ -401,7 +418,14 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient, ucClien
         ownerEmail,
         ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
         probedSkus: skuList.length,
-        message: `None of the ${skuList.length} products 6th Street lists were found in Unicommerce ${target.label.toUpperCase()} at facility ${target.facility || '(default)'}. Check the facility, or whether these SKUs live in a different instance.`,
+        // Show what was actually tried. Without samples this reads as a vague failure
+        // and nobody can tell whether it is a facility, an instance or a mapping issue.
+        triedSkus: skuList.slice(0, 10),
+        mapped: Object.keys(skuMap).length > 0,
+        message: `None of the ${skuList.length} products 6th Street lists exist in Unicommerce ${target.label.toUpperCase()} (facility ${target.facility || 'default'}). Tried for example: ${skuList.slice(0, 3).join(', ')}. `
+          + (Object.keys(skuMap).length
+            ? 'A SKU map is configured, so either it is incomplete or these products are in another instance.'
+            : '6th Street lists barcodes; if Unicommerce uses different codes, set STREET6_SKU_MAP_JSON to translate them.'),
       };
     }
 
