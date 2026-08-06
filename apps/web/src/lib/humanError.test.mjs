@@ -55,9 +55,30 @@ test('run statuses read as plain English', () => {
 });
 
 test('a summary describes what happened without inventing anything', () => {
-  assert.equal(humanSummary({ empty: true }), 'There was nothing new to process.');
+  assert.match(humanSummary({ empty: true }), /nothing new to process/i);
   assert.match(humanSummary({ fetched: 12, okCount: 11, failed: 1 }), /12 found, 11 done, 1 failed/);
   assert.match(humanSummary({ skuCount: 151, dryRun: true }), /preview only, nothing was changed/);
   assert.equal(humanSummary(null), '', 'no data means no claim');
   assert.equal(humanSummary({}), '');
+});
+
+test('an empty run repeats the reason it was empty, not a generic line', () => {
+  // "Nothing new to process" reads like a failure to someone expecting a sale order.
+  const r = { empty: true, message: 'Home Centre has no active orders right now, so there was nothing to punch.' };
+  assert.match(humanSummary(r), /no active orders right now/);
+});
+
+test('already in sync is reported as a real outcome', () => {
+  // Once a schedule is running this is the normal steady state, and a blank summary
+  // made a healthy run look like it had done nothing.
+  assert.match(
+    humanSummary({ changedCount: 0, uploadConfirmed: true }),
+    /already in sync/i,
+  );
+});
+
+test('confirmation counts come from the channel, not from what we sent', () => {
+  const s = humanSummary({ changedCount: 3, importResult: { confirmed: 148, checked: 151, stale: 3 } });
+  assert.match(s, /148 of 151 confirmed in the channel/);
+  assert.match(s, /3 did not change/);
 });

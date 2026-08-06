@@ -127,16 +127,26 @@ export const RUN_STATUS_TEXT = {
  */
 export function humanSummary(result) {
   if (!result || typeof result !== 'object') return '';
-  if (result.empty) return 'There was nothing new to process.';
+  // A run with nothing to do is a real, healthy outcome. Say what was checked rather
+  // than leaving a blank that reads like a failure.
+  if (result.empty) return result.message || 'There was nothing new to process.';
+
+  // Everything already matching is the normal steady state once a schedule is running.
+  if (result.changedCount === 0 && result.uploadConfirmed !== false) {
+    return 'Everything is already in sync, no quantities needed changing.';
+  }
 
   const bits = [];
 
   // Home Centre inventory: report what the channel itself confirmed, not what we sent.
-  const c = result.importResult?.counts;
-  if (c) {
-    bits.push(`${c.success ?? 0} accepted by the channel`);
-    if (c.failed) bits.push(`${c.failed} rejected`);
-    if (c.pending) bits.push(`${c.pending} still processing`);
+  // Confirmed against the channel's own catalogue, not against what we sent.
+  const ir = result.importResult;
+  if (ir && typeof ir.confirmed === 'number') {
+    bits.push(`${ir.confirmed} of ${ir.checked} confirmed in the channel`);
+    if (ir.stale) bits.push(`${ir.stale} did not change`);
+  }
+  if (typeof result.changedCount === 'number' && result.changedCount > 0) {
+    bits.push(`${result.changedCount} quantities updated`);
   }
 
   if (typeof result.catalogMatched === 'number') bits.push(`${result.catalogMatched} products matched`);
@@ -144,7 +154,7 @@ export function humanSummary(result) {
   if (typeof result.fetched === 'number') bits.push(`${result.fetched} found`);
   if (typeof result.okCount === 'number') bits.push(`${result.okCount} done`);
   if (typeof result.created === 'number' && result.created) bits.push(`${result.created} created`);
-  if (typeof result.skuCount === 'number' && !c) bits.push(`${result.skuCount} products`);
+  if (typeof result.skuCount === 'number' && !ir) bits.push(`${result.skuCount} products`);
   if (typeof result.draftCount === 'number') bits.push(`${result.draftCount} drafts`);
   if (typeof result.lineCount === 'number') bits.push(`${result.lineCount} lines`);
   if (typeof result.failed === 'number' && result.failed) bits.push(`${result.failed} failed`);

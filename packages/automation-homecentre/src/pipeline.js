@@ -331,7 +331,11 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
         results: [],
         empty: true,
         ownerEmail,
-        message: 'No Home Centre orders to process, nothing to do',
+        // "Nothing to do" reads like a failure to someone expecting a sale order.
+        // Say which list was checked and what the alternative is.
+        message: source === 'archive'
+          ? 'No orders in the Home Centre archive list, so there was nothing to punch.'
+          : 'Home Centre has no active orders right now, so there was nothing to punch. Active means placed but not yet shipped. Past orders live under the archive list, which you can sync instead to test the flow.',
       };
     }
 
@@ -596,6 +600,16 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
       const buf = await buildInventoryXlsx(rows);
       await step('Filling the Home Centre inventory template', 'done', `${rows.length} rows`);
       workbookBytes = buf.length;
+      // Everything already matching is the healthy steady state, and by far the most
+      // common outcome once a schedule is running. Report it as a real result instead
+      // of an upload that appears to have done nothing.
+      const changed = rows.filter((r) => Number(r.sellerInv) !== Number(r.priorSellerInv)).length;
+      if (changed === 0) {
+        await step('Comparing with Home Centre', 'done', 'every quantity already matches');
+      } else {
+        await step('Comparing with Home Centre', 'done', `${changed} quantit${changed === 1 ? 'y' : 'ies'} to update`);
+      }
+
       if (mode.allowVinculumInventoryWrite) {
         catalog = await catalogMatchSkus(uc, ucSkuList);
         validation = validateInventoryFill(rows, {
@@ -619,30 +633,52 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
             upload?.batchNo ? `batch ${upload.batchNo}` : (upload?.reason || ''),
           );
 
-          // Ask Vinculum what the import actually did, rather than inferring it from an
-          // HTML page. This is the request behind the portal's own Successful / Error /
-          // Pending tabs, so the numbers we report are theirs, not ours.
-          if (upload?.ok && typeof vin.getImportResult === 'function') {
-            await step('Checking the result in Home Centre', 'running');
-            // The rows are queued, not applied the instant the POST returns.
-            await new Promise((r) => setTimeout(r, 3000));
-            importResult = await vin.getImportResult(upload.batchNo || '').catch((err) => ({
-              ok: false, error: String(err.message || err),
-            }));
-            if (importResult?.ok) {
-              const c = importResult.counts || {};
+          // Confirm by re-reading the catalogue, not by parsing the response page.
+          // Vinculum returns the same Update Price/Inventory page whether the import
+          // worked or not, so the only trustworthy proof is that the quantities we
+          // sent are now the quantities it reports.
+          if (upload?.accepted) {
+            await step('Confirming the new quantities in Home Centre', 'running');
+            // The import is queued, not applied the instant the POST returns.
+            await new Promise((r) => setTimeout(r, 5000));
+            try {
+              const after = await vin.listAllSellerSkus({ vendorCode: vinVendor });
+              const nowBy = new Map((after?.skus || []).map((r) => [String(r.skuCode || r.mrktSku), Number(r.qty)]));
+              let confirmed = 0;
+              let stale = 0;
+              const notUpdated = [];
+              for (const r of rows) {
+                const key = String(r.vendorSku || r.marketplaceSku);
+                if (!nowBy.has(key)) continue;
+                if (nowBy.get(key) === Number(r.sellerInv)) confirmed += 1;
+                else { stale += 1; if (notUpdated.length < 10) notUpdated.push({ sku: key, sent: r.sellerInv, portal: nowBy.get(key) }); }
+              }
+              importResult = { ok: stale === 0, confirmed, stale, notUpdated, checked: confirmed + stale };
               await step(
-                'Checking the result in Home Centre',
-                c.failed ? 'failed' : 'done',
-                `${c.success ?? 0} accepted, ${c.failed ?? 0} rejected${c.pending ? `, ${c.pending} pending` : ''}`,
+                'Confirming the new quantities in Home Centre',
+                stale === 0 ? 'done' : 'failed',
+                stale === 0
+                  ? `all ${confirmed} products match Unicommerce`
+                  : `${confirmed} of ${confirmed + stale} match, ${stale} did not change`,
               );
-            } else {
-              await step('Checking the result in Home Centre', 'failed', importResult?.error || 'could not read the batch');
+            } catch (err) {
+              importResult = { ok: false, error: String(err.message || err) };
+              await step('Confirming the new quantities in Home Centre', 'failed', importResult.error.slice(0, 120));
             }
           }
         }
       }
     } catch (err) {
+      // Everything already matching is the healthy steady state, and by far the most
+      // common outcome once a schedule is running. Report it as a real result instead
+      // of an upload that appears to have done nothing.
+      const changed = rows.filter((r) => Number(r.sellerInv) !== Number(r.priorSellerInv)).length;
+      if (changed === 0) {
+        await step('Comparing with Home Centre', 'done', 'every quantity already matches');
+      } else {
+        await step('Comparing with Home Centre', 'done', `${changed} quantit${changed === 1 ? 'y' : 'ies'} to update`);
+      }
+
       if (mode.allowVinculumInventoryWrite) {
         upload = { ok: false, error: String(err.message || err) };
       } else {
@@ -699,6 +735,9 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
       })),
       upload,
       importResult,
+      // A run is successful only when the channel's own data proves it.
+      uploadConfirmed: importResult ? importResult.ok === true : null,
+      changedCount: changed,
       ownerEmail,
       identityMapEnough: Object.keys(skuMap).length === 0,
       message: gateBlocked

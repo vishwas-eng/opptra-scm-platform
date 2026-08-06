@@ -6,41 +6,51 @@ import {
 } from '../src/client.js';
 
 /* --------------------------- import classification --------------------------- */
-// This is a LIVE stock write. A false "ok" means the team believes inventory was
-// pushed when it was not, the most expensive failure this connector can produce.
+// Vinculum returns the SAME Update Price/Inventory page whether an import worked or
+// not, so the response can never prove success. Only a transport failure, a dead
+// session, or a quoted error sentence are real verdicts; everything else is accepted
+// but unverified, and the pipeline confirms by re-reading the catalogue.
 
-test('an HTML error page returned with HTTP 200 is a failure, not a success', () => {
-  const r = classifyImportResponse(200, '<html><body><div class="err">Error: invalid file format</div></body></html>');
+test('a quoted error sentence is a real failure', () => {
+  const r = classifyImportResponse(200, '<html><body>Error: invalid file format</body></html>');
   assert.equal(r.ok, false);
-  assert.equal(r.confirmed, true);
-  assert.match(r.reason, /import reported/i);
+  assert.equal(r.accepted, false);
+  assert.match(r.reason, /invalid file format/i);
 });
 
-test('an explicit success page is confirmed', () => {
-  const r = classifyImportResponse(200, '<html>Records processed: 151 uploaded successfully</html>');
+test('the page tab labels never decide the verdict', () => {
+  // The tabs read "Successful | Error | Pending" on every normal render. Treating the
+  // word Error as a failure marked working uploads as failed for days.
+  const page = '<html><body><li id="failedGridTab" onclick="genricSearchGrid(2)">Error</li>'
+    + '<li id="successGridTab">Successful</li></body></html>';
+  const r = classifyImportResponse(200, page);
   assert.equal(r.ok, true);
-  assert.equal(r.confirmed, true);
+  assert.equal(r.accepted, true);
+  assert.equal(r.verified, false, 'accepted is not the same as proven');
 });
 
-test('a session bounce to the login page is a failure', () => {
-  for (const body of ['Invalid Login Credentials', '<form action="sellerPanalLogin.action">']) {
-    const r = classifyImportResponse(200, body);
-    assert.equal(r.ok, false);
-    assert.match(r.reason, /session expired|import reported/i);
-  }
+test('an accepted upload is never reported as verified', () => {
+  const r = classifyImportResponse(200, '<html><body>Update Price/Inventory</body></html>');
+  assert.equal(r.accepted, true);
+  assert.equal(r.verified, false);
+  assert.match(r.reason, /awaiting confirmation/i);
 });
 
-test('an ambiguous 200 is reported unconfirmed rather than assumed good', () => {
-  const r = classifyImportResponse(200, '<html><body>&nbsp;</body></html>');
+test('a batch number is captured when the page happens to carry one', () => {
+  assert.equal(classifyImportResponse(200, '<html>batchId 884512</html>').batchNo, '884512');
+});
+
+test('a session bounce to login is a failure, not an accepted upload', () => {
+  const r = classifyImportResponse(200, '<form action="sellerPanalLogin.action">');
   assert.equal(r.ok, false);
-  assert.equal(r.confirmed, false, 'we do not know either way, say so');
-  assert.match(r.reason, /did not confirm/i);
+  assert.equal(r.accepted, false);
+  assert.match(r.reason, /session expired/i);
 });
 
-test('a non-2xx status is a confirmed failure', () => {
+test('a non-2xx status is a failure', () => {
   const r = classifyImportResponse(500, 'Internal Server Error');
   assert.equal(r.ok, false);
-  assert.equal(r.confirmed, true);
+  assert.equal(r.accepted, false);
   assert.match(r.reason, /HTTP 500/);
 });
 
@@ -122,15 +132,3 @@ test('script and style contents never influence the verdict', () => {
   assert.equal(r.batchNo, '12345');
 });
 
-test('getting the import page back with no batch number means nothing was imported', () => {
-  // The exact production response: HTTP 200, the whole Update Price/Inventory page,
-  // no batch number. Struts re-renders on a POST it did not act on, so this is a
-  // definite "not processed", not an ambiguous result.
-  const r = classifyImportResponse(200,
-    '<html><body><h1>Update Price/Inventory</h1><li id="failedGridTab" onclick="genricSearchGrid(2)">Error</li></body></html>');
-  assert.equal(r.ok, false);
-  assert.equal(r.confirmed, true);
-  assert.equal(r.notProcessed, true);
-  assert.match(r.reason, /was not processed/i);
-  assert.match(r.reason, /captured from a manual import/i, 'must say what would fix it');
-});

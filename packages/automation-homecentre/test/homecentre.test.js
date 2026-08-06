@@ -149,7 +149,21 @@ test('syncOrders with zero orders is ok empty success', async () => {
   assert.equal(r.ok, true);
   assert.equal(r.empty, true);
   assert.equal(r.processed, 0);
-  assert.match(r.message, /No Home Centre orders/);
+  // The message must explain WHICH list was empty and what to try instead. "Nothing
+  // to do" reads like a failure to someone waiting for a sale order.
+  assert.match(r.message, /no active orders/i);
+  assert.match(r.message, /archive/i, 'must point at the archive list as the alternative');
+});
+
+test('an empty archive run says archive, not active', async () => {
+  const pipe = makeHomecentrePipeline({}, { HC_UC_CHANNEL: 'CUSTOM' }, {
+    listActiveOrders: async () => ({ records: 0, orders: [] }),
+    listArchiveOrders: async () => ({ records: 0, orders: [] }),
+  });
+  const r = await pipe.syncOrders({ dryRun: true, source: 'archive' });
+  assert.equal(r.empty, true);
+  assert.match(r.message, /archive/i);
+  assert.ok(!/no active orders/i.test(r.message), 'must not blame the active list');
 });
 
 test('syncOrders creates on staging when dryRun=false and UC client works', async () => {
