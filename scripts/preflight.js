@@ -5,6 +5,7 @@
 //   node scripts/preflight.js [path-to-env-file]
 //
 // Exit code 1 means do not deploy.
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +47,32 @@ if (existsSync(path.join(dist, 'index.html'))) {
   walk(path.join(ROOT, 'apps/web/src'));
   check('SPA build is newer than its sources', builtAt >= newestSrc,
     'sources changed after the last build — run: npm run build:web', { fatal: false });
+}
+
+/* ------------------------------- the lockfile ------------------------------- */
+// The image installs with `npm ci`, which refuses to run when package.json and
+// package-lock.json disagree. Deleting a workspace package leaves orphaned entries
+// behind that a plain `npm install` may not prune, and newer npm tolerates what the
+// image's older npm rejects — so this only surfaces inside the Docker build, minutes
+// in, on the VM. Check it here instead.
+try {
+  const lock = JSON.parse(readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'));
+  const orphans = Object.keys(lock.packages || {})
+    .filter((k) => k.startsWith('packages/') || k.startsWith('apps/'))
+    .filter((k) => !existsSync(path.join(ROOT, k, 'package.json')));
+  check('no lockfile entries for deleted workspaces', orphans.length === 0,
+    `${orphans.join(', ')} — run: rm package-lock.json && npm install`);
+
+  execFileSync('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund', '--dry-run'], {
+    cwd: ROOT, stdio: 'ignore',
+  });
+  ok.push('package-lock.json is in sync (npm ci would succeed)');
+} catch (err) {
+  if (err?.status !== undefined) {
+    problems.push('package-lock.json is OUT OF SYNC — the Docker build will fail at `npm ci`. Fix: rm package-lock.json && npm install');
+  } else {
+    warnings.push(`could not verify the lockfile: ${err.message}`);
+  }
 }
 
 /* -------------------------------- migrations -------------------------------- */

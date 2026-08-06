@@ -27,7 +27,12 @@ gcloud auth print-access-token >/dev/null 2>&1 || {
   echo "gcloud auth has expired — run: gcloud auth login"; exit 1;
 }
 
-TARBALL=$(mktemp /tmp/opptra-scm-XXXX.tar.gz)
+# A temp DIRECTORY, not a temp file: macOS mktemp only substitutes trailing X's, so
+# `mktemp /tmp/opptra-scm-XXXX.tar.gz` creates that name literally and every later run
+# fails with "File exists". A directory template has the X's last and stays portable.
+STAGE_DIR=$(mktemp -d)
+trap 'rm -rf "$STAGE_DIR"' EXIT
+TARBALL="$STAGE_DIR/opptra-scm.tar.gz"
 # COPYFILE_DISABLE stops macOS tar from embedding "._foo" AppleDouble metadata files -
 # one of those next to a migration (still ends in .sql, sorts before it) crashes the
 # migration runner with a binary-garbage SQL statement on boot.
@@ -35,7 +40,7 @@ COPYFILE_DISABLE=1 tar -czf "$TARBALL" -C "$REPO_DIR" \
   --exclude node_modules --exclude .git \
   --exclude '.env' --exclude '.env.*' --exclude '._*' .
 gcloud compute scp "$TARBALL" "$VM_NAME:/tmp/opptra-scm.tar.gz" --zone "$ZONE" --quiet
-rm -f "$TARBALL"
+# STAGE_DIR (tarball included) is removed by the EXIT trap.
 
 gcloud compute ssh "$VM_NAME" --zone "$ZONE" --command '
   set -e
