@@ -1,9 +1,11 @@
 {
-  "name": "@opptra/connectors-instamart",
+  "name": "@opptra/connectors-stubs",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "src/index.js",
   "exports": { ".": "./src/index.js" },
-  "dependencies": { "@opptra/connectors-sdk": "*", "@opptra/core": "*" }
+  "dependencies": {
+    "@opptra/connectors-sdk": "*"
+  }
 }

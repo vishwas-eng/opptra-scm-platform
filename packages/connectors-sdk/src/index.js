@@ -6,6 +6,7 @@ import { CONNECTOR_ERROR_CODES, connectorError } from './errors.js';
 export {
   CONNECTOR_ERROR_CODES, connectorError, isRetryable,
 } from './errors.js';
+export { createStubConnector } from './stub.js';
 
 // One Ajv per process is enough: compile() is pure and the compiled validators are
 // stored per-action, so registries never share validation state.

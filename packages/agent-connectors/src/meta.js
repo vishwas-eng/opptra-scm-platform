@@ -37,6 +37,9 @@ export const CONNECTOR_META = Object.freeze([
   { id: 'instamart', name: 'Swiggy Instamart', group: 'marketplace', icon: 'IM', authKind: 'session', connectMode: 'paste', live: false, blurb: 'Partner portal' },
   { id: 'nykaa', name: 'Nykaa Seller', group: 'marketplace', icon: 'NY', authKind: 'session', connectMode: 'paste', live: false, blurb: 'Seller portal' },
   { id: 'meesho', name: 'Meesho Supplier', group: 'marketplace', icon: 'MS', authKind: 'session', connectMode: 'paste', live: false, blurb: 'Supplier portal' },
+  { id: 'ajio', name: 'Ajio Seller', group: 'marketplace', icon: 'AJ', authKind: 'session', connectMode: 'paste', live: false, blurb: 'Reliance seller portal' },
+  { id: 'noon', name: 'noon Seller Lab', group: 'marketplace', icon: 'NN', authKind: 'session', connectMode: 'paste', live: false, blurb: 'UAE + KSA marketplace' },
+  { id: 'namshi', name: 'Namshi Seller', group: 'marketplace', icon: 'NM', authKind: 'session', connectMode: 'paste', live: false, blurb: 'UAE + KSA fashion (noon group)' },
   { id: '6thstreet', name: '6th Street', group: 'marketplace', icon: '6S', authKind: 'session', connectMode: 'env', live: false, blurb: 'VPN + seller portal / IBM OMS pack email' },
 ]);
 

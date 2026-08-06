@@ -12,11 +12,7 @@ import { createUnicommerceConnector } from '@opptra/connectors-unicommerce';
 import { createAmazonConnector } from '@opptra/connectors-amazon';
 import { createFlipkartConnector } from '@opptra/connectors-flipkart';
 import { createMyntraConnector } from '@opptra/connectors-myntra';
-import { createNykaaConnector } from '@opptra/connectors-nykaa';
-import { createZeptoConnector } from '@opptra/connectors-zepto';
-import { createBlinkitConnector } from '@opptra/connectors-blinkit';
-import { createInstamartConnector } from '@opptra/connectors-instamart';
-import { createMeeshoConnector } from '@opptra/connectors-meesho';
+import { createAllChannelStubs } from '@opptra/connectors-stubs';
 import { createSixthStreetConnector } from '@opptra/connectors-6thstreet';
 import { enqueue } from '../queue.js';
 
@@ -75,11 +71,9 @@ export function listAllCapabilities() {
   push('amazon', createAmazonConnector({ cfg }).listCapabilities(), false);
   push('flipkart', createFlipkartConnector({ cfg }).listCapabilities(), false);
   push('myntra', createMyntraConnector({}).listCapabilities(), false);
-  push('nykaa', createNykaaConnector({}).listCapabilities(), false);
-  push('zepto', createZeptoConnector({}).listCapabilities(), false);
-  push('blinkit', createBlinkitConnector({}).listCapabilities(), false);
-  push('instamart', createInstamartConnector({}).listCapabilities(), false);
-  push('meesho', createMeeshoConnector({}).listCapabilities(), false);
+  for (const [id, stub] of createAllChannelStubs()) {
+    push(id, stub.listCapabilities(), false);
+  }
   push('6thstreet', createSixthStreetConnector({ cfg }).listCapabilities(), false);
   return caps;
 }
