@@ -1,3 +1,5 @@
+import ExcelJS from 'exceljs';
+import { buildInventoryXlsx } from '../src/inventoryFile.js';
 import { vinculumCredsFor, inventoryUcConfig } from '../src/targets.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -354,4 +356,26 @@ test('a KSA sync with no KSA login stops with a fixable message, and touches not
   assert.equal(r.ok, false);
   assert.equal(r.configured, false);
   assert.match(r.message, /VINCULUM_KSA_USER/);
+});
+
+test('the workbook uses the sheet name Vinculum actually reads', async () => {
+  // Their template names the sheet "PO Enquiry". We used "Inventory", so Vinculum
+  // opened the file, found no sheet it recognised, imported nothing, and still
+  // returned HTTP 200 with the page. Headers alone were never enough.
+  const buf = await buildInventoryXlsx([
+    { marketplaceSku: '170120936', vendorSku: 'T80358', sellerInv: 12, sellerCode: '75' },
+  ]);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  assert.deepEqual(wb.worksheets.map((w) => w.name), ['PO Enquiry']);
+
+  const header = wb.worksheets[0].getRow(1).values.slice(1);
+  assert.deepEqual(header, [
+    'MarketPlace SkuCode', 'Vendor Sku Code', 'Sku Name', 'MRP', 'Selling Price',
+    'Seller Inv', 'Seller Code', 'Sku Size', 'Sku Color', 'Web Sku Status',
+  ], 'column order must match their template exactly');
+
+  const row = wb.worksheets[0].getRow(2).values.slice(1);
+  assert.equal(row[0], '170120936');
+  assert.equal(row[5], 12, 'Seller Inv carries the quantity');
 });

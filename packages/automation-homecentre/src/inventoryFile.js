@@ -164,9 +164,15 @@ export function validateInventoryFill(rows = [], opts = {}) {
   };
 }
 
+// Vinculum reads the import by SHEET NAME, and its own template calls the sheet
+// "PO Enquiry" (confirmed by downloading it). A workbook with the right headers on a
+// differently named sheet is accepted, re-renders the page, and imports nothing, which
+// is exactly how a live sync appeared to succeed while changing no stock.
+const SHEET_NAME = 'PO Enquiry';
+
 export async function buildInventoryXlsx(rows = []) {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Inventory');
+  const ws = wb.addWorksheet(SHEET_NAME);
   ws.addRow(HEADERS);
   for (const r of rows) {
     ws.addRow([
