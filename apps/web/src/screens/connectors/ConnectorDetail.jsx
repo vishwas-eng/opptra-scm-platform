@@ -63,7 +63,19 @@ export default function ConnectorDetail({ connector: c, onClose, onChanged }) {
         {/* --- live connectors: connect / disconnect / bind --- */}
         {c.live && (
           <>
-            {c.connectMode === 'google-user' ? (
+            {c.scope === 'platform' ? (
+              // The company's own credential. Everyone shares it; nobody toggles it.
+              <div className="conn-platform">
+                <p className="lead">
+                  {c.systemReady
+                    ? 'Configured by the platform and shared by everyone — nothing for you to connect.'
+                    : 'Not configured yet. An admin sets this up once for the whole team.'}
+                </p>
+                {c.id === 'unicommerce' && !c.systemReady && (
+                  <Link className="btn btn-primary" to="/schedules">Connect Unicommerce</Link>
+                )}
+              </div>
+            ) : c.connectMode === 'google-user' ? (
               c.connected ? (
                 <div className="conn-actions">
                   <Button loading={busy} onClick={() => act('disconnect')}>Disconnect</Button>
@@ -78,11 +90,6 @@ export default function ConnectorDetail({ connector: c, onClose, onChanged }) {
               </div>
             ) : c.systemReady ? (
               <Button variant="primary" loading={busy} onClick={() => act('connect')}>Connect</Button>
-            ) : c.id === 'unicommerce' ? (
-              <div className="conn-actions">
-                <p className="meta">No live Unicommerce session yet.</p>
-                <Link className="btn btn-primary" to="/schedules">Connect Unicommerce</Link>
-              </div>
             ) : (
               <p className="meta">{c.connectHint}</p>
             )}
@@ -91,9 +98,35 @@ export default function ConnectorDetail({ connector: c, onClose, onChanged }) {
           </>
         )}
 
-        {/* --- not live yet: the two real paths forward --- */}
+        {/* --- not live yet: the real paths forward, per channel --- */}
         {!c.live && c.connectMode === 'oauth-amazon' && <AmazonConnect />}
         {!c.live && c.connectMode === 'capture' && <CaptureGuide connector={c} />}
+        {!c.live && c.connectMode === 'official-api' && (
+          <p className="lead">
+            This channel publishes a real seller API — we build against that rather than
+            recording a login. Needs API credentials from their onboarding team.
+          </p>
+        )}
+        {!c.live && c.connectMode === 'via-noon' && (
+          <p className="lead">
+            Runs on the same platform as noon — one connection serves both marketplaces,
+            so connect noon and this comes with it.
+          </p>
+        )}
+        {!c.live && c.connectMode === 'partner' && (
+          <p className="lead">
+            Access is granted per integrator: they whitelist our vendor ID rather than
+            issuing a key. Ask the category/account manager to enable it.
+          </p>
+        )}
+        {!c.live && c.connectMode === 'email-po' && (
+          <p className="lead">
+            No vendor API exists. Purchase orders arrive by email as PDF/XLSX — the
+            connector parses the mailbox, and Unicommerce already ingests this channel
+            too. The work worth doing here is appointments, GRN reconciliation and
+            fill-rate, not fetching the PO.
+          </p>
+        )}
 
         {capture && (
           <div className="capture-summary">

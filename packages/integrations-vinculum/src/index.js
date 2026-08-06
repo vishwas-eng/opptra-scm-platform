@@ -4,4 +4,5 @@ export {
   extractPublicKeyPem,
   encryptPasswordRsaPkcs1,
 } from './client.js';
+export { classifyImportResponse } from './client.js';
 export { makeVinculumFulfill, parseFulfillActions } from './fulfill.js';

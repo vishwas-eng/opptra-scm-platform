@@ -249,7 +249,15 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
       return { ok: true, webOrderNo, ...so, ucTarget: targetCfg.label, ucBaseUrl: targetCfg.baseUrl, mode: resolved.modeLabel };
     } catch (err) {
       const msg = String(err.message || err);
-      if (/already|duplicate|exist/i.test(msg)) {
+      // "Already exists" is the one failure that is really a success — the order was
+      // punched by an earlier run. But the old test was /already|duplicate|exist/i,
+      // which also matched "item does not exist" and "SKU does not exist": a genuinely
+      // unmapped SKU was reported as ok:true, skipped, so a whole sync could look clean
+      // while punching nothing. Require an affirmative duplicate phrase, and never
+      // treat a negated one as success.
+      const negated = /(does\s*not|doesn't|no such|not\s+found|invalid|unknown)/i.test(msg);
+      const duplicate = /(already\s+exists|duplicate|already\s+present|already\s+created)/i.test(msg);
+      if (duplicate && !negated) {
         return { ok: true, webOrderNo, soCode, skipped: true, reason: msg, ucTarget: targetCfg.label };
       }
       return { ok: false, webOrderNo, soCode, error: msg, ucTarget: targetCfg.label };

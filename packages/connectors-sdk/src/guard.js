@@ -28,11 +28,23 @@ export const DEFAULT_POLICY = Object.freeze({
   jitterMs: 700,          // random extra, so the cadence is never metronomic
   maxConcurrent: 1,       // serial per portal — never parallelize one session
   maxRetries: 2,          // per call, on transient failures only
-  backoffBaseMs: 2000,
-  backoffMaxMs: 60_000,
+  // Backoff follows the AWS SDK model: full jitter over an exponential window, capped
+  // at 20s, with a LONGER base for throttling than for transient faults. A 429 means
+  // the service actively rejected us, so waiting 50ms and trying again is worse than
+  // useless — it deepens the throttle.
+  transientBaseMs: 50,
+  throttleBaseMs: 1000,
+  backoffMaxMs: 20_000,
   maxRetryAfterMs: 300_000, // honour Retry-After up to 5 min; beyond that, give up and alert
   breakerThreshold: 3,    // consecutive block signals before the circuit opens
   dailyBudget: 5000,      // requests per portal per rolling 24h
+  // Retry quota, also from the AWS model: retries spend tokens and successes refund
+  // them, so a portal having a bad hour makes us fail fast instead of multiplying our
+  // own traffic at the worst possible moment.
+  retryQuota: 500,
+  transientRetryCost: 14,
+  throttleRetryCost: 5,
+  retryRefund: 1,
 });
 
 /** Signals that mean "the portal is pushing back", as opposed to an ordinary error. */
@@ -141,6 +153,7 @@ export function createPortalGuard({
 
   let lastRequestAt = 0;
   let chain = Promise.resolve(); // serializes every call through this guard
+  let retryTokens = p.retryQuota;
   const spend = []; // request timestamps, trimmed to a rolling 24h
 
   function budgetRemaining() {
@@ -156,10 +169,28 @@ export function createPortalGuard({
     lastRequestAt = now();
   }
 
-  function backoffFor(attempt) {
-    const base = Math.min(p.backoffBaseMs * (2 ** attempt), p.backoffMaxMs);
-    // Full jitter: two workers that failed together must not retry together.
-    return Math.floor(base / 2 + random() * (base / 2));
+  /**
+   * Full jitter over an exponential window: delay = random(0,1) × min(cap, base × 2^n).
+   * Full jitter — not "half the window plus jitter" — is what actually breaks up a
+   * thundering herd, because two clients that failed at the same instant can land
+   * anywhere in the window rather than clustering in its upper half.
+   */
+  function backoffFor(attempt, kind = 'transient') {
+    const base = kind === 'throttle' ? p.throttleBaseMs : p.transientBaseMs;
+    const window = Math.min(base * (2 ** attempt), p.backoffMaxMs);
+    return Math.floor(random() * window);
+  }
+
+  /**
+   * Retry quota. Retrying costs tokens; a success refunds one. When the bucket empties
+   * we stop retrying entirely and fail fast — during a real outage, our retries are
+   * part of the problem, and backing off helps the portal recover.
+   */
+  function spendRetryToken(kind) {
+    const cost = kind === 'throttle' ? p.throttleRetryCost : p.transientRetryCost;
+    if (retryTokens < cost) return false;
+    retryTokens -= cost;
+    return true;
   }
 
   /**
@@ -195,11 +226,11 @@ export function createPortalGuard({
           res = await fetchOnce();
         } catch (err) {
           // Transport failure (DNS, socket). Retry — this is not a block signal.
-          if (attempt === p.maxRetries) {
+          if (attempt === p.maxRetries || !spendRetryToken('transient')) {
             return connectorError(CONNECTOR_ERROR_CODES.UPSTREAM_ERROR,
               `${portal}: ${String(err.message || err)}`, { portal, retryable: true });
           }
-          await sleep(backoffFor(attempt));
+          await sleep(backoffFor(attempt, 'transient'));
           continue;
         }
 
@@ -213,8 +244,10 @@ export function createPortalGuard({
 
         if (signal === BLOCK_SIGNALS.RATE_LIMITED) {
           breaker.recordBlock(signal, now());
-          const wait = retryAfterMs(res.headers || {}, { now, max: p.maxRetryAfterMs }) ?? backoffFor(attempt);
-          if (attempt === p.maxRetries || breaker.open) {
+          // Retry-After always wins over our own backoff when the server sends one.
+          const wait = retryAfterMs(res.headers || {}, { now, max: p.maxRetryAfterMs })
+            ?? backoffFor(attempt, 'throttle');
+          if (attempt === p.maxRetries || breaker.open || !spendRetryToken('throttle')) {
             onAlert?.({ portal, signal, label: meta.label, breakerOpen: breaker.open });
             return connectorError(CONNECTOR_ERROR_CODES.RATE_LIMITED,
               `${portal} is rate-limiting us. Backing off; the connector will not retry automatically.`,
@@ -235,15 +268,16 @@ export function createPortalGuard({
         }
 
         if (res.status >= 500) {
-          if (attempt === p.maxRetries) {
+          if (attempt === p.maxRetries || !spendRetryToken('transient')) {
             return connectorError(CONNECTOR_ERROR_CODES.UPSTREAM_ERROR,
               `${portal} returned ${res.status}`, { portal, status: res.status, retryable: true });
           }
-          await sleep(backoffFor(attempt));
+          await sleep(backoffFor(attempt, 'transient'));
           continue;
         }
 
         breaker.recordSuccess();
+        retryTokens = Math.min(p.retryQuota, retryTokens + p.retryRefund);
         return { ok: true, response: res };
       }
 
@@ -270,6 +304,8 @@ export function createPortalGuard({
         consecutiveBlocks: breaker.consecutive,
         budgetRemaining: budgetRemaining(),
         dailyBudget: p.dailyBudget,
+        retryTokens,
+        retryQuota: p.retryQuota,
       };
     },
     /** Operator action after they have checked the account is healthy. */

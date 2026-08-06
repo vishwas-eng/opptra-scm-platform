@@ -53,6 +53,43 @@ export function encryptPasswordRsaPkcs1(plaintext, publicKeyPem) {
   return buf.toString('base64');
 }
 
+/**
+ * Decide whether a Vinculum import actually succeeded.
+ *
+ * Struts apps answer HTTP 200 with an HTML error page, so "2xx and not a login page"
+ * reported success for a rejected file — the inventory would look pushed and would not
+ * be. An import we cannot positively confirm is reported as unconfirmed, not as done:
+ * for a live stock write, a false success is far worse than a false alarm.
+ *
+ * @returns {{ ok: boolean, confirmed: boolean, reason: string, preview: string }}
+ */
+export function classifyImportResponse(status, body) {
+  const text = String(body || '');
+  const preview = text.slice(0, 400);
+
+  if (status < 200 || status >= 400) {
+    return { ok: false, confirmed: true, reason: `HTTP ${status}`, preview };
+  }
+  if (/Invalid Login|Login Failed|sellerPanalLogin/i.test(text)) {
+    return { ok: false, confirmed: true, reason: 'session expired — bounced to login', preview };
+  }
+  // Explicit failure wording from the importer.
+  const failure = text.match(/(error|failed|failure|invalid|not\s+uploaded|rejected)[^<>{]{0,120}/i);
+  if (failure) {
+    return { ok: false, confirmed: true, reason: `import reported: ${failure[0].trim().slice(0, 120)}`, preview };
+  }
+  // Positive confirmation from the importer.
+  if (/(success|uploaded\s+successfully|import(ed)?\s+successfully|records?\s+processed)/i.test(text)) {
+    return { ok: true, confirmed: true, reason: 'import confirmed', preview };
+  }
+  return {
+    ok: false,
+    confirmed: false,
+    reason: 'upload accepted but Vinculum did not confirm the import — verify in the portal before trusting the stock levels',
+    preview,
+  };
+}
+
 export function mapOrderRow(row) {
   const p = (n) => row?.[`param${n}`] ?? row?.[`PARAM${n}`] ?? '';
   const webOrderNo = String(p(1) || '').trim();
@@ -315,8 +352,7 @@ export function makeVinculumClient(cfg = {}) {
     const res = await fetch(url, { method: 'POST', headers: h, body: form });
     mergeJar(jar, res.headers.getSetCookie?.() || res.headers.get('set-cookie'));
     const text = await res.text();
-    const ok = res.status >= 200 && res.status < 400 && !/Invalid Login|Login Failed/i.test(text);
-    return { ok, status: res.status, preview: text.slice(0, 400) };
+    return { ...classifyImportResponse(res.status, text), status: res.status };
   }
 
   async function listActiveOrders(opts = {}) {

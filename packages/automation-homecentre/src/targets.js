@@ -10,10 +10,27 @@ function truthy(v) {
   return /^(1|true|yes|on)$/i.test(String(v ?? '').trim());
 }
 
+/**
+ * Parse HC_SKU_MAP_JSON.
+ *
+ * A malformed map used to be swallowed into `{}`, which is indistinguishable from "no
+ * map configured" — so a typo in the env silently degraded every order to the identity
+ * mapping (or, on staging, to the `optest` fallback) and the sync still reported
+ * success. A bad map is a configuration error and must be loud.
+ */
 export function parseSkuMap(raw) {
   if (!raw) return {};
   if (typeof raw === 'object') return raw;
-  try { return JSON.parse(raw); } catch { return {}; }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`HC_SKU_MAP_JSON is not valid JSON (${err.message}). Fix it or unset it — an unparseable map would silently map every SKU to itself.`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('HC_SKU_MAP_JSON must be a JSON object of {"hcSku":"ucSku"} pairs.');
+  }
+  return parsed;
 }
 
 /** Effective run mode for writes. Production Vinculum inventory + UAE SO require HC_LIVE. */

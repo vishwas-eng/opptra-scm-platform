@@ -271,19 +271,30 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
     }
 
     const skuList = Array.isArray(skus) ? skus.map(String).filter(Boolean).slice(0, 50) : [];
+    // Without SKUs this used to make no calls at all and still return ok:true — a
+    // scheduled job would report success forever while doing nothing. Say so instead.
+    if (!skuList.length) {
+      return {
+        ok: false,
+        dryRun,
+        ownerEmail,
+        ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
+        message: 'No SKUs given — pass skus[] to read UC inventory. Nothing was checked.',
+        snapshotCount: 0,
+      };
+    }
+
     let snapshots = [];
     let sample = null;
     try {
-      if (skuList.length) {
-        const fac = target.facility ? { facility: target.facility } : {};
-        const snap = await client.public(
-          '/services/rest/v1/inventory/inventorySnapshot/get',
-          { itemTypeSKUs: skuList },
-          { ...fac, idempotent: true },
-        );
-        snapshots = snap?.inventorySnapshots || [];
-        sample = snapshots[0] || null;
-      }
+      const fac = target.facility ? { facility: target.facility } : {};
+      const snap = await client.public(
+        '/services/rest/v1/inventory/inventorySnapshot/get',
+        { itemTypeSKUs: skuList },
+        { ...fac, idempotent: true },
+      );
+      snapshots = snap?.inventorySnapshots || [];
+      sample = snapshots[0] || null;
     } catch (err) {
       return {
         ok: false,

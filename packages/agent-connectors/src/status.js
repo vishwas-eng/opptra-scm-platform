@@ -163,7 +163,13 @@ export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) 
       connectHint = hcReady ? 'Vinculum creds configured' : 'Set VINCULUM_USER / VINCULUM_PASS on server';
     }
 
-    const userEnabled = pref ? !!pref.enabled : systemReady;
+    // Platform connectors are the company's own machine identity (our Unicommerce
+    // session, our Waypoint DB, our Vinculum login). They are on for everyone the
+    // moment an admin configures them — a per-user enable toggle would only let
+    // someone switch off a credential they do not own and then wonder why their
+    // automations stopped.
+    const isPlatform = meta.scope === 'platform';
+    const userEnabled = isPlatform ? systemReady : (pref ? !!pref.enabled : systemReady);
     const connected = !!(systemReady && userEnabled);
     let status = 'disconnected';
     if (connected) status = 'connected';
@@ -181,7 +187,8 @@ export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) 
       resources,
       oauthUrl,
       beta: true,
-      connectEnabled: true,
+      // Only user-scoped connectors get a Connect/Disconnect control.
+      connectEnabled: !isPlatform,
     };
   });
 }

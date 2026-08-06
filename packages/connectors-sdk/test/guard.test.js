@@ -116,15 +116,49 @@ test('403 and CAPTCHA stop immediately — retrying into a block is what causes 
   }
 });
 
-test('5xx retries with exponential backoff, then reports upstream failure', async () => {
-  const { guard, slept } = harness({ minDelayMs: 0, jitterMs: 0, maxRetries: 2, backoffBaseMs: 1000 });
+test('5xx retries with full-jitter exponential backoff, then reports upstream failure', async () => {
+  const { guard, slept } = harness({ minDelayMs: 0, jitterMs: 0, maxRetries: 2, transientBaseMs: 1000 });
   let calls = 0;
   const r = await guard.run(async () => { calls += 1; return { status: 503, headers: {}, body: '' }; });
   assert.equal(calls, 3, 'initial attempt plus two retries');
   assert.equal(r.code, 'UPSTREAM_ERROR');
   assert.equal(r.retryable, true);
-  // random()=0.5 → base/2 + 0.5*(base/2): 1000→750, 2000→1500
-  assert.deepEqual(slept, [750, 1500]);
+  // Full jitter = random() × window, window doubling: 1000→500, 2000→1000 at random()=0.5
+  assert.deepEqual(slept, [500, 1000]);
+});
+
+test('throttling waits far longer than a transient fault at the same attempt number', async () => {
+  // A 429 means the service actively rejected us; retrying on the transient timescale
+  // deepens the throttle instead of clearing it.
+  const opts = { minDelayMs: 0, jitterMs: 0, maxRetries: 1, transientBaseMs: 50, throttleBaseMs: 1000 };
+
+  const t = harness(opts);
+  let n = 0;
+  await t.guard.run(async () => (n++ === 0 ? { status: 500, headers: {}, body: '' } : okRes()));
+
+  const th = harness(opts);
+  let m = 0;
+  await th.guard.run(async () => (m++ === 0 ? { status: 429, headers: {}, body: '' } : okRes()));
+
+  assert.ok(th.slept[0] > t.slept[0] * 10, `throttle wait ${th.slept[0]} should dwarf transient ${t.slept[0]}`);
+});
+
+test('the retry quota makes a sustained outage fail fast instead of multiplying our traffic', async () => {
+  // 3 tokens, 14 per transient retry → the very first retry is unaffordable.
+  const { guard } = harness({ minDelayMs: 0, jitterMs: 0, maxRetries: 5, retryQuota: 3 });
+  let calls = 0;
+  const r = await guard.run(async () => { calls += 1; return { status: 503, headers: {}, body: '' }; });
+  assert.equal(calls, 1, 'with no tokens to spend, do not retry at all');
+  assert.equal(r.code, 'UPSTREAM_ERROR');
+});
+
+test('successes refund retry tokens, so an occasional blip never exhausts the quota', async () => {
+  const { guard } = harness({ minDelayMs: 0, jitterMs: 0, maxRetries: 1, retryQuota: 100, transientRetryCost: 10, retryRefund: 10 });
+  const before = guard.status().retryTokens;
+  let n = 0;
+  await guard.run(async () => (n++ === 0 ? { status: 500, headers: {}, body: '' } : okRes()));
+  // Spent 10 on the retry, refunded 10 on the eventual success.
+  assert.equal(guard.status().retryTokens, before);
 });
 
 /* --------------------------- circuit breaker --------------------------- */
