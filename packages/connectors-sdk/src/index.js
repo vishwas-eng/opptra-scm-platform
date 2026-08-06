@@ -7,6 +7,9 @@ export {
   CONNECTOR_ERROR_CODES, connectorError, isRetryable,
 } from './errors.js';
 export { createStubConnector } from './stub.js';
+export {
+  createPortalGuard, detectBlock, retryAfterMs, BLOCK_SIGNALS, DEFAULT_POLICY,
+} from './guard.js';
 
 // One Ajv per process is enough: compile() is pure and the compiled validators are
 // stored per-action, so registries never share validation state.
