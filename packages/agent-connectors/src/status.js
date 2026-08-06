@@ -28,6 +28,27 @@ async function ucSessionMeta() {
   }
 }
 
+/**
+ * Latest capture per connector, so a not-yet-live channel can show real progress
+ * ("blueprint ready · 34 endpoints") instead of a dead "Coming soon" chip. One query
+ * for every connector — this runs on each Connectors render and each chat turn.
+ */
+async function latestCaptureByConnector() {
+  try {
+    const { rows } = await query(
+      `SELECT DISTINCT ON (connector_id)
+              connector_id, capture_uid, status, entry_count, session_saved, created_at,
+              analysis -> 'summary' AS summary
+       FROM capture_sessions
+       ORDER BY connector_id, created_at DESC`,
+    );
+    return Object.fromEntries(rows.map((r) => [r.connector_id, r]));
+  } catch {
+    // The table may not exist yet on an un-migrated deploy; absence is not an error.
+    return {};
+  }
+}
+
 export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) {
   const cfg = config();
   const prefMap = Object.fromEntries((prefs || []).map((p) => [p.connector_id, p]));
@@ -50,6 +71,7 @@ export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) 
   const driveResources = userEmail
     ? await listConnectorResources({ userEmail, connectorId: 'google-drive' }).catch(() => [])
     : [];
+  const captures = await latestCaptureByConnector();
 
   return CONNECTOR_META.map((meta) => {
     const pref = prefMap[meta.id];
@@ -60,17 +82,44 @@ export async function buildConnectorStatus(prefs = [], { userEmail = '' } = {}) 
     let resources = [];
 
     if (!meta.live) {
+      // Not live yet — but "not live" is a pipeline stage, not a dead end. Report how
+      // far this channel has actually got so the operator sees progress and knows the
+      // next action: authorize (Amazon) or run a capture (every other portal).
+      const capture = captures[meta.id];
+      const summary = capture?.summary || {};
+      const captureProgress = capture
+        ? {
+          captureUid: capture.capture_uid,
+          status: capture.status,
+          entries: capture.entry_count,
+          endpoints: summary.endpoints ?? null,
+          primaryHost: summary.primaryHost ?? null,
+          sessionSaved: !!capture.session_saved,
+          capturedAt: capture.created_at,
+        }
+        : null;
+      let hint;
+      if (meta.connectMode === 'oauth-amazon') {
+        hint = 'Authorize once in Seller Central (India / UAE / KSA)';
+      } else if (captureProgress?.status === 'ready') {
+        hint = `Blueprint ready · ${captureProgress.endpoints ?? 0} endpoints on ${captureProgress.primaryHost || 'portal'}`;
+      } else {
+        hint = 'Log in once with the Capture extension — we map the portal';
+      }
       return {
         ...meta,
         systemReady: false,
         userEnabled: false,
         connected: false,
-        status: 'coming_soon',
-        connectHint: 'Coming soon',
-        detail: { disabled: true },
+        status: captureProgress?.status === 'ready' ? 'blueprint_ready' : 'coming_soon',
+        connectHint: hint,
+        detail: { disabled: true, capture: captureProgress },
         resources: [],
         beta: true,
+        // The Connect button is live for these — it starts an authorization or explains
+        // how to run a capture. Only the TOOLS stay gated until the connector is proven.
         connectEnabled: false,
+        connectMode: meta.connectMode,
       };
     }
 
