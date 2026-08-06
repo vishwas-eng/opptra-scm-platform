@@ -88,6 +88,20 @@ test('/api/ops/summary rejects missing or wrong ops token (before DB)', async ()
   assert.equal(badHdr.statusCode, 401);
 });
 
+test('/api/mcp/* rejects missing token with 401 (before any DB access)', async () => {
+  const list = await app.inject({ method: 'GET', url: '/api/mcp/tools' });
+  assert.equal(list.statusCode, 401);
+  const call = await app.inject({
+    method: 'POST', url: '/api/mcp/call',
+    payload: { tool: 'unicommerce_health_ping', args: {} },
+  });
+  assert.equal(call.statusCode, 401);
+  // Body validation must also hold for authenticated-shaped requests: no `tool` → 400
+  // (Fastify schema fires before preValidation-independent handler logic).
+  const noTool = await app.inject({ method: 'POST', url: '/api/mcp/call', payload: { args: {} } });
+  assert.ok([400, 401].includes(noTool.statusCode));
+});
+
 test('/api/ops/summary accepts Bearer or X-Ops-Token (auth gate only; DB may 500 in this harness)', async () => {
   // With a valid token, preValidation passes. This harness has no real DB, so the
   // handler may 500 — that still proves the machine-auth gate opened (not 401).

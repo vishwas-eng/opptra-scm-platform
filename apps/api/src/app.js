@@ -54,6 +54,7 @@ export async function buildApp({ withStatic = true } = {}) {
   await app.register(import('./routes/googleAuth.js'));
   await app.register(import('./routes/automations.js'));
   await app.register(import('./routes/connectors.js'));
+  await app.register(import('./routes/mcp.js'));
   await app.register(import('./agent/routes.js'));
 
   if (withStatic) {

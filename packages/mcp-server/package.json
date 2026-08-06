@@ -1,0 +1,9 @@
+{
+  "name": "@opptra/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/handler.js",
+  "exports": { ".": "./src/handler.js" },
+  "bin": { "opptra-mcp": "bin/opptra-mcp.js" }
+}
