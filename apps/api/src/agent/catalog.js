@@ -2,7 +2,7 @@
 // execution live in @opptra/agent-connectors (shared with the worker). The one thing the
 // API adds is HOW Unicommerce is reached: enqueue connector.unicommerce.invoke and poll
 // the Run, because only the worker process may talk to UC.
-import { config, query, createRun } from '@opptra/core';
+import { config, query, createRun, upsertChannelSchedule } from '@opptra/core';
 import {
   LIVE_CONNECTOR_IDS, isLiveConnector, CONNECTOR_META,
   buildConnectorStatus, buildToolSpecs, isKnownTool,
@@ -50,11 +50,62 @@ function makeApiInvokeUc(userEmail) {
   };
 }
 
+/**
+ * Let the agent start a channel job and schedule it — the bridge between "tell the
+ * agent what you want" and the Channels screen. It goes through the same queue and the
+ * same Run row as the button, so an agent-started sync is attributed and audited
+ * identically to a human-started one.
+ */
+function makeChannelRunners(userEmail) {
+  const JOB_FOR = {
+    homecentre: { inventory: 'homecentre.inventory', orders: 'homecentre.sync' },
+    '6thstreet': { inventory: 'street6.inventory', orders: 'street6.packEmail' },
+  };
+
+  return {
+    async runChannelOperation({ connectorId, region, operation, dryRun = true, limit }) {
+      const jobName = JOB_FOR[connectorId]?.[operation];
+      if (!jobName) return { ok: false, error: `unknown operation ${connectorId}/${operation}` };
+
+      const run = await createRun({
+        userEmail,
+        automation: connectorId,
+        action: `${operation}:${region}`,
+        input: { region, operation, dryRun, via: 'agent' },
+      });
+      await enqueue(jobName, {
+        runUid: run.run_uid,
+        input: { dryRun, region, ucInstance: region, ...(limit ? { limit } : {}) },
+      });
+      // Wait for the result so the agent can SHOW the operator what happened rather
+      // than saying "queued" and leaving them to go looking.
+      const result = await waitForRun(run.run_uid);
+      return { ok: result.ok !== false, runUid: run.run_uid, region, operation, dryRun, result };
+    },
+
+    async scheduleChannelOperation({ connectorId, region, operation, enabled, hour, minute, dryRun }) {
+      const schedule = await upsertChannelSchedule({
+        connectorId,
+        region,
+        operation,
+        enabled,
+        hour,
+        minute,
+        timezone: region === 'ksa' ? 'Asia/Riyadh' : 'Asia/Dubai',
+        dryRun,
+        ownerEmail: userEmail,
+      });
+      return { ok: true, schedule };
+    },
+  };
+}
+
 export function makeToolExecutor({ userEmail, connectedIds }) {
   return makeSharedToolExecutor({
     userEmail,
     connectedIds,
     invokeUc: makeApiInvokeUc(userEmail),
+    ...makeChannelRunners(userEmail),
   });
 }
 

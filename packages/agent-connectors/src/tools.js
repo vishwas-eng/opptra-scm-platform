@@ -100,6 +100,36 @@ export const TOOLS_BY_CONNECTOR = {
   homecentre: [
     { name: 'homecentre_health_ping', description: 'Home Centre / Vinculum login health', parameters: { type: 'object', properties: {} } },
     { name: 'homecentre_orders_list', description: 'List active Home Centre orders', parameters: { type: 'object', properties: { limit: { type: 'integer' } } } },
+    {
+      name: 'homecentre_run_operation',
+      description: 'Run a Home Centre job for one region and report what it did. Defaults to a dry run — set dryRun:false only when the user explicitly asks to write for real.',
+      parameters: {
+        type: 'object',
+        properties: {
+          operation: { type: 'string', enum: ['inventory', 'orders'], description: 'inventory = push stock to Home Centre; orders = punch HC orders into Unicommerce' },
+          region: { type: 'string', enum: ['uae', 'ksa'], description: 'UAE and KSA are separate marketplaces' },
+          dryRun: { type: 'boolean', description: 'default true — preview without writing' },
+          limit: { type: 'integer', description: 'max orders to process' },
+        },
+        required: ['operation', 'region'],
+      },
+    },
+    {
+      name: 'homecentre_schedule_operation',
+      description: 'Schedule a Home Centre job to run daily at a chosen local time, or turn the schedule off. Run it once first and show the user the result before scheduling.',
+      parameters: {
+        type: 'object',
+        properties: {
+          operation: { type: 'string', enum: ['inventory', 'orders'] },
+          region: { type: 'string', enum: ['uae', 'ksa'] },
+          enabled: { type: 'boolean' },
+          hour: { type: 'integer', minimum: 0, maximum: 23, description: 'local hour in the region timezone' },
+          minute: { type: 'integer', enum: [0, 15, 30, 45] },
+          dryRun: { type: 'boolean', description: 'whether the scheduled run writes for real' },
+        },
+        required: ['operation', 'region', 'enabled'],
+      },
+    },
   ],
 };
 
@@ -165,7 +195,7 @@ function clampRows(values) {
  *   invokeUc: (action: string, params?: object) => Promise<object>,
  * }} opts
  */
-export function makeToolExecutor({ userEmail, connectedIds, invokeUc }) {
+export function makeToolExecutor({ userEmail, connectedIds, invokeUc, runChannelOperation, scheduleChannelOperation }) {
   const set = new Set((connectedIds || []).filter(isLiveConnector));
   if (typeof invokeUc !== 'function') {
     // Fail closed at construction, not on first UC call at 3 AM inside a playbook.
@@ -502,6 +532,43 @@ export function makeToolExecutor({ userEmail, connectedIds, invokeUc }) {
           orders: (data.orders || []).slice(0, limit),
         });
       }
+      if (tool === 'homecentre_run_operation') {
+        if (typeof runChannelOperation !== 'function') {
+          return connectorError(CONNECTOR_ERROR_CODES.INTERNAL,
+            'Channel operations can only be started from the app, not from this context.');
+        }
+        // Dry-run unless the user asked otherwise IN WORDS. An agent must never infer
+        // permission to write to a live marketplace from an ambiguous instruction.
+        const dryRun = args.dryRun !== false;
+        const r = await runChannelOperation({
+          connectorId: 'homecentre',
+          region: args.region,
+          operation: args.operation,
+          dryRun,
+          limit: args.limit,
+          userEmail,
+        });
+        return sanitizeResult(r);
+      }
+
+      if (tool === 'homecentre_schedule_operation') {
+        if (typeof scheduleChannelOperation !== 'function') {
+          return connectorError(CONNECTOR_ERROR_CODES.INTERNAL,
+            'Schedules can only be changed from the app, not from this context.');
+        }
+        const r = await scheduleChannelOperation({
+          connectorId: 'homecentre',
+          region: args.region,
+          operation: args.operation,
+          enabled: !!args.enabled,
+          hour: args.hour ?? 9,
+          minute: args.minute ?? 0,
+          dryRun: args.dryRun !== false,
+          userEmail,
+        });
+        return sanitizeResult(r);
+      }
+
       return connectorError(CONNECTOR_ERROR_CODES.UNKNOWN_ACTION, `Unknown Home Centre tool: ${tool}`);
     } catch (err) {
       return connectorError(CONNECTOR_ERROR_CODES.UPSTREAM_ERROR, String(err.message || err));

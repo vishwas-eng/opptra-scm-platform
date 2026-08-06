@@ -17,6 +17,7 @@ const Packing = lazy(() => import('./screens/Packing.jsx'));
 const SheetUpdate = lazy(() => import('./screens/SheetUpdate.jsx'));
 const EwayBill = lazy(() => import('./screens/EwayBill.jsx'));
 const HomeCentre = lazy(() => import('./screens/HomeCentre.jsx'));
+const Channels = lazy(() => import('./screens/Channels.jsx'));
 const Returns = lazy(() => import('./screens/Returns.jsx'));
 const Inventory = lazy(() => import('./screens/Inventory.jsx'));
 const Schedules = lazy(() => import('./screens/Schedules.jsx'));
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="/sheet" element={<SheetUpdate />} />
           <Route path="/eway-bill" element={<EwayBill />} />
           <Route path="/home-centre" element={<HomeCentre />} />
+          <Route path="/channels" element={<Channels />} />
           <Route path="/returns" element={<Returns />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/schedules" element={<Schedules />} />

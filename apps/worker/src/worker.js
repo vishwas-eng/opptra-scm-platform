@@ -227,6 +227,19 @@ if (cfg.STREET6_SYNC_MINUTES > 0) {
   await queue.removeJobScheduler('street6-sync').catch(() => {});
 }
 
+// Channel schedules (Home Centre UAE/KSA, 6th Street) live in the DB, not in env, so
+// operators can change the timing per region without a redeploy. Reconcile at boot and
+// then on a slow tick — a schedule saved in the UI takes effect within a minute.
+try {
+  const { reconcileChannelSchedules } = await import('./channelSchedulers.js');
+  await reconcileChannelSchedules(queue);
+  setInterval(() => {
+    reconcileChannelSchedules(queue).catch((err) => logger.error({ err: String(err) }, 'channel schedule reconcile failed'));
+  }, 60_000).unref();
+} catch (err) {
+  logger.error({ err: String(err) }, 'channel schedule reconcile failed at boot');
+}
+
 // Re-register active daily Agent playbooks after deploy/restart.
 try {
   const { listActiveDailyPlaybooks, playbookCron } = await import('@opptra/core');

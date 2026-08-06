@@ -51,3 +51,11 @@ export {
   isValidGstin,
   isValidBulkReturnId,
 } from './validate.js';
+export {
+  createRelayJob, claimRelayJob, completeRelayJob, getRelayJob, listRelayJobs,
+} from './relayJobs.js';
+export {
+  CHANNEL_OPERATIONS, CHANNEL_REGIONS, regionsFor, assertScheduleShape,
+  listChannelSchedules, upsertChannelSchedule, markChannelScheduleRun,
+  listEnabledChannelSchedules, scheduleCron, scheduleKey,
+} from './channelSchedules.js';

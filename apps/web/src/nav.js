@@ -14,7 +14,7 @@ export const NAV = [
   { path: '/packing', id: 'packing', label: 'Packing Mail', icon: '✉', title: 'Packing Mail' },
   { path: '/sheet', id: 'sheet', label: 'Sheet Update', icon: '▦', title: 'Sheet Update' },
   { path: '/eway-bill', id: 'ewaybill', label: 'E-way Bill', icon: '▤', title: 'E-way Bill Generation' },
-  { path: '/home-centre', id: 'homecentre', label: 'Home Centre Sync', icon: '⇄', title: 'Home Centre Sync', region: 'gcc' },
+  { path: '/channels', id: 'channels', label: 'Channels', icon: '⇄', title: 'Channel Operations' },
   { path: '/returns', id: 'return', label: 'Return Flow', icon: '↺', title: 'Return + Re-dispatch' },
   { path: '/inventory', id: 'inventory', label: 'Inward / Outward', icon: '⇅', title: 'Inward / Outward / Full-cycle' },
   { path: '/schedules', id: 'schedules', label: 'Scheduled Jobs', icon: '⏱', title: 'Scheduled Jobs' },

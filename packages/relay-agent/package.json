@@ -1,0 +1,9 @@
+{
+  "name": "@opptra/relay-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/oms.js",
+  "exports": { ".": "./src/oms.js" },
+  "bin": { "opptra-relay": "bin/opptra-relay.js" }
+}

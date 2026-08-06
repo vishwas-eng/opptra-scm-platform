@@ -57,6 +57,8 @@ export async function buildApp({ withStatic = true } = {}) {
   await app.register(import('./routes/connectors.js'));
   await app.register(import('./routes/mcp.js'));
   await app.register(import('./routes/capture.js'));
+  await app.register(import('./routes/relay.js'));
+  await app.register(import('./routes/channels.js'));
   await app.register(import('./agent/routes.js'));
 
   if (withStatic) {
