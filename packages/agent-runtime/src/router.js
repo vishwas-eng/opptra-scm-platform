@@ -13,6 +13,23 @@ const RULES = [
     args: () => ({}),
   },
   {
+    // Specific intents must be matched BEFORE the generic "so <code>" rule below,
+    // otherwise every one of them collapses into a plain summary lookup.
+    re: /\b(?:invoice|inv)\b\s*(?:details?\s*)?(?:for|of)?\s*[:#]?\s*(?:so\s+)?([A-Z0-9_-]{3,40})\b/i,
+    tool: 'unicommerce_sale_order_get',
+    args: (m) => ({ saleOrder: m[1].toUpperCase() }),
+  },
+  {
+    re: /\b(?:package|shipment|shipping)s?\b\s*(?:for|of)?\s*[:#]?\s*(?:so\s+)?([A-Z0-9_-]{3,40})\b/i,
+    tool: 'unicommerce_shipping_packages',
+    args: (m) => ({ saleOrder: m[1].toUpperCase() }),
+  },
+  {
+    re: /\b(?:stock|inventory)\b\s*(?:for|of)?\s*[:#]?\s*(?:sku\s+)?([A-Za-z0-9_-]{2,60})\b/i,
+    tool: 'unicommerce_inventory_snapshot',
+    args: (m) => ({ skus: [m[1]] }),
+  },
+  {
     re: /(?:^|\b)(?:uc\s+)?(?:so|sale\s*order)\s*[:#]?\s*([A-Z0-9_-]{3,40})\b/i,
     tool: 'unicommerce_sale_order_summary',
     args: (m) => ({ saleOrder: m[1].toUpperCase() }),
@@ -43,9 +60,14 @@ const RULES = [
     args: () => ({ limit: 20 }),
   },
   {
+    re: /list\s+(?:my\s+)?bound\s+(?:sheets?|spreadsheets?)|\/sheets?\s+bound\b/i,
+    tool: 'sheets_list_bound',
+    args: () => ({}),
+  },
+  {
     re: /(?:read|get|show)\s+(?:sheet|spreadsheet)|sheets?\s+range|\/sheets?\b/i,
-    tool: 'sheets_get_range',
-    args: () => ({ range: 'Master!A1:G20' }),
+    tool: 'sheets_list_bound',
+    args: () => ({}),
   },
   {
     re: /list\s+(?:my\s+)?(?:recent\s+)?spreadsheets?|\/sheets?\s+list\b/i,
@@ -53,9 +75,14 @@ const RULES = [
     args: () => ({ pageSize: 20 }),
   },
   {
+    re: /list\s+(?:my\s+)?bound\s+drive|\/drive\s+bound\b/i,
+    tool: 'drive_list_bound',
+    args: () => ({}),
+  },
+  {
     re: /(?:search|find|list)\s+(?:drive|files?)|\/drive\b/i,
-    tool: 'drive_search',
-    args: () => ({ query: "mimeType != 'application/vnd.google-apps.folder'", pageSize: 10 }),
+    tool: 'drive_list_bound',
+    args: () => ({}),
   },
   {
     re: /(?:home\s*centre|homecentre|vinculum).{0,20}(?:health|ping|status)|(?:^\/(?:hc|homecentre)\s+health)/i,
@@ -85,10 +112,10 @@ export function routeIntent(message) {
         '• `/uc facilities` — list facilities',
         '• `/so SO02696` — sale order summary',
         '• `/waypoint` — recent Waypoint SOs',
-        '• `/sheets` — peek Master sheet range',
-        '• `/drive` — recent Drive files',
+        '• `/sheets` — list bound spreadsheets (bind on Connectors first)',
+        '• `/drive` — list bound Drive folders/files',
         '• `/hc health` — Home Centre (Vinculum) login',
-        'Connectors must show Connected in the panel (live only).',
+        'Connectors: account OAuth → bind specific sheets/folders → Agent tools.',
       ].join('\n'),
     };
   }

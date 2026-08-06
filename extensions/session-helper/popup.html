@@ -1,36 +1,45 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <style>
-    :root { --navy:#131A48; --orange:#FF5800; --grey:#5A5A5A; --grey-l:#CECECE; --green:#276749; }
-    body { width: 320px; margin: 0; font-family: 'Segoe UI', Roboto, sans-serif; color: var(--grey); font-size: 13px; }
-    header { background: var(--navy); color: #fff; padding: 12px 16px; font-weight: 600; }
-    header span { color: var(--orange); }
-    .body { padding: 14px 16px; }
-    label { display: block; font-size: 11px; font-weight: 600; color: var(--navy); margin: 10px 0 3px; }
-    input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--grey-l); border-radius: 7px; font-size: 12px; }
-    button { width: 100%; margin-top: 12px; padding: 10px; border: 0; border-radius: 7px; font-weight: 600; font-size: 13px; cursor: pointer; }
-    .primary { background: var(--orange); color: #fff; }
-    .secondary { background: #fff; color: var(--navy); border: 1px solid var(--grey-l); }
-    .msg { margin-top: 10px; font-size: 12px; padding: 8px 10px; border-radius: 7px; display: none; }
-    .msg.ok { background: #e7f6ec; color: #137a3a; display: block; }
-    .msg.err { background: #ffe9df; color: #9a3500; display: block; }
-    .hint { font-size: 11px; color: var(--grey); margin-top: 8px; line-height: 1.4; }
+    body { font: 13px/1.4 system-ui, sans-serif; margin: 12px; width: 300px; color: #141414; }
+    h1 { font-size: 14px; margin: 0 0 8px; }
+    label { display: block; margin: 8px 0 4px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #666; }
+    input, select { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; }
+    .row { display: flex; gap: 6px; margin-top: 10px; }
+    button { flex: 1; padding: 8px; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    #save { background: #f0f0f0; }
+    #open-uc { background: #FFE4D4; color: #141414; }
+    #capture { background: #FF5800; color: #fff; }
+    .msg { margin-top: 10px; font-size: 12px; }
+    .msg.ok { color: #1a7f37; }
+    .msg.err { color: #c45a46; }
+    .hint { font-size: 11px; color: #777; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <header>Opptra <span>Session</span> Helper</header>
-  <div class="body">
-    <label>Platform URL</label>
-    <input id="platform" placeholder="https://scm.opptra.com" />
-    <label>Ingest token (from Admin → Session Helper token)</label>
-    <input id="token" type="password" placeholder="paste token" />
-    <button class="secondary" id="save">Save settings</button>
-    <button class="primary" id="capture">Capture session &amp; send</button>
-    <div class="msg" id="msg"></div>
-    <div class="hint">Log into Unicommerce in a normal tab first (do the CAPTCHA). Then click “Capture session” — this reads only your JSESSIONID cookie and sends it to the platform. No passwords are read or stored.</div>
+  <h1>Opptra Session Helper</h1>
+  <label>Platform URL</label>
+  <input id="platform" placeholder="https://scm.opptra.com" value="https://scm.opptra.com" />
+  <label>Ingest token</label>
+  <input id="token" type="password" placeholder="from Admin → ingest token" />
+  <label>Instance</label>
+  <select id="instance">
+    <option value="india">india · oppdoor</option>
+    <option value="staging">staging · oppdoorstg</option>
+    <option value="uae">uae · opptrauae</option>
+    <option value="ksa">ksa · opptraksa</option>
+  </select>
+  <div class="row">
+    <button id="save" type="button">Save</button>
+    <button id="open-uc" type="button">Open UC</button>
   </div>
+  <div class="row">
+    <button id="capture" type="button">Capture session</button>
+  </div>
+  <div id="msg" class="msg"></div>
+  <p class="hint">You log in yourself (CAPTCHA ok). We only read the JSESSIONID cookie for the selected company and send it to SCM. One session ≠ all instances — capture each tenant you need.</p>
   <script src="popup.js"></script>
 </body>
 </html>

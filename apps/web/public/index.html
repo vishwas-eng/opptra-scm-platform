@@ -7,7 +7,7 @@
   <link rel="icon" href="/assets/opptra-logo-official.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=connectors-market-1" />
+  <link rel="stylesheet" href="styles.css?v=schedules-uc-connect-1" />
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -45,6 +45,7 @@
         <button data-tab="sheet"><i>▦</i> Sheet Update</button>
         <button data-tab="ewaybill"><i>▤</i> E-way Bill</button>
         <button data-tab="homecentre" class="region-gcc"><i>⇄</i> Home Centre Sync</button>
+        <button data-tab="schedules"><i>⏱</i> Scheduled Jobs</button>
         <div class="side-group">Coming soon</div>
         <button disabled title="Coming soon"><i>↺</i> Return Flow <span class="soon">soon</span></button>
         <button disabled title="Coming soon"><i>⇅</i> Inward / Outward <span class="soon">soon</span></button>
@@ -94,34 +95,48 @@
       </div>
 
       <main>
-        <!-- Agent · Beta (admin only) — clean chat, no connector wall -->
+        <!-- Agent · Beta (admin only) — compact chat + scheduled automations -->
         <section id="tab-agent" class="tab hidden">
           <div class="agent-chat-panel agent-chat-solo">
             <div class="agent-chat-head">
               <div>
-                <div class="workspace-eyebrow">Opptra SCM</div>
                 <h2 id="agent-chat-title">Agent <span class="beta-inline">Beta</span></h2>
               </div>
               <div class="agent-chat-actions">
-                <button type="button" id="agent-manage-connectors" class="secondary">Manage connectors</button>
-                <button type="button" id="agent-save-daily" class="secondary" title="Save last tool steps as a daily job">Automate daily</button>
-                <button type="button" id="agent-new-chat" class="secondary">New chat</button>
+                <button type="button" id="agent-manage-connectors" class="secondary compact">Connectors</button>
+                <button type="button" id="agent-save-daily" class="primary compact" title="Schedule last tool steps as a BullMQ daily job">Automate daily</button>
+                <button type="button" id="agent-new-chat" class="secondary compact">New</button>
                 <span id="agent-llm-mode" class="meta"></span>
               </div>
             </div>
             <div class="agent-tools-summary" id="agent-tools-summary"></div>
+            <div class="agent-schedule-bar hidden" id="agent-schedule-bar">
+              <form id="agent-schedule-form" class="agent-schedule-form">
+                <input type="text" id="agent-schedule-title" placeholder="Automation name" maxlength="160" required />
+                <label class="agent-schedule-hour">
+                  Daily at
+                  <select id="agent-schedule-hour"></select>
+                </label>
+                <button type="submit" class="primary compact">Schedule</button>
+                <button type="button" class="secondary compact" id="agent-schedule-cancel">Cancel</button>
+              </form>
+              <p class="meta" id="agent-schedule-hint">Saves the last successful tool steps and registers a BullMQ cron. Runs even when chat is closed.</p>
+            </div>
             <div class="agent-threads" id="agent-threads"></div>
-            <div class="agent-playbooks" id="agent-playbooks"></div>
+            <div class="agent-playbooks-wrap">
+              <div class="agent-section-label" id="agent-playbooks-label" hidden>Scheduled</div>
+              <div class="agent-playbooks" id="agent-playbooks"></div>
+            </div>
             <div class="agent-messages" id="agent-messages">
               <div class="agent-empty" id="agent-empty">
-                <h3>Automate your daily ops</h3>
-                <p>Connect <b>Sheets</b> &amp; <b>Drive</b> with your Google account, then describe the work — sheet→sheet, Drive→sheet, UC into Master.</p>
-                <p class="agent-empty-hints"><button type="button" class="linkish" id="agent-empty-connectors">Manage connectors</button> · try <code>list my recent spreadsheets</code></p>
+                <h3>Build a daily workflow</h3>
+                <p>Connect Sheets, bind a spreadsheet, run tools in chat — then <b>Automate daily</b> to keep it on a BullMQ schedule.</p>
+                <p class="agent-empty-hints"><button type="button" class="linkish" id="agent-empty-connectors">Connectors</button> · <code>/sheets</code> · <code>/uc health</code></p>
               </div>
             </div>
             <form class="agent-composer" id="agent-composer">
-              <textarea id="agent-input" rows="2" placeholder="Describe a daily Sheets / Drive / UC workflow…" autocomplete="off"></textarea>
-              <button type="submit" id="agent-send" class="primary">Send</button>
+              <textarea id="agent-input" rows="2" placeholder="e.g. read bound Master A1:G20, then append new rows…" autocomplete="off"></textarea>
+              <button type="submit" id="agent-send" class="primary compact">Send</button>
             </form>
           </div>
         </section>
@@ -131,11 +146,10 @@
           <div class="connectors-page">
             <div class="connectors-page-head">
               <div>
-                <div class="workspace-eyebrow">Integrations</div>
                 <h2>Connectors <span class="beta-inline">Beta</span></h2>
-                <p class="lead">Connect the tools Opptra uses every day. Marketplace channels are listed as coming soon.</p>
+                <p class="lead">Account → bind resources → Agent tools. Marketplaces stay coming soon.</p>
               </div>
-              <button type="button" id="connectors-open-agent" class="primary">Open Agent</button>
+              <button type="button" id="connectors-open-agent" class="primary compact">Open Agent</button>
             </div>
             <h3 class="connectors-section-title">Live</h3>
             <div class="connectors-grid" id="connectors-grid-live"></div>
@@ -322,17 +336,64 @@
           </div>
         </section>
 
-        <!-- Home Centre (GCC) — manual only -->
+        <!-- Scheduled running jobs (HC + 6th Street + sheet) -->
+        <section id="tab-schedules" class="tab hidden">
+          <h2>Scheduled Jobs</h2>
+          <p class="lead" style="margin-bottom:12px">Platform sync jobs that keep running. Home Centre = inventory + sale orders in <b>one</b> job. 6th Street = pack-email + inventory in <b>one</b> job.</p>
+          <div id="schedules-board" class="schedules-board"></div>
+          <div class="panel" style="margin-top:16px">
+            <h3>Connect Unicommerce (no paste every time)</h3>
+            <p class="meta">Click Connect → pick instance (india / staging / uae / ksa) → Open login → log in yourself → Capture via Session Helper (or paste once). Each company has its own JSESSIONID — they never share.</p>
+            <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:10px">
+              <label>Instance
+                <select id="uc-connect-instance">
+                  <option value="india">india · oppdoor</option>
+                  <option value="staging">staging · oppdoorstg</option>
+                  <option value="uae">uae · opptrauae</option>
+                  <option value="ksa">ksa · opptraksa</option>
+                </select>
+              </label>
+              <button type="button" id="uc-connect-open" class="primary">Open Unicommerce login</button>
+              <button type="button" id="uc-connect-paste-toggle" class="secondary">Paste session</button>
+              <a class="dl-btn" href="/downloads/opptra-session-helper.zip" download>Session Helper</a>
+            </div>
+            <div id="uc-connect-paste" class="hidden" style="margin-top:12px">
+              <label>JSESSIONID for selected instance
+                <input id="uc-connect-cookie" type="text" placeholder="paste JSESSIONID value" autocomplete="off" />
+              </label>
+              <button type="button" id="uc-connect-save" class="primary compact">Verify &amp; save</button>
+            </div>
+            <div id="uc-sessions-board" class="meta" style="margin-top:12px"></div>
+          </div>
+        </section>
+
+        <!-- Home Centre (GCC) — staging-first orders; UAE inventory -->
         <section id="tab-homecentre" class="tab hidden">
           <h2>Home Centre Sync</h2>
+          <div class="panel" id="hc-status-panel">
+            <div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+              <div>
+                <span class="badge" id="hc-mode-badge">Staging / Dry-run</span>
+                <span class="meta" id="hc-owner-meta" style="margin-left:8px"></span>
+              </div>
+              <button type="button" id="hc-refresh-status" class="secondary compact">Refresh status</button>
+            </div>
+            <div id="hc-status-kv" class="meta" style="margin-top:10px"></div>
+            <table class="data-table" id="hc-runs-table" style="margin-top:12px;min-width:640px">
+              <thead><tr><th>When</th><th>Action</th><th>Mode</th><th>Status</th><th>Counts</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
           <div class="panel">
-            <label class="check"><input type="checkbox" id="hc-dry" checked /> Dry run (no UC create, no Vinculum writes)</label>
-            <div class="row" style="margin-top:12px">
-              <button id="hc-sync-btn" class="primary">Check / sync orders</button>
-              <button id="hc-fulfill-btn" class="secondary">Fulfill dry-run</button>
+            <label class="check"><input type="checkbox" id="hc-dry" checked /> Dry run (no UC SO create, no Vinculum inventory upload)</label>
+            <label class="check" style="margin-top:8px"><input type="checkbox" id="hc-source-archive" /> Use archive orders (active list often empty)</label>
+            <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px">
+              <button id="hc-sync-btn" class="primary">Sync orders → staging UC</button>
+              <button id="hc-inv-btn" class="secondary">Inventory preview (UAE UC)</button>
+              <button id="hc-fulfill-btn" class="secondary">Fulfill (out of scope)</button>
             </div>
             <div id="hc-output" class="result hidden"></div>
-            <p class="meta hidden" id="hc-hint"></p>
+            <p class="meta" id="hc-hint">Orders punch <b>staging UC</b> only until approved. Inventory reads <b>UAE UC</b>; Vinculum upload needs HC_LIVE. Active Vinculum queue may be empty — use archive for staging proof.</p>
           </div>
         </section>
 
@@ -446,10 +507,18 @@
           <h2>Admin</h2>
 
           <div class="panel" id="admin-session-panel">
-            <h3>Unicommerce Session</h3>
+            <h3>Unicommerce Sessions</h3>
+            <p class="meta">Each UC tenant (India / UAE / KSA / Staging) keeps its own JSESSIONID. Pasting into one never overwrites another.</p>
             <div class="meta" id="admin-session-meta">…</div>
             <div class="row">
-              <button id="admin-relogin-btn" class="primary">Re-login to Unicommerce</button>
+              <label class="meta" for="admin-uc-instance">Instance</label>
+              <select id="admin-uc-instance">
+                <option value="india" selected>India (packing / sheet / e-way)</option>
+                <option value="uae">UAE (HC inventory) — opptrauae</option>
+                <option value="ksa">KSA — opptraksa</option>
+                <option value="staging">Staging (HC orders) — oppdoorstg</option>
+              </select>
+              <button id="admin-relogin-btn" class="primary">Re-login</button>
             </div>
             <details>
               <summary class="summary-toggle">Manual paste (fallback)</summary>
@@ -519,6 +588,6 @@
   </div>
 
   <script src="validate.js?v=preflight-1"></script>
-  <script src="app.js?v=preflight-1"></script>
+  <script src="app.js?v=schedules-uc-connect-1"></script>
 </body>
 </html>

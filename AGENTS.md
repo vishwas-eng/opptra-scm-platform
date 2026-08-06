@@ -116,8 +116,8 @@ Use `marketplaceLabelFromCustomer(customer, channel)` in `packages/automation-sh
 |-------|-------------|
 | ETRADE | `E-Trade` |
 | KKOC | `KKOC` |
-| COCOBLU / Cocoa | `Cocoa Blue` |
-| CLICKTECH / ClickTag | `ClickTag` |
+| COCOBLU / Cocoa / Coco Blue | `cocoblu` |
+| CLICKTECH / ClickTag / clicktag | `clickTech` |
 | Swiggy / Instamart | `Swiggy` |
 | Flipkart | `Flipkart` |
 | Everything else | Waypoint `customer_code` as-is |

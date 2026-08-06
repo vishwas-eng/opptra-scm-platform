@@ -1,15 +1,21 @@
 // Admin-only: session cookie paste + helper-extension ingest, user management.
 import { randomBytes, createHash } from 'node:crypto';
 import { query, audit, config, logger } from '@opptra/core';
+import {
+  normalizeInstanceId,
+  resolveInstanceBaseUrl,
+  instanceIdFromHost,
+  UC_INSTANCE_IDS,
+  PgSessionStore,
+} from '@opptra/uc-client';
 import { enqueue } from '../queue.js';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
-// Test a JSESSIONID against Unicommerce RIGHT NOW, synchronously, so the admin gets an
-// immediate real answer (not "saved" that might silently still be dead). Hits a cheap
-// endpoint with the cookie directly - no worker round-trip, no waiting for a cron tick.
-async function testUcCookie(cookie) {
-  const base = config().UC_BASE_URL.replace(/\/+$/, '');
+// Test a JSESSIONID against a specific UC instance RIGHT NOW, synchronously.
+async function testUcCookie(cookie, instanceId = 'india') {
+  const id = normalizeInstanceId(instanceId);
+  const base = resolveInstanceBaseUrl(id, config()).replace(/\/+$/, '');
   try {
     const res = await fetch(`${base}/data/user/facilities`, {
       headers: { Cookie: 'JSESSIONID=' + cookie, Accept: 'application/json' },
@@ -17,67 +23,128 @@ async function testUcCookie(cookie) {
       signal: AbortSignal.timeout(15_000),
     });
     if ([301, 302, 401, 403].includes(res.status)) {
-      return { alive: false, reason: `Unicommerce rejected the session (HTTP ${res.status}). It may be expired, or from the wrong instance (checking against ${base}).` };
+      return {
+        alive: false,
+        instanceId: id,
+        baseUrl: base,
+        reason: `Unicommerce rejected the session (HTTP ${res.status}). It may be expired, or from the wrong instance (checking against ${base} / ${id}).`,
+      };
     }
     const data = await res.json().catch(() => null);
-    if (!data) return { alive: false, reason: `Unexpected response from Unicommerce (HTTP ${res.status}, not JSON).` };
-    if (data.successful === false) {
-      return { alive: false, reason: (data.errors || []).map((e) => e.description || e.message).join('; ') || 'Unicommerce rejected the session.' };
+    if (!data) {
+      return {
+        alive: false,
+        instanceId: id,
+        baseUrl: base,
+        reason: `Unexpected response from Unicommerce (HTTP ${res.status}, not JSON).`,
+      };
     }
-    return { alive: true, facility: data.currentFacilityCode || null };
+    if (data.successful === false) {
+      return {
+        alive: false,
+        instanceId: id,
+        baseUrl: base,
+        reason: (data.errors || []).map((e) => e.description || e.message).join('; ') || 'Unicommerce rejected the session.',
+      };
+    }
+    return {
+      alive: true,
+      instanceId: id,
+      baseUrl: base,
+      facility: data.currentFacilityCode || null,
+    };
   } catch (err) {
-    logger.warn({ err: String(err) }, 'uc session test call failed');
-    return { alive: false, reason: `Could not reach Unicommerce at ${base}: ${err.message || err}` };
+    logger.warn({ err: String(err), instanceId: id }, 'uc session test call failed');
+    return {
+      alive: false,
+      instanceId: id,
+      baseUrl: base,
+      reason: `Could not reach Unicommerce at ${base}: ${err.message || err}`,
+    };
   }
+}
+
+async function persistSession({ cookie, instanceId, actor, facility, baseUrl }) {
+  const id = normalizeInstanceId(instanceId);
+  const resolvedBase = baseUrl || resolveInstanceBaseUrl(id, config());
+  await query(
+    `INSERT INTO uc_session (instance_id, base_url, jsessionid, source, status, updated_by,
+       updated_at, last_ok_at, last_check_at, fail_count, needs_relogin, relogin_since, facility)
+     VALUES ($1, $2, $3, 'admin-paste', 'alive', $4, now(), now(), now(), 0, false, NULL, $5)
+     ON CONFLICT (instance_id) DO UPDATE SET
+       jsessionid = EXCLUDED.jsessionid,
+       source = 'admin-paste',
+       status = 'alive',
+       updated_by = EXCLUDED.updated_by,
+       updated_at = now(),
+       last_ok_at = now(),
+       last_check_at = now(),
+       fail_count = 0,
+       needs_relogin = false,
+       relogin_since = NULL,
+       facility = COALESCE(NULLIF(EXCLUDED.facility,''), uc_session.facility),
+       base_url = CASE
+         WHEN EXCLUDED.base_url <> '' THEN EXCLUDED.base_url
+         ELSE uc_session.base_url
+       END`,
+    [id, resolvedBase, cookie, actor, facility || ''],
+  );
 }
 
 // After a verified-alive paste, wake the worker immediately (it owns automations) so it
 // reloads the new cookie in seconds instead of waiting for the ~4-min keepalive cron.
-async function nudgeWorker() {
-  await enqueue('system.keepalive', {}, { removeOnComplete: true, removeOnFail: true }).catch(() => {});
+async function nudgeWorker(instanceId = 'india') {
+  await enqueue(
+    'system.keepalive',
+    { instanceId },
+    { removeOnComplete: true, removeOnFail: true },
+  ).catch(() => {});
 }
 
 export default async function adminRoutes(app) {
   const adminOnly = { preValidation: app.requireRole('admin') };
 
-  // Paste a fresh JSESSIONID captured from the browser. Stored in Postgres; the worker
-  // picks it up on its next call (it re-reads on session death and on keepalive).
+  // Paste a fresh JSESSIONID for a selected UC instance.
   app.post('/api/admin/uc-session', {
     ...adminOnly,
     schema: {
       body: {
         type: 'object', required: ['jsessionid'], additionalProperties: false,
-        properties: { jsessionid: { type: 'string', minLength: 8, maxLength: 512 } },
+        properties: {
+          jsessionid: { type: 'string', minLength: 8, maxLength: 512 },
+          instanceId: { type: 'string', enum: [...UC_INSTANCE_IDS] },
+        },
       },
     },
   }, async (req, reply) => {
     const cookie = req.body.jsessionid.trim().replace(/^JSESSIONID=/i, '');
-    const test = await testUcCookie(cookie);
+    const instanceId = normalizeInstanceId(req.body.instanceId || 'india');
+    const test = await testUcCookie(cookie, instanceId);
 
     if (!test.alive) {
-      // Do NOT overwrite a working session with one that just failed verification.
-      // Record the attempt so it's visible in the audit trail either way.
-      await audit(req.user.email, 'uc-session-paste-rejected', { reason: test.reason });
-      return reply.code(400).send({ ok: false, alive: false, error: test.reason });
+      await audit(req.user.email, 'uc-session-paste-rejected', {
+        reason: test.reason,
+        instanceId,
+      });
+      return reply.code(400).send({ ok: false, alive: false, instanceId, error: test.reason });
     }
 
-    await query(
-      `UPDATE uc_session SET jsessionid = $1, source = 'admin-paste', status = 'alive',
-        updated_by = $2, updated_at = now(), last_ok_at = now(), last_check_at = now(), fail_count = 0,
-        needs_relogin = false, relogin_since = NULL,
-        facility = COALESCE(NULLIF($3,''), facility) WHERE id = 1`,
-      [cookie, req.user.email, test.facility || '']
-    );
-    await audit(req.user.email, 'uc-session-paste', { facility: test.facility });
-    await nudgeWorker();
-    return { ok: true, alive: true, facility: test.facility };
+    await persistSession({
+      cookie,
+      instanceId,
+      actor: req.user.email,
+      facility: test.facility,
+      baseUrl: test.baseUrl,
+    });
+    await audit(req.user.email, 'uc-session-paste', {
+      facility: test.facility,
+      instanceId,
+    });
+    await nudgeWorker(instanceId);
+    return { ok: true, alive: true, instanceId, facility: test.facility, baseUrl: test.baseUrl };
   });
 
   // ── Session-helper ingest ────────────────────────────────────────────────
-  // The "Opptra Session Helper" browser extension POSTs a freshly-captured
-  // JSESSIONID here after the admin logs into Unicommerce by hand. Auth is a
-  // per-admin bearer ingest token (NOT the web cookie - the extension is a
-  // different origin). No login automation server-side; the human did the login.
   app.post('/api/ingest/uc-session', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     schema: {
@@ -87,6 +154,8 @@ export default async function adminRoutes(app) {
           jsessionid: { type: 'string', minLength: 8, maxLength: 512 },
           token: { type: 'string', minLength: 20, maxLength: 200 },
           facility: { type: 'string', maxLength: 64 },
+          instanceId: { type: 'string', enum: [...UC_INSTANCE_IDS] },
+          baseUrl: { type: 'string', maxLength: 256 },
         },
         additionalProperties: false,
       },
@@ -98,26 +167,41 @@ export default async function adminRoutes(app) {
     if (!rows.length) return reply.code(401).send({ error: 'invalid or revoked ingest token' });
     const owner = rows[0].owner_email;
     const cookie = req.body.jsessionid.trim().replace(/^JSESSIONID=/i, '');
-    const test = await testUcCookie(cookie);
+    const fromHost = req.body.baseUrl ? instanceIdFromHost(req.body.baseUrl) : null;
+    const instanceId = normalizeInstanceId(req.body.instanceId || fromHost || 'india');
+    const test = await testUcCookie(cookie, instanceId);
     if (!test.alive) {
-      await audit(`helper:${owner}`, 'uc-session-ingest-rejected', { reason: test.reason });
-      return reply.code(400).send({ ok: false, alive: false, error: test.reason });
+      await audit(`helper:${owner}`, 'uc-session-ingest-rejected', {
+        reason: test.reason,
+        instanceId,
+      });
+      return reply.code(400).send({ ok: false, alive: false, instanceId, error: test.reason });
     }
-    await query(
-      `UPDATE uc_session SET jsessionid = $1, source = 'admin-paste', status = 'alive',
-        updated_by = $2, updated_at = now(), last_ok_at = now(), last_check_at = now(), fail_count = 0,
-        needs_relogin = false, relogin_since = NULL,
-        facility = COALESCE(NULLIF($3,''), facility) WHERE id = 1`,
-      [cookie, `helper:${owner}`, req.body.facility || test.facility || '']);
+    await persistSession({
+      cookie,
+      instanceId,
+      actor: `helper:${owner}`,
+      facility: req.body.facility || test.facility,
+      baseUrl: test.baseUrl,
+    });
     await query('UPDATE ingest_tokens SET last_used = now() WHERE id = $1', [rows[0].id]);
-    await audit(`helper:${owner}`, 'uc-session-ingest', { facility: test.facility });
-    await nudgeWorker();
-    return { ok: true, alive: true, message: 'session captured and verified alive' };
+    await audit(`helper:${owner}`, 'uc-session-ingest', {
+      facility: test.facility,
+      instanceId,
+    });
+    await nudgeWorker(instanceId);
+    return { ok: true, alive: true, instanceId, message: 'session captured and verified alive' };
   });
 
   // Where the admin should log in (drives the "Re-login" button in the UI).
-  app.get('/api/admin/uc-login-url', adminOnly, async () => {
-    return { url: config().UC_BASE_URL };
+  app.get('/api/admin/uc-login-url', adminOnly, async (req) => {
+    const instanceId = normalizeInstanceId(req.query.instanceId || 'india');
+    return { url: resolveInstanceBaseUrl(instanceId, config()), instanceId };
+  });
+
+  app.get('/api/admin/uc-sessions', adminOnly, async () => {
+    const sessions = await PgSessionStore.listStatus();
+    return { sessions, instances: UC_INSTANCE_IDS };
   });
 
   // Create / list / revoke ingest tokens (one per admin's helper install).
@@ -235,8 +319,8 @@ export default async function adminRoutes(app) {
       query(`SELECT run_uid, user_email, automation, action, status, created_at, finished_at
               FROM runs WHERE created_at > ${since} AND user_email <> 'system'
               ORDER BY created_at DESC LIMIT 40`),
-      query(`SELECT status, source, needs_relogin, relogin_since, last_ok_at, fail_count,
-                (jsessionid <> '') has_cookie FROM uc_session WHERE id = 1`),
+      query(`SELECT instance_id, status, source, needs_relogin, relogin_since, last_ok_at, fail_count,
+                (jsessionid <> '') has_cookie FROM uc_session WHERE instance_id = 'india'`),
       query(`SELECT count(*) FILTER (WHERE status='queued')::int queued,
                      count(*) FILTER (WHERE status='running')::int running,
                      count(*) FILTER (WHERE status='pending_retry')::int pending
@@ -278,8 +362,8 @@ export default async function adminRoutes(app) {
       byDay: byDay.rows,
       recentErrors: recentErrors.rows,
       recentActivity: recentActivity.rows,
-      session: sessionRow.rows[0],
-      inflight: queueRow.rows[0],
+      session: sessionRow.rows[0] || null,
+      inflight: queueRow.rows[0] || { queued: 0, running: 0, pending: 0 },
       users: usersTotal.rows[0] || { registered: 0, active_logins: 0 },
     };
   }

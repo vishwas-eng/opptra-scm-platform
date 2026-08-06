@@ -22,6 +22,7 @@ test('protected routes reject anonymous callers with 401 (before any DB access)'
   const protectedGets = [
     '/api/me', '/api/runs', '/api/uc-session', '/api/admin/users', '/api/admin/analytics', '/api/admin/kpi',
     '/api/connectors', '/api/connectors/unicommerce/capabilities', '/api/connectors/unicommerce/health',
+    '/api/automations/homecentre/status', '/api/automations/6thstreet/status',
     '/api/agent/meta', '/api/agent/connectors', '/api/agent/threads',
   ];
   for (const url of protectedGets) {
@@ -40,6 +41,36 @@ test('protected routes reject anonymous callers with 401 (before any DB access)'
     payload: { message: 'hello' },
   });
   assert.equal(agentChat.statusCode, 401, 'agent chat must require auth');
+});
+
+// Agent Beta is admin-only. Every route under /api/agent/* — including the ones added
+// later for resources and playbooks — must refuse anonymous callers. A route shipped
+// without a preValidation guard would answer 404/500 here instead of 401.
+test('ADMIN-ONLY: every /api/agent/* route and connector mutation rejects anonymous', async () => {
+  const cases = [
+    ['GET', '/api/agent/meta'],
+    ['GET', '/api/agent/connectors'],
+    ['GET', '/api/agent/capabilities'],
+    ['GET', '/api/agent/threads'],
+    ['GET', '/api/agent/threads/abc/messages'],
+    ['GET', '/api/agent/playbooks'],
+    ['GET', '/api/agent/connectors/google-sheets/resources'],
+    ['POST', '/api/agent/threads', {}],
+    ['POST', '/api/agent/chat', { message: 'hi' }],
+    ['POST', '/api/agent/playbooks', { title: 'x' }],
+    ['POST', '/api/agent/playbooks/abc/activate', {}],
+    ['POST', '/api/agent/playbooks/abc/pause', {}],
+    ['POST', '/api/agent/playbooks/abc/run', {}],
+    ['POST', '/api/agent/connectors/unicommerce/connect', {}],
+    ['POST', '/api/agent/connectors/unicommerce/disconnect', {}],
+    ['POST', '/api/agent/connectors/google-sheets/resources', { url: 'x' }],
+    ['DELETE', '/api/agent/connectors/google-sheets/resources/abc'],
+    ['POST', '/api/connectors/unicommerce/invoke', { action: 'health.ping' }],
+  ];
+  for (const [method, url, payload] of cases) {
+    const res = await app.inject({ method, url, ...(payload ? { payload } : {}) });
+    assert.equal(res.statusCode, 401, `${method} ${url} should be 401 when unauthenticated, got ${res.statusCode}`);
+  }
 });
 
 test('/api/ops/summary rejects missing or wrong ops token (before DB)', async () => {

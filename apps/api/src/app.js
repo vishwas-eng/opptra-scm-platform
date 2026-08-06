@@ -8,7 +8,12 @@ import { logger } from '@opptra/core';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export async function buildApp({ withStatic = true } = {}) {
-  const app = Fastify({ loggerInstance: logger, trustProxy: true, bodyLimit: 1 * 1024 * 1024 });
+  // trustProxy: 1, NOT true. `true` trusts the entire X-Forwarded-For chain, so a client
+  // that sends its own XFF header controls req.ip — and every per-IP / per-user rate
+  // limit keyed on it can be bypassed by rotating a fake value each request. Exactly one
+  // proxy sits in front of us (Caddy), which APPENDS the real peer address, so trusting
+  // one hop from the right yields the true client and ignores anything the client forged.
+  const app = Fastify({ loggerInstance: logger, trustProxy: 1, bodyLimit: 1 * 1024 * 1024 });
 
   await app.register(import('@fastify/helmet'), {
     contentSecurityPolicy: {

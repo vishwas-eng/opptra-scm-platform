@@ -18,6 +18,7 @@ import { makeReverseDcPipeline } from '@opptra/automation-reversedc';
 import { makePackingPipeline } from '@opptra/automation-packing';
 import { makeSheetPipeline } from '@opptra/automation-sheet';
 import { makeHomecentrePipeline } from '@opptra/automation-homecentre';
+import { makeSixthStreetPipeline } from '@opptra/automation-6thstreet';
 import { googleClients } from '@opptra/integrations-google';
 import { makeHandlers } from './handlers.js';
 
@@ -125,6 +126,8 @@ const handlers = makeHandlers({
     homecentrePipeline: (cfg.VINCULUM_USER && cfg.VINCULUM_PASS)
       ? makeHomecentrePipeline(uc, cfg)
       : null,
+    // Always load scaffold — downloads stay HAR-gated; status/email dry-run work without VPN.
+    street6Pipeline: makeSixthStreetPipeline(uc, cfg, google),
   },
   reenqueue: (name, data, opts) => queue.add(name, data, opts),
 });
@@ -169,16 +172,61 @@ if (cfg.SHEET_SYNC_MINUTES > 0) {
   await queue.removeJobScheduler('sheet-sync-source').catch(() => {});
 }
 
-// Home Centre is MANUAL ONLY for now (no orders yet / testing). Never auto-schedule.
-await queue.removeJobScheduler('homecentre-sync').catch(() => {});
+// Home Centre scheduled sync (inventory UAE + orders→staging). Always enqueues dryRun unless HC_LIVE
+// and caller later flips input — scheduled jobs stay dry-run by default for safety.
+if (cfg.HC_SYNC_MINUTES > 0 && cfg.VINCULUM_USER && cfg.VINCULUM_PASS) {
+  await queue.upsertJobScheduler('homecentre-sync', { every: cfg.HC_SYNC_MINUTES * 60_000 }, {
+    name: 'homecentre.scheduled',
+    data: {
+      input: {
+        // Default dry-run. Set HC_DRY_RUN=false for staging SO writes; UAE SO still needs HC_LIVE + HC_ORDERS_UC_TARGET=uae.
+        dryRun: cfg.HC_DRY_RUN !== false,
+        source: 'active',
+        limit: 50,
+      },
+      ownerEmail: cfg.HC_OWNER_EMAIL || 'ratikanta@opptra.com',
+    },
+    opts: { removeOnComplete: { count: 20 }, removeOnFail: { count: 20 } },
+  });
+  logger.info({
+    everyMin: cfg.HC_SYNC_MINUTES,
+    owner: cfg.HC_OWNER_EMAIL,
+    live: cfg.HC_LIVE,
+    dryRun: cfg.HC_DRY_RUN,
+    ordersTarget: cfg.HC_ORDERS_UC_TARGET,
+  }, 'homecentre scheduler registered');
+} else {
+  await queue.removeJobScheduler('homecentre-sync').catch(() => {});
+}
+
+// 6th Street scheduled job (pack-email + UC→portal inventory). Dry-run by default.
+if (cfg.STREET6_SYNC_MINUTES > 0) {
+  await queue.upsertJobScheduler('street6-sync', { every: cfg.STREET6_SYNC_MINUTES * 60_000 }, {
+    name: 'street6.scheduled',
+    data: {
+      input: {
+        dryRun: cfg.STREET6_DRY_RUN !== false,
+        send: false,
+      },
+      ownerEmail: cfg.STREET6_OWNER_EMAIL || 'daniyal@opptra.com',
+    },
+    opts: { removeOnComplete: { count: 20 }, removeOnFail: { count: 20 } },
+  });
+  logger.info({
+    everyMin: cfg.STREET6_SYNC_MINUTES,
+    owner: cfg.STREET6_OWNER_EMAIL,
+    dryRun: cfg.STREET6_DRY_RUN,
+  }, 'street6 scheduler registered');
+} else {
+  await queue.removeJobScheduler('street6-sync').catch(() => {});
+}
 
 // Re-register active daily Agent playbooks after deploy/restart.
 try {
-  const { listActiveDailyPlaybooks } = await import('@opptra/core');
+  const { listActiveDailyPlaybooks, playbookCron } = await import('@opptra/core');
   const active = await listActiveDailyPlaybooks();
   for (const pb of active) {
-    const hour = Math.min(23, Math.max(0, Number(pb.hour_utc) || 3));
-    await queue.upsertJobScheduler(`agent-playbook-${pb.playbook_uid}`, { pattern: `0 ${hour} * * *` }, {
+    await queue.upsertJobScheduler(`agent-playbook-${pb.playbook_uid}`, playbookCron(pb), {
       name: 'agent.playbook.run',
       data: { playbookUid: pb.playbook_uid },
       opts: { removeOnComplete: { count: 20 }, removeOnFail: { count: 20 } },
@@ -189,7 +237,12 @@ try {
   logger.warn({ err: String(err.message || err) }, 'agent playbook scheduler sync skipped');
 }
 
-logger.info({ keepaliveEveryMin: cfg.UC_KEEPALIVE_MINUTES, hcManualOnly: true }, 'worker started');
+logger.info({
+  keepaliveEveryMin: cfg.UC_KEEPALIVE_MINUTES,
+  hcSyncMinutes: cfg.HC_SYNC_MINUTES,
+  hcLive: cfg.HC_LIVE,
+  hcOrdersTarget: cfg.HC_ORDERS_UC_TARGET,
+}, 'worker started');
 
 /* ------------------------------ shutdown ------------------------------ */
 let shuttingDown = false;

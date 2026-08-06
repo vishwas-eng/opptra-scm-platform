@@ -73,9 +73,14 @@ const MARKETPLACE_MAP = {
   AMAZON_B2B: 'AZ Etrade', AMAZON: 'Amazon FBA', AMAZON_FBA: 'Amazon FBA',
   ZEPTO_B2B: 'Zepto', ZEPTO: 'Zepto', FLIPKART_B2B: 'Flipkart Alpha',
   BLINKIT_B2B: 'Blinkit', BLINKIT: 'Blinkit', INSTAMART_B2B: 'Instamart', INSTAMART: 'Instamart',
-  RELIANCE_AJIO_SOR_B2B: 'AJIO', AJIO: 'AJIO', COCOBLU: 'Cocoblu',
+  RELIANCE_AJIO_SOR_B2B: 'AJIO', AJIO: 'AJIO', COCOBLU: 'cocoblu',
   BIGBASKET_B2B_SOR: 'BigBasket', BIGBASKET_B2B: 'BigBasket', BIGBASKET: 'BigBasket',
 };
+
+// Flexible matchers: accept legacy sheet spellings (Coco Blue, Cocoa Blue, ClickTag, …)
+// while canonical display labels stay cocoblu / clickTech.
+const RE_COCOBLU = /COCO\s*A?\s*BLU|COCOBLU/i;
+const RE_CLICKTECH = /CLICK\s*TECH|CLICKTECH|CLICK\s*TAG|CLICKTAG/i;
 
 export function mapMarketplaceDropdown(raw) {
   const v = String(raw || '').trim();
@@ -92,10 +97,11 @@ export function mapMarketplaceDropdown(raw) {
   if (/BIGBASKET|BIG_BASKET|Big_Basket/i.test(v)) return 'BigBasket';
   if (/FLIPKART/i.test(v) && /FBF/i.test(v)) return 'Flipkart FBF';
   if (/FLIPKART/i.test(v)) return 'Flipkart Alpha';
-  if (/COCOBLU/i.test(v)) return 'Cocoblu';
+  if (RE_COCOBLU.test(v)) return 'cocoblu';
   if (/KKOC/i.test(v)) return 'AZ KKOC';
   if (/ETRADE/i.test(v)) return 'AZ Etrade';
-  if (/RETAILEZ|CLICKTECH/i.test(v)) return 'AZ RetailEZ';
+  if (RE_CLICKTECH.test(v)) return 'clickTech';
+  if (/RETAILEZ/i.test(v)) return 'AZ RetailEZ';
   if (/FBA/i.test(v)) return 'Amazon FBA';
   if (/AMAZON/i.test(v) || /^AZ\b/i.test(v)) return 'AZ Etrade';
   if (/SHOPPERS?STOP/i.test(v)) return 'Shoppersstop';
@@ -116,8 +122,8 @@ export function marketplaceLabelFromCustomer(customer, channel = '') {
   // Amazon UCB family — only these four short names
   if (/ETRADE/i.test(src)) return 'E-Trade';
   if (/KKOC/i.test(src)) return 'KKOC';
-  if (/COCOBLU|COCOA\s*BLU/i.test(src)) return 'Cocoa Blue';
-  if (/CLICKTECH|CLICK\s*TAG|CLICKTAG/i.test(src)) return 'ClickTag';
+  if (RE_COCOBLU.test(src)) return 'cocoblu';
+  if (RE_CLICKTECH.test(src)) return 'clickTech';
 
   // Channel short names (match customer or marketplace channel)
   if (/SWIGGY|INSTAMART/i.test(src)) return 'Swiggy';
@@ -164,7 +170,7 @@ export function parseFlexibleDate(v) {
 
 /** Waypoint so-summary export row -> B2B-VIEW Phase-1 headers (Config.gs phase1Mapper_). */
 export function phase1Mapper(wpRow, cfg = {}) {
-  // Marketplace column: Amazon family → E-Trade / KKOC / Cocoa Blue / ClickTag;
+  // Marketplace column: Amazon family → E-Trade / KKOC / cocoblu / clickTech;
   // Swiggy / Flipkart short names; everything else = Waypoint customer name as-is.
   const customer = String(
     wpRow['Customer'] || wpRow['customer'] || wpRow['Customer Code']

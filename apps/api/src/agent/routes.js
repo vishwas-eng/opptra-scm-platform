@@ -6,27 +6,42 @@ import {
   listConnectorStates, setConnectorEnabled,
   setConnectorCredential, clearConnectorCredential,
   getUserGoogleOAuthToken, clearUserGoogleOAuthToken, userGoogleScopeStatus,
-  createAgentPlaybook, listAgentPlaybooks, getAgentPlaybook, updateAgentPlaybook,
+  createAgentPlaybook, listAgentPlaybooks, getAgentPlaybook, updateAgentPlaybook, playbookCron,
+  parseGoogleResourceRef, listConnectorResources, createConnectorResource,
+  deleteConnectorResource, deleteConnectorResourcesForUser,
+  markUserGoogleOAuthOk, markUserGoogleOAuthError,
 } from '@opptra/core';
+import { googleClients } from '@opptra/integrations-google';
 import { runAgentTurn, llmModeLabel } from '@opptra/agent-runtime';
 import {
   LIVE_CONNECTOR_IDS, isLiveConnector, buildConnectorStatus,
-  buildToolSpecs, makeToolExecutor, listAllCapabilities, CONNECTOR_META,
+  buildToolSpecs, makeToolExecutor, listAllCapabilities, CONNECTOR_META, isKnownTool,
 } from '../agent/catalog.js';
 import { enqueue, upsertScheduler, removeScheduler } from '../queue.js';
+import { perUser } from '../plugins/rateLimitKey.js';
 
-function userBucket(req) {
-  try {
-    const m = (req.headers.cookie || '').match(/(?:^|;\s*)opptra_session=([^;]+)/);
-    if (m) {
-      const payload = decodeURIComponent(m[1]).split('.')[1];
-      const claims = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
-      if (claims.email) return `u:${claims.email}`;
-    }
-  } catch { /* fall through */ }
-  return `ip:${req.ip}`;
+const RESOURCE_CONNECTORS = new Set(['google-sheets', 'google-drive']);
+
+async function agentGoogleClients(userEmail) {
+  const cfg = config();
+  const email = String(userEmail || '').trim().toLowerCase();
+  const tok = await getUserGoogleOAuthToken(email);
+  if (!tok?.refresh_token) return null;
+  const scopes = userGoogleScopeStatus(tok.scope);
+  if (!scopes.ok) {
+    const err = new Error(`Missing Google scopes: ${scopes.missing.join(', ')}`);
+    err.code = 'GOOGLE_SCOPES';
+    throw err;
+  }
+  const clients = await googleClients({
+    refreshToken: tok.refresh_token,
+    clientId: cfg.GOOGLE_CLIENT_ID,
+    clientSecret: cfg.GOOGLE_OAUTH_CLIENT_SECRET,
+    delegatedUser: tok.google_email || tok.granted_by || email,
+  });
+  await markUserGoogleOAuthOk(email).catch(() => {});
+  return { ...clients, googleEmail: tok.google_email || tok.granted_by || email };
 }
-const perUser = (max, timeWindow) => ({ rateLimit: { max, timeWindow, keyGenerator: userBucket } });
 
 function titleFromMessage(msg) {
   const t = String(msg || '').trim().replace(/\s+/g, ' ');
@@ -36,10 +51,9 @@ function titleFromMessage(msg) {
 async function syncPlaybookScheduler(pb) {
   const schedulerId = `agent-playbook-${pb.playbook_uid}`;
   if (pb.status === 'active' && pb.schedule_kind === 'daily') {
-    const hour = Math.min(23, Math.max(0, Number(pb.hour_utc) || 3));
     await upsertScheduler(
       schedulerId,
-      { pattern: `0 ${hour} * * *` },
+      playbookCron(pb),
       {
         name: 'agent.playbook.run',
         data: { playbookUid: pb.playbook_uid },
@@ -164,12 +178,21 @@ export default async function agentRoutes(app) {
       return reply.code(403).send({ error: 'This connector is coming soon.', connector: id });
     }
     if (id === 'google-sheets' || id === 'google-drive') {
-      // Disconnect Google for Agent: clear per-user OAuth (also affects Packing Mail Gmail).
-      const clearToken = req.body?.revokeGoogle !== false;
+      // Disconnecting the Agent's Sheets/Drive tile turns OFF the agent connector and
+      // drops its bindings. It does NOT revoke the Google grant by default: that same
+      // per-user refresh token is what Packing Mail sends drafts with, so revoking on
+      // this click used to silently break a production automation with no visible link
+      // to what the operator pressed. Revoking is now explicit opt-in.
+      const clearToken = req.body?.revokeGoogle === true;
+      const clearResources = req.body?.clearResources !== false;
       await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-sheets', enabled: false });
       await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-drive', enabled: false });
+      if (clearResources) {
+        await deleteConnectorResourcesForUser(req.user.email, 'google-sheets').catch(() => {});
+        await deleteConnectorResourcesForUser(req.user.email, 'google-drive').catch(() => {});
+      }
       if (clearToken) await clearUserGoogleOAuthToken(req.user.email);
-      await audit(req.user.email, 'agent-connector-disconnect', { connector: id, revokedToken: clearToken });
+      await audit(req.user.email, 'agent-connector-disconnect', { connector: id, revokedToken: clearToken, clearResources });
       const prefs = await listConnectorStates(req.user.email);
       const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
       return { ok: true, connector: connectors.find((c) => c.id === id), connectors };
@@ -186,6 +209,157 @@ export default async function agentRoutes(app) {
     const prefs = await listConnectorStates(req.user.email);
     const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
     return { ok: true, state, connector: connectors.find((c) => c.id === id) };
+  });
+
+  // ── Layer B: bound resources (Sheets / Drive) ─────────────────────
+  app.get('/api/agent/connectors/:id/resources', { preValidation: adminOnly }, async (req, reply) => {
+    const id = String(req.params.id || '').trim();
+    if (!RESOURCE_CONNECTORS.has(id)) {
+      return reply.code(400).send({ error: 'Resources are only supported for google-sheets and google-drive.' });
+    }
+    const resources = await listConnectorResources({ userEmail: req.user.email, connectorId: id });
+    return { ok: true, connectorId: id, resources };
+  });
+
+  app.post('/api/agent/connectors/:id/resources', {
+    preValidation: adminOnly,
+    config: perUser(40, '1 minute'),
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string', maxLength: 160 },
+          url: { type: 'string', maxLength: 500 },
+          externalId: { type: 'string', maxLength: 128 },
+          kind: { type: 'string', enum: ['spreadsheet', 'drive_folder', 'drive_file'] },
+          tabs: { type: 'array', items: { type: 'string' }, maxItems: 50 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const id = String(req.params.id || '').trim();
+    if (!RESOURCE_CONNECTORS.has(id)) {
+      return reply.code(400).send({ error: 'Resources are only supported for google-sheets and google-drive.' });
+    }
+    const body = req.body || {};
+    const preferredKind = body.kind
+      || (id === 'google-sheets' ? 'spreadsheet' : 'drive_folder');
+    const parsed = parseGoogleResourceRef(body.url || body.externalId, preferredKind);
+    if (!parsed) {
+      return reply.code(400).send({
+        error: 'Provide a Google Sheets/Drive URL or id (e.g. docs.google.com/spreadsheets/d/… or drive.google.com/drive/folders/…).',
+      });
+    }
+    let kind = body.kind || parsed.kind;
+    if (id === 'google-sheets' && kind !== 'spreadsheet') {
+      return reply.code(400).send({ error: 'google-sheets only accepts spreadsheet resources.' });
+    }
+    if (id === 'google-drive' && !['drive_folder', 'drive_file'].includes(kind)) {
+      kind = preferredKind === 'drive_file' ? 'drive_file' : 'drive_folder';
+    }
+
+    const tok = await getUserGoogleOAuthToken(req.user.email);
+    const scopes = userGoogleScopeStatus(tok.scope);
+    if (!tok.refresh_token || !scopes.ok) {
+      return reply.code(400).send({
+        error: 'Connect Google OAuth first, then bind resources.',
+        oauthUrl: '/auth/google/connect?return=connectors',
+        needsOAuth: true,
+      });
+    }
+
+    let displayName = String(body.name || '').trim();
+    let meta = {
+      url: body.url || null,
+      googleEmail: tok.google_email || tok.granted_by || null,
+      tabs: Array.isArray(body.tabs) ? body.tabs.slice(0, 50) : undefined,
+    };
+
+    // Best-effort: resolve title + verify access with per-user token (never SA).
+    try {
+      const g = await agentGoogleClients(req.user.email);
+      if (g && kind === 'spreadsheet' && g.sheets) {
+        const metaRes = await g.sheets.spreadsheets.get({
+          spreadsheetId: parsed.externalId,
+          fields: 'properties.title,sheets.properties.title',
+        });
+        if (!displayName) displayName = metaRes.data.properties?.title || parsed.externalId;
+        const tabs = (metaRes.data.sheets || []).map((s) => s.properties?.title).filter(Boolean);
+        meta = { ...meta, tabs: meta.tabs || tabs };
+      } else if (g?.drive) {
+        const file = await g.drive.files.get({
+          fileId: parsed.externalId,
+          fields: 'id,name,mimeType,webViewLink',
+        });
+        if (!displayName) displayName = file.data.name || parsed.externalId;
+        const mime = file.data.mimeType || '';
+        if (mime === 'application/vnd.google-apps.folder') kind = 'drive_folder';
+        else if (id === 'google-drive') kind = 'drive_file';
+        meta = { ...meta, mimeType: mime, webViewLink: file.data.webViewLink || null };
+      }
+    } catch (err) {
+      const msg = String(err.message || err);
+      if (/invalid_grant|revoked/i.test(msg)) {
+        await markUserGoogleOAuthError(req.user.email, 'refresh token revoked').catch(() => {});
+        return reply.code(400).send({
+          error: 'Google access revoked — reconnect on Connectors.',
+          oauthUrl: '/auth/google/connect?return=connectors',
+          reconnect: true,
+        });
+      }
+      if (/PERMISSION_DENIED|403|not found|404/i.test(msg)) {
+        return reply.code(400).send({
+          error: 'Cannot access that resource with your Google account. Check the link, share access, or reconnect the correct Google account.',
+          permissionDenied: true,
+        });
+      }
+      // Still allow bind if metadata fetch fails for other reasons — store id + given name.
+      if (!displayName) displayName = parsed.externalId;
+      meta = { ...meta, resolveWarning: msg.slice(0, 200) };
+    }
+
+    try {
+      const resource = await createConnectorResource({
+        userEmail: req.user.email,
+        connectorId: id,
+        kind,
+        name: displayName,
+        externalId: parsed.externalId,
+        meta,
+      });
+      // Ensure connector prefs enabled once a resource is bound.
+      await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-sheets', enabled: true });
+      await setConnectorEnabled({ userEmail: req.user.email, connectorId: 'google-drive', enabled: true });
+      await audit(req.user.email, 'agent-connector-resource-add', {
+        connector: id, resourceUid: resource.resourceUid, kind, externalId: resource.externalId,
+      });
+      const resources = await listConnectorResources({ userEmail: req.user.email, connectorId: id });
+      return { ok: true, resource, resources };
+    } catch (err) {
+      const code = err.code === 'BAD_KIND' || err.code === 'BAD_ID' || err.code === 'UNSUPPORTED' ? 400 : 500;
+      return reply.code(code).send({ error: String(err.message || err) });
+    }
+  });
+
+  app.delete('/api/agent/connectors/:id/resources/:resourceUid', {
+    preValidation: adminOnly,
+    config: perUser(40, '1 minute'),
+  }, async (req, reply) => {
+    const id = String(req.params.id || '').trim();
+    if (!RESOURCE_CONNECTORS.has(id)) {
+      return reply.code(400).send({ error: 'Resources are only supported for google-sheets and google-drive.' });
+    }
+    const removed = await deleteConnectorResource({
+      userEmail: req.user.email,
+      resourceUid: req.params.resourceUid,
+    });
+    if (!removed) return reply.code(404).send({ error: 'resource not found' });
+    await audit(req.user.email, 'agent-connector-resource-remove', {
+      connector: id, resourceUid: req.params.resourceUid,
+    });
+    const resources = await listConnectorResources({ userEmail: req.user.email, connectorId: id });
+    return { ok: true, resources };
   });
 
   // ── Threads ───────────────────────────────────────────────────────
@@ -323,6 +497,8 @@ export default async function agentRoutes(app) {
           threadId: { type: 'string', maxLength: 80 },
           scheduleKind: { type: 'string', enum: ['manual', 'daily'] },
           hourUtc: { type: 'integer', minimum: 0, maximum: 23 },
+          scheduleMinute: { type: 'integer', minimum: 0, maximum: 59 },
+          timezone: { type: 'string', maxLength: 60, description: 'IANA zone, e.g. Asia/Kolkata' },
           activate: { type: 'boolean' },
           steps: {
             type: 'array',
@@ -363,6 +539,16 @@ export default async function agentRoutes(app) {
       });
     }
 
+    // Validate tool names at save time. The worker fails safe on an unknown tool, but a
+    // scheduled job that only reveals its typo on the first 3 AM run is a bad trade.
+    const unknown = steps.map((s2) => s2.tool).filter((t) => t && !isKnownTool(t));
+    if (unknown.length) {
+      return reply.code(400).send({
+        error: `Unknown tool(s): ${[...new Set(unknown)].join(', ')}`,
+        unknownTools: [...new Set(unknown)],
+      });
+    }
+
     const prefs = await listConnectorStates(req.user.email);
     const connectors = await buildConnectorStatus(prefs, { userEmail: req.user.email });
     const connectedIds = connectors.filter((c) => c.connected && c.live).map((c) => c.id);
@@ -387,6 +573,8 @@ export default async function agentRoutes(app) {
       status,
       scheduleKind,
       hourUtc: body.hourUtc ?? 3,
+      scheduleMinute: body.scheduleMinute ?? 0,
+      timezone: body.timezone || 'UTC',
       threadUid: body.threadId || null,
     });
     await syncPlaybookScheduler(pb);
@@ -398,7 +586,7 @@ export default async function agentRoutes(app) {
       beta: true,
       playbook: pb,
       note: scheduleKind === 'daily' && status === 'active'
-        ? `Scheduled daily at ${pb.hour_utc}:00 UTC via BullMQ. Worker runs agent.playbook.run.`
+        ? `Scheduled daily at ${String(pb.hour_utc).padStart(2, '0')}:${String(pb.schedule_minute).padStart(2, '0')} ${pb.timezone} via BullMQ job scheduler. Worker runs agent.playbook.run.`
         : 'Saved as draft. Activate with scheduleKind=daily to run every day.',
     };
   });
@@ -411,6 +599,8 @@ export default async function agentRoutes(app) {
       status: 'active',
       scheduleKind: 'daily',
       hourUtc: req.body?.hourUtc,
+      scheduleMinute: req.body?.scheduleMinute,
+      timezone: req.body?.timezone,
     });
     if (!pb) return reply.code(404).send({ error: 'playbook not found' });
     await syncPlaybookScheduler(pb);

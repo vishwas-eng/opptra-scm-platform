@@ -55,7 +55,7 @@ Auth column: **Session/RE (primary)** vs **Official API (future swap)** — both
 | **Zepto** | **Session/RE (primary)** — vendor portal | Partner feed if offered (swap) | **Not started** — ASN CSV already from UC; portal write-back next | Orders/PO status, inventory, ASN upload companion | **P1** (after Sheets) | No stable public API; format churn |
 | **Blinkit** | **Session/RE (primary)** | Partner API if offered (swap) | **Not started** | Orders, inventory, dispatch status | **P1–P2** | Access + ToS |
 | **Swiggy Instamart** | **Session/RE (primary)** | Partner API if offered (swap) | **Not started** | Orders, inventory, slot/dispatch | **P1–P2** | Same class as Zepto/Blinkit |
-| **Google Sheets** | **Official OAuth (already)** — hybrid: OAuth refresh / SA+DWD is primary | N/A (already official) | **Hybrid** — not RE; promote `integrations-google` + multi-sheet resources | Read/write ranges, tab ops, Master/B2B/source sync (`automation-sheet`) | **P0** (after UC scaffold) | Impersonation scope; never overwrite IMPORTRANGE mirrors |
+| **Google Sheets** | **Official OAuth (already)** — hybrid: OAuth refresh / SA+DWD is primary; **Agent uses per-user OAuth + bound resources** | N/A (already official) | **Hybrid** — not RE; `user_google_oauth` + `connector_resources` | Read/write ranges on **bound** sheets; discovery list; Master/B2B still via platform SA | **P0** | Never overwrite IMPORTRANGE mirrors; Agent never uses shared SA |
 | **Vinculum / Home Centre** | **Session/RE (primary)** — RSA login + session (existing) | — | **Partial** — `integrations-vinculum`; fulfill needs more HAR | Order list → UC B2C punch; fulfill/label | **P2** | Creds often invalid; GCC-only |
 | **Couriers** | API keys / OAuth | Official aggregator APIs | Prefer official when keys exist; RE only for gaps | Tracking, manifest, label fetch | **P2** | Multi-courier mapping |
 | **E-way / GST** | Via UC RE/public path today | Direct NIC/GSP only if UC insufficient | UC path is P0 capability | Generate/download EWB | **P2** (UC path P0) | Transporter GSTIN; dry-run mandatory |
@@ -83,6 +83,17 @@ Ordered for Opptra daily ops. For each portal after UC: capture **login + sessio
 ## 3. Shared connector architecture
 
 Grounded in what already exists: `@opptra/uc-client`, `@opptra/core` runs/audit, BullMQ worker, Google OAuth vault, dry-run on e-way / Home Centre.
+
+### 3.0 Layers (Agent Connectors)
+
+| Layer | What | Status |
+|---|---|---|
+| **A — Account** | Google OAuth (per-user), UC session, Waypoint env, Home Centre env | Live |
+| **B — Resource** | Bound spreadsheet / Drive folder / file rows in `connector_resources`; Agent tools scoped to them | Live (Sheets/Drive) |
+| **C — Channel marketplace** | All portals listed; live unlock after RE/HAR; Amazon etc. stay disabled | Scaffold + docs |
+| **D — Agent** | Chat tools + daily playbooks reference `resourceId` | Live (admin Beta) |
+
+See `docs/connectors/RESOURCE-CONNECTORS.md`.
 
 ### 3.1 Connector interface
 

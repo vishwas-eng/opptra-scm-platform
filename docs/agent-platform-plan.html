@@ -1,0 +1,325 @@
+<title>Opptra — The Supply-Chain Agent Workspace</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --orange: #FF5800; --orange-ink: #c93f00;
+    --bg: #faf8f5; --surface: #ffffff; --raised: #fffdfb;
+    --ink: #1c1a17; --body: #45403a; --muted: #7a736a; --line: #e7e1d8;
+    --sidebar: #171512;
+    /* state chips — deliberately NOT green (kept muted, brand-adjacent) */
+    --have: #1f6f4a; --have-bg: #e8f3ec;
+    --part: #9a6a15; --part-bg: #f8efd9;
+    --build: #b5480e; --build-bg: #fbe9dd;
+    --serif: 'Spectral', Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    --sans: 'Raleway', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131110; --surface: #1c1a18; --raised: #221f1c;
+      --ink: #f3efe9; --body: #cbc4ba; --muted: #918a7f; --line: #2f2b27;
+      --have: #5fce97; --have-bg: #16281f; --part: #e0b256; --part-bg: #2a2213;
+      --build: #ff8a52; --build-bg: #2c1a11;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #faf8f5; --surface: #ffffff; --raised: #fffdfb; --ink: #1c1a17; --body: #45403a; --muted: #7a736a; --line: #e7e1d8;
+    --have: #1f6f4a; --have-bg: #e8f3ec; --part: #9a6a15; --part-bg: #f8efd9; --build: #b5480e; --build-bg: #fbe9dd;
+  }
+  :root[data-theme="dark"] {
+    --bg: #131110; --surface: #1c1a18; --raised: #221f1c; --ink: #f3efe9; --body: #cbc4ba; --muted: #918a7f; --line: #2f2b27;
+    --have: #5fce97; --have-bg: #16281f; --part: #e0b256; --part-bg: #2a2213; --build: #ff8a52; --build-bg: #2c1a11;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--bg); color: var(--body); font-family: var(--sans); line-height: 1.62; font-size: 16px; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 34px 0; border-top: 1px solid var(--line); }
+  section:first-of-type { border-top: 0; }
+
+  h1, h2, h3 { font-family: var(--serif); color: var(--ink); line-height: 1.12; letter-spacing: -.01em; text-wrap: balance; font-weight: 600; }
+  .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .17em; color: var(--orange-ink); font-weight: 700; font-family: var(--sans); }
+  @media (prefers-color-scheme: dark) { .eyebrow { color: var(--orange); } }
+  :root[data-theme="dark"] .eyebrow { color: var(--orange); }
+  h2 { font-size: clamp(24px, 4vw, 33px); margin: 8px 0 6px; }
+  h3 { font-size: 18px; margin: 0 0 4px; }
+  p { max-width: 68ch; }
+  a { color: var(--orange-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  @media (prefers-color-scheme: dark) { a { color: var(--orange); } }
+  :root[data-theme="dark"] a { color: var(--orange); }
+  strong { color: var(--ink); font-weight: 700; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+
+  /* ---- hero ---- */
+  .hero { background: var(--sidebar); color: #efe9e1; padding: 62px 0 56px; border: 0; }
+  .hero .wrap { position: relative; }
+  .hero .eyebrow { color: #ff7a3d; }
+  .hero h1 { color: #fff; font-size: clamp(34px, 6.2vw, 62px); margin: 14px 0 20px; max-width: 15ch; }
+  .hero h1 .u { color: var(--orange); }
+  .hero .lede { color: #cfc7bc; font-size: clamp(16px, 2.4vw, 19px); max-width: 60ch; }
+  .hero .meta { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12.5px; color: #97907f; font-family: var(--mono); letter-spacing: .02em; }
+  .hero .meta span { color: #97907f; }
+  .hero .rule { width: 54px; height: 3px; background: var(--orange); margin: 0 0 4px; border-radius: 2px; }
+
+  /* ---- thesis callout ---- */
+  .thesis { font-family: var(--serif); font-size: clamp(19px, 2.8vw, 24px); line-height: 1.42; color: var(--ink); max-width: 40ch; }
+  .thesis-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 30px; align-items: start; }
+  @media (max-width: 720px) { .thesis-grid { grid-template-columns: 1fr; gap: 14px; } }
+
+  .lead { font-size: 17px; color: var(--body); }
+
+  /* ---- state chips ---- */
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; font-family: var(--sans); letter-spacing: .03em; text-transform: uppercase; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .chip.have { color: var(--have); background: var(--have-bg); }
+  .chip.part { color: var(--part); background: var(--part-bg); }
+  .chip.build { color: var(--build); background: var(--build-bg); }
+
+  /* ---- mapping table ---- */
+  .tbl-scroll { overflow-x: auto; margin-top: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+  th, td { text-align: left; padding: 11px 15px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th { font-family: var(--sans); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; background: var(--raised); position: sticky; top: 0; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.k { color: var(--ink); font-weight: 600; }
+  td .sub { color: var(--muted); font-size: 12.5px; font-family: var(--mono); }
+  .val { font-variant-numeric: tabular-nums; }
+
+  /* ---- architecture stack ---- */
+  .stack { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+  .layer { display: grid; grid-template-columns: 40px 1fr; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+  .layer .n { display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-size: 19px; font-weight: 600; color: #fff; background: var(--orange); }
+  .layer.done .n { background: var(--have); }
+  .layer .lbody { padding: 13px 16px; }
+  .layer h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .layer p { font-size: 13.5px; margin: 3px 0 0; color: var(--body); max-width: none; }
+  .layer .tag { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 5px; font-family: var(--sans); }
+  .layer .tag.h { color: var(--have); background: var(--have-bg); }
+  .layer .tag.b { color: var(--build); background: var(--build-bg); }
+
+  /* ---- generic card grid ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin-top: 18px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 17px 18px; }
+  .card h3 { font-size: 16px; }
+  .card p { font-size: 13.5px; margin: 5px 0 0; max-width: none; }
+  .card .who { margin-top: 9px; font-size: 12px; font-family: var(--mono); color: var(--muted); }
+
+  /* ---- phases timeline ---- */
+  .phases { margin-top: 20px; display: flex; flex-direction: column; gap: 0; }
+  .phase { display: grid; grid-template-columns: 92px 1fr; gap: 20px; padding: 16px 0; border-top: 1px solid var(--line); position: relative; }
+  .phase:first-child { border-top: 0; }
+  .phase .ph { font-family: var(--sans); }
+  .phase .ph .p { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-weight: 800; color: var(--orange-ink); }
+  @media (prefers-color-scheme: dark){ .phase .ph .p { color: var(--orange); } }
+  :root[data-theme="dark"] .phase .ph .p { color: var(--orange); }
+  .phase .ph .t { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+  .phase .pbody h3 { font-size: 17px; }
+  .phase .pbody p { font-size: 14px; margin: 4px 0 0; }
+  @media (max-width: 620px){ .phase { grid-template-columns: 1fr; gap: 4px; } }
+
+  /* ---- decisions ---- */
+  ol.dec { counter-reset: d; list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-direction: column; gap: 12px; }
+  ol.dec li { counter-increment: d; display: grid; grid-template-columns: 30px 1fr; gap: 14px; align-items: start; }
+  ol.dec li::before { content: counter(d); font-family: var(--serif); font-weight: 600; font-size: 15px; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--orange); color: var(--orange-ink); display: flex; align-items: center; justify-content: center; }
+  @media (prefers-color-scheme: dark){ ol.dec li::before { color: var(--orange); } }
+  :root[data-theme="dark"] ol.dec li::before { color: var(--orange); }
+  ol.dec p { margin: 0; font-size: 14.5px; }
+  ol.dec .q { color: var(--ink); font-weight: 700; }
+
+  .foot { padding: 30px 0 60px; color: var(--muted); font-size: 12.5px; }
+  .foot a { color: var(--muted); }
+
+  .toggle { position: fixed; top: 14px; right: 14px; z-index: 20; background: var(--surface); border: 1px solid var(--line); color: var(--body); border-radius: 999px; padding: 7px 13px; font-size: 12px; font-weight: 700; font-family: var(--sans); cursor: pointer; }
+  .toggle:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+</style>
+
+<button class="toggle" id="themeToggle" aria-label="Toggle light and dark theme">◐ Theme</button>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="rule"></div>
+    <div class="eyebrow">Opptra · Product Strategy · v0.1 · 31 Jul 2026</div>
+    <h1>The supply-chain <span class="u">agent workspace</span>.</h1>
+    <p class="lede">Today an ops person clicks a button and one hard-wired automation runs. Next, any supply-chain user assembles their own agents from a library of connectors — Amazon, Flipkart, Unicommerce, Sheets, WhatsApp, couriers — and lets them run the daily work, with a human approving anything that touches money or a customer.</p>
+    <div class="meta"><span>Not another Zapier.</span> <span>The vertical agent platform for marketplace operations.</span> <span>Dogfood Opptra first, sell it second.</span></div>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="wrap thesis-grid">
+      <div><div class="eyebrow">The thesis</div></div>
+      <div>
+        <p class="thesis">Horizontal agents own generic office work. None of them speak supply chain — GRNs, e-way GSTINs, how a Zepto B2B order cancels differently from a Myntra one. <strong>That domain knowledge is the moat, and we already have it in code.</strong></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">Why now, honestly</div>
+      <h2>A real, forming market — and a narrow way in</h2>
+      <p class="lead">Agentic commerce is projected at ~$1T of US retail by 2030, 90+ startups are building, and three protocols (Anthropic's <strong>MCP</strong>, Google's A2A, OpenAI/Stripe's ACP) are settling into the connector standard. The horizontal winners — Zapier Agents, Lindy, Gumloop, n8n — cover 7,000 generic apps and zero supply-chain depth.</p>
+      <div class="cards">
+        <div class="card"><h3>The moat is vertical</h3><p>Marketplace + UC + courier + WhatsApp connectors, and the playbooks that use them, are ours to build and nobody else's priority.</p></div>
+        <div class="card"><h3>The real cost is access, not code</h3><p>Amazon SP-API, Flipkart, WhatsApp all need seller accounts, developer registration, ID verification — weeks of paperwork per connector. We sequence around it.</p></div>
+        <div class="card"><h3>The MVP is narrow &amp; deep</h3><p>3–4 connectors + 5 killer playbooks that save a real team hours a day, proven on our own floor before we widen. Not "an AGI that fixes everything" on day one.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">The surprising part</div>
+      <h2>The platform is already hiding in the repo</h2>
+      <p class="lead">A survey of <code>opptra-scm-platform</code> shows the hard parts are built — just not named as a platform. The one genuine gap: <strong>there is no LLM anywhere yet</strong>, and connectors are hard-wired into job handlers instead of being a discoverable, composable library. That gap <em>is</em> the build. Everything below is refactoring, not rewriting.</p>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Agent-platform primitive</th><th>Already exists as</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Connector interface</td><td>11 injected, mockable client packages<div class="sub">packages/*</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Unicommerce connector</td><td>Two-layer client, rate-limited, 975 mapped endpoints<div class="sub">uc-client</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Google (Sheets/Drive/Gmail)</td><td>3 auth modes + per-user OAuth vault<div class="sub">integrations-google</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Credential vault</td><td>Postgres token stores, per-user &amp; shared, hashed<div class="sub">migrations 002/004/006</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Agent executor</td><td>BullMQ worker, 17 job types, resumable long-runs<div class="sub">apps/worker</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Human-in-the-loop</td><td>Draft-first mail, dry-run e-way, pending-retry parking<div class="sub">automation-packing / -ewaybill</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Run ledger + audit + KPI</td><td>runs / audit_log tables, KPI endpoint, Slack alerts<div class="sub">core</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Idempotency</td><td>step_ledger — a step never double-fires on retry<div class="sub">migration 003</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">RBAC + machine auth</td><td>admin/ops/viewer + ops-agent token API<div class="sub">plugins/auth · routes/ops</div></td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Connector registry</td><td>connectors hard-wired in handlers, not composable</td><td><span class="chip build">build</span></td></tr>
+            <tr><td class="k">LLM planner / agent loop</td><td>no anthropic/openai anywhere in the tree</td><td><span class="chip build">build</span></td></tr>
+            <tr><td class="k">Multi-tenant workspaces</td><td>single-workspace today; schema needs workspace_id</td><td><span class="chip build">build</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">Architecture</div>
+      <h2>Five layers — three already standing</h2>
+      <div class="stack">
+        <div class="layer">
+          <div class="n">5</div>
+          <div class="lbody"><h3>Workspace UI <span class="tag b">evolve</span></h3><p>Agent builder, connector gallery, run inbox, approvals, schedules, KPI. Grows out of today's SPA.</p></div>
+        </div>
+        <div class="layer">
+          <div class="n">4</div>
+          <div class="lbody"><h3>Agent runtime <span class="tag b">build on the worker</span></h3><p>Trigger → LLM planner (tool schemas) → connector tool-calls → approval gate for money/customer actions → run ledger + memory. Extends BullMQ, doesn't replace it.</p></div>
+        </div>
+        <div class="layer">
+          <div class="n">3</div>
+          <div class="lbody"><h3>Connector layer — the moat <span class="tag b">SDK + build</span></h3><p>One uniform Connector shape: auth + typed actions + triggers + an LLM tool-manifest. Native: UC, Google, Vinculum (have) · Amazon, Flipkart, WhatsApp, Slack, couriers (build) · long-tail via MCP / Composio / Nango.</p></div>
+        </div>
+        <div class="layer done">
+          <div class="n">2</div>
+          <div class="lbody"><h3>Credential vault + identity <span class="tag h">generalize</span></h3><p>Per-workspace, per-connector encrypted credentials. Generalize today's Google/UC token stores into one table.</p></div>
+        </div>
+        <div class="layer done">
+          <div class="n">1</div>
+          <div class="lbody"><h3>Core platform <span class="tag h">have</span></h3><p>Fastify API · BullMQ · Postgres · Redis · RBAC · audit · one GCP VM. Running in production today.</p></div>
+        </div>
+      </div>
+      <p style="margin-top:18px;font-size:14px">The pivotal new abstraction is the <strong>Connector SDK</strong>: every connector — ours or third-party — implements <code>{ auth, actions[], triggers[], toolManifest() }</code>. An action's input schema <em>is</em> its LLM tool-use schema, so <strong>adding a connector automatically gives every agent new abilities</strong> with zero runtime changes. Expose our own connectors <em>as</em> MCP servers, too — that makes Opptra callable from Claude and any external agent.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">Connector roadmap</div>
+      <h2>Build order = access difficulty × value</h2>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Connector</th><th>Access reality</th><th>Phase</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Unicommerce</td><td>owned bot account</td><td class="val">—</td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Google Sheets / Drive / Gmail</td><td>per-user OAuth, live</td><td class="val">—</td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Waypoint (Neon Postgres)</td><td>direct DB read</td><td class="val">—</td><td><span class="chip have">have</span></td></tr>
+            <tr><td class="k">Vinculum / Home Centre</td><td>code done, creds invalid</td><td class="val">fix</td><td><span class="chip part">partial</span></td></tr>
+            <tr><td class="k">Slack (inbound bot)</td><td>easy — Events API</td><td class="val">1</td><td><span class="chip build">build</span></td></tr>
+            <tr><td class="k">WhatsApp Business</td><td>Meta acct + ~₹0.13/utility msg, no monthly floor</td><td class="val">1–2</td><td><span class="chip build">build</span></td></tr>
+            <tr><td class="k">Shiprocket / Delhivery</td><td>seller signup; 17 couriers under one API</td><td class="val">2</td><td><span class="chip build">build</span></td></tr>
+            <tr><td class="k">Amazon SP-API</td><td>Pro seller + dev reg + ID verify (~weeks)</td><td class="val">2</td><td><span class="chip build">build</span></td></tr>
+            <tr><td class="k">Flipkart Seller API</td><td>seller approval, 3–5 days</td><td class="val">2</td><td><span class="chip build">build</span></td></tr>
+            <tr><td class="k">Meesho / Zepto / Blinkit / Instamart</td><td>mixed; some need portal automation</td><td class="val">3</td><td><span class="chip build">build</span></td></tr>
+            <tr><td class="k">Long-tail SaaS (Notion, Jira…)</td><td>proxy via MCP / Composio / Nango</td><td class="val">3</td><td><span class="chip build">build</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:16px;font-size:14px"><strong>Build-vs-buy rule:</strong> hand-build the supply-chain connectors that are our moat. For generic SaaS breadth, wrap an aggregator (Composio ≈ $29/mo for ~1,000 tools to start; Nango if we later want to own the stack) instead of writing 500 connectors by hand.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">The product, concretely</div>
+      <h2>Playbooks that save hours — ship these, not "a chat box"</h2>
+      <p class="lead">An agent workspace is worthless without killer default agents. Each is a composition of connectors, shipped as a clone-and-tweak template. The builder is the wrapper; the playbooks are the product.</p>
+      <div class="cards">
+        <div class="card"><h3>Packing Autopilot</h3><p>Each morning: pull today's CREATED SOs, draft per-warehouse packing mail with label + appointment, wait for approval, send, then follow up with invoice + e-way in the same thread.</p><div class="who">UC · Sheets · Drive · Gmail/WhatsApp · <span style="color:var(--have)">most built</span></div></div>
+        <div class="card"><h3>Stock Sync Guardian</h3><p>Watch marketplace inventory against Unicommerce; when they drift, flag it — or auto-correct with a human approval.</p><div class="who">Amazon/Flipkart · UC · Slack</div></div>
+        <div class="card"><h3>Exception Autopilot</h3><p>A live feed of stuck SOs, appointment-expiry cancellations, short-GRN, failed e-way — each with a one-click playbook to resolve it.</p><div class="who">UC · Waypoint · Slack/WhatsApp</div></div>
+        <div class="card"><h3>Appointment &amp; Label Chaser</h3><p>Pull appointment letters and labels from Drive/Amazon by date, attach them, nudge warehouses on WhatsApp.</p><div class="who">Drive · Amazon · WhatsApp</div></div>
+        <div class="card"><h3>Daily Ops Digest</h3><p>One message each morning: what shipped, what's stuck, what needs a human — on WhatsApp or Slack.</p><div class="who">UC · Waypoint · Slack/WhatsApp</div></div>
+        <div class="card"><h3>Report Puller</h3><p>Scheduled inventory / batch pulls to Sheets or GCS. The FMCG version already runs in Python — fold it in.</p><div class="who">UC · Sheets/GCS · <span style="color:var(--have)">have (Python)</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">Delivery</div>
+      <h2>Four phases — each leaves a working, dogfooded system</h2>
+      <div class="phases">
+        <div class="phase">
+          <div class="ph"><div class="p">Phase 0</div><div class="t">2–3 weeks</div></div>
+          <div class="pbody"><h3>Name the platform</h3><p>Refactor <code>automation-*</code> into the Connector SDK; build the registry + <code>toolManifest()</code>; generalize the vault; add <code>workspace_id</code> (defaulted). First LLM agent loop behind a flag, driving only existing UC/Google actions. Mostly renaming and wiring — low risk, high leverage. No new external access needed.</p></div>
+        </div>
+        <div class="phase">
+          <div class="ph"><div class="p">Phase 1</div><div class="t">3–4 weeks</div></div>
+          <div class="pbody"><h3>First outside connectors + approvals UI</h3><p>Slack inbound bot + WhatsApp (start the Meta paperwork day one). Run inbox with approve/reject. Ship Packing Autopilot and Daily Ops Digest on our own floor. Begin Amazon/Flipkart developer registration now — long lead time.</p></div>
+        </div>
+        <div class="phase">
+          <div class="ph"><div class="p">Phase 2</div><div class="t">6–8 weeks</div></div>
+          <div class="pbody"><h3>Marketplace connectors + Exception Autopilot</h3><p>Amazon SP-API + Flipkart (as approvals land) + Shiprocket/Delhivery. Ship Stock Sync Guardian and Exception Autopilot. The "wow" moment — agents that reason across systems.</p></div>
+        </div>
+        <div class="phase">
+          <div class="ph"><div class="p">Phase 3</div><div class="t">ongoing</div></div>
+          <div class="pbody"><h3>Open the workspace (SaaS)</h3><p>Flip on multi-tenancy, self-serve connector auth, the connector gallery, MCP in and out, aggregators for the long tail. Onboard the first external seller or 3PL beyond Opptra.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">Over to you</div>
+      <h2>Decisions that unblock the build</h2>
+      <ol class="dec">
+        <li><p><span class="q">Which LLM &amp; budget posture?</span> Recommend Claude — we already run on it, and it's native to tool-use + MCP. Agent loops multiply per-run cost, so the existing cost discipline applies double.</p></li>
+        <li><p><span class="q">Amazon or Flipkart first after Slack/WhatsApp?</span> Whichever seller account we control most cleanly — and <strong>start that developer registration this week</strong>, because it's weeks of lead time regardless of engineering.</p></li>
+        <li><p><span class="q">How long internal-only before the first external customer?</span> Recommend proving three playbooks on Opptra for ~6–8 weeks first.</p></li>
+        <li><p><span class="q">Buy or build the long tail?</span> Recommend Composio to start (fast, cheap), keeping the door open to Nango once volume justifies owning the stack.</p></li>
+        <li><p><span class="q">Expose our connectors as public MCP servers?</span> Recommend yes, eventually — it turns Opptra into something callable from Claude and any agent: a distribution channel, not just a product.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <div class="wrap foot">
+    Opptra · Supply-Chain Agent Workspace · plan for review. Companion doc: <code>docs/AGENT-PLATFORM-PLAN.md</code> in the repo. Nothing here breaks what runs in production today — every phase is additive, and the first agent drives automations we've already proven.
+  </div>
+</main>
+
+<script>
+  (function () {
+    var root = document.documentElement, btn = document.getElementById('themeToggle');
+    btn.addEventListener('click', function () {
+      var cur = root.getAttribute('data-theme');
+      if (!cur) cur = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+    });
+  })();
+</script>

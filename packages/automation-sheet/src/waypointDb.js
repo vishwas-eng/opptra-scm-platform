@@ -67,6 +67,60 @@ export async function fetchSOsFromNeon(dbUrl) {
   return rows.map(mapNeonRow);
 }
 
+/** Cheap connectivity probe for connector health — never touches business tables' data. */
+export async function pingWaypointDb(dbUrl) {
+  const { rows } = await pool_(dbUrl).query('SELECT count(*)::int AS n FROM "SalesOrder"');
+  return { ok: true, salesOrders: rows[0]?.n ?? 0 };
+}
+
+/**
+ * Filtered, LIMITed SO query for the Agent connector. Unlike fetchSOsFromNeon (the sheet
+ * pipeline wants the whole order book), agent questions are "recent/specific" — pulling
+ * every row to answer a 20-row question wastes Neon compute and tool-result tokens.
+ * All filters are parameterized; free-text values never touch the SQL string.
+ */
+export function buildWaypointSOQuery({
+  soCode, poCode, status, customer, warehouse, createdFrom, createdTo, limit = 50,
+} = {}) {
+  const where = ['so.suppressed = false'];
+  const params = [];
+  const add = (clause, value) => { params.push(value); where.push(clause.replace('?', `$${params.length}`)); };
+  if (soCode) add('so.so_code = ?', String(soCode).trim());
+  if (poCode) add('so.po_code = ?', String(poCode).trim());
+  if (status) add('upper(so.so_status) = upper(?)', String(status).trim());
+  if (customer) add('upper(so.customer_code) = upper(?)', String(customer).trim());
+  if (warehouse) add('upper(so.dispatch_warehouse_code) = upper(?)', String(warehouse).trim());
+  if (createdFrom) add('so.so_creation_date >= ?', createdFrom);
+  if (createdTo) add('so.so_creation_date <= ?', createdTo);
+  params.push(Math.min(Math.max(Number(limit) || 50, 1), 200));
+  const sql = `
+    SELECT
+      so.so_code, so.so_status, so.marketplace, so.customer_code, so.dispatch_warehouse_code,
+      so.ship_to_city, so.so_value, so.so_creation_date, so.po_code,
+      li.brands, li.total_units,
+      ap.appointment_date, ap.appointment_id
+    FROM "SalesOrder" so
+    LEFT JOIN (
+      SELECT so_code, string_agg(DISTINCT brand_name, ',') AS brands, sum(units) AS total_units
+      FROM "SoLineItem" WHERE brand_name IS NOT NULL GROUP BY so_code
+    ) li ON li.so_code = so.so_code
+    LEFT JOIN LATERAL (
+      SELECT appointment_date, appointment_id FROM "Appointment" a
+      WHERE a.so_code = so.so_code ORDER BY a.created_at DESC LIMIT 1
+    ) ap ON true
+    WHERE ${where.join(' AND ')}
+    ORDER BY so.so_creation_date DESC
+    LIMIT $${params.length}
+  `;
+  return { sql, params };
+}
+
+export async function queryWaypointSOs(dbUrl, filters = {}) {
+  const { sql, params } = buildWaypointSOQuery(filters);
+  const { rows } = await pool_(dbUrl).query(sql, params);
+  return rows.map(mapNeonRow);
+}
+
 /** @deprecated name kept for callers written when this was CREATED-only. */
 export const fetchCreatedSOsFromNeon = fetchSOsFromNeon;
 

@@ -178,7 +178,11 @@ export function makeVinculumClient(cfg = {}) {
       loggedIn = false;
       throw new Error(`Vinculum session invalid: ${json.jsonMessage}`);
     }
-    const list = json.commonSearchDTOList || json.rows || [];
+    // Active/empty searches return null; some grids return an object map instead of Array.
+    const rawList = json.commonSearchDTOList ?? json.rows ?? [];
+    const list = Array.isArray(rawList)
+      ? rawList
+      : (rawList && typeof rawList === 'object' ? Object.values(rawList) : []);
     return {
       records: json.records ?? list.length,
       total: json.total ?? 1,
@@ -186,6 +190,133 @@ export function makeVinculumClient(cfg = {}) {
       orders: list.map(mapOrderRow).filter((o) => o.webOrderNo),
       raw: json,
     };
+  }
+
+  /** Download Update Pricing & Inventory import template (xlsx). */
+  async function downloadInventoryTemplate() {
+    return getBinary('sellerSkuImportDisplayDownloadImportTemplateBS.action', {});
+  }
+
+  /**
+   * List seller SKUs from Vinculum SKU Enquiry grid (sellerSkuListBS → jsonSellerSkuEnqBS).
+   * Filter with vendorCode (= #seller / vinf:param4). For OppDoor UAE this is the
+   * Vinculum login user id (e.g. 2424675), NOT HC_SELLER_CODE_UAE=75 and NOT archive LAND*.
+   */
+  async function listSellerSkus({
+    vendorCode = userName,
+    page = 1,
+    rows = 100,
+    mSku = '',
+    skuCode = '',
+    upc = '',
+    skuName = '',
+  } = {}) {
+    await ensureLogin();
+    const form = {
+      rows: String(rows),
+      page: String(page),
+      _search: 'false',
+      sidx: '',
+      sord: 'asc',
+      REQ_SEARCH_FLAG: 'true',
+      skuName: skuName || '',
+      upc: upc || '',
+      brands: '',
+      status: '',
+      hCode: '',
+      mSku: mSku || '',
+      skuCode: skuCode || '',
+      stkStatus: '',
+      webStatus1: '',
+      vendorCode: String(vendorCode || userName || ''),
+      selectLoc: '',
+      edit: 'false',
+    };
+    const r = await raw('jsonSellerSkuEnqBS.action', {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+        Referer: `${baseUrl}/sellerSkuListBS.action`,
+      },
+      form,
+    });
+    let json;
+    try {
+      json = JSON.parse(r.text);
+    } catch {
+      throw new Error(`Vinculum jsonSellerSkuEnqBS: non-JSON (${r.status})`);
+    }
+    const gm = json.gridModel;
+    const list = Array.isArray(gm) ? gm : (gm && typeof gm === 'object' ? Object.values(gm) : []);
+    return {
+      records: Number(json.records) || list.length,
+      total: Number(json.total) || 1,
+      page: Number(json.page) || page,
+      skus: list.map((row) => ({
+        mrktSku: String(row.mrktSku || '').trim(),
+        skuCode: String(row.skuCode || '').trim(),
+        mfgSku: String(row.mfgSku || '').trim(),
+        isbn: String(row.ISBN || row.isbn || '').trim(),
+        udf1: String(row.udf1 || '').trim(),
+        qty: Number(row.qty || 0) || 0,
+        whQty: Number(row.whQTY || row.whQty || 0) || 0,
+        mrp: row.mrp ?? '',
+        salePrice: row.salePrice ?? '',
+        sellerCode: String(row.sellerCode || '').trim(),
+        sellerName: String(row.sellerName || '').trim(),
+        skuShortName: String(row.skuShortName || '').trim(),
+        status: String(row.status || '').trim(),
+        webStatus: String(row.webStatus || '').trim(),
+        skuSize: String(row.skuSize || '').trim(),
+        skuColor: String(row.skuColor || '').trim(),
+        raw: row,
+      })),
+    };
+  }
+
+  /** Paginate listSellerSkus until all records fetched (deduped by mrktSku|skuCode). */
+  async function listAllSellerSkus(opts = {}) {
+    const rows = Number(opts.rows) || 100;
+    const first = await listSellerSkus({ ...opts, page: 1, rows });
+    const pages = Math.max(1, Math.ceil((first.records || 0) / rows));
+    const out = [...first.skus];
+    for (let p = 2; p <= pages; p++) {
+      const page = await listSellerSkus({ ...opts, page: p, rows });
+      out.push(...page.skus);
+    }
+    const seen = new Set();
+    const skus = out.filter((s) => {
+      const k = `${s.mrktSku}|${s.skuCode}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    return { records: first.records, skus, vendorCode: String(opts.vendorCode || userName || '') };
+  }
+
+  /**
+   * Upload inventory/price xlsx to Vinculum (LIVE write — caller must gate).
+   * Form field name from sellerPriceUpdateBS: importFileName.
+   */
+  async function uploadInventoryWorkbook(buffer, filename = 'hc-inventory.xlsx') {
+    await ensureLogin();
+    const url = `${baseUrl}/sellerSkuImportBS.action?importFlag=I`;
+    const form = new FormData();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    form.append('importFileName', blob, filename);
+    const h = {
+      Cookie: cookieHeader(jar),
+      'User-Agent': 'Mozilla/5.0 Chrome/149',
+      Referer: `${baseUrl}/sellerPriceUpdateBS.action`,
+    };
+    const res = await fetch(url, { method: 'POST', headers: h, body: form });
+    mergeJar(jar, res.headers.getSetCookie?.() || res.headers.get('set-cookie'));
+    const text = await res.text();
+    const ok = res.status >= 200 && res.status < 400 && !/Invalid Login|Login Failed/i.test(text);
+    return { ok, status: res.status, preview: text.slice(0, 400) };
   }
 
   async function listActiveOrders(opts = {}) {
@@ -226,6 +357,10 @@ export function makeVinculumClient(cfg = {}) {
     commonJsonSearch,
     postAction,
     getBinary,
+    downloadInventoryTemplate,
+    listSellerSkus,
+    listAllSellerSkus,
+    uploadInventoryWorkbook,
     mapOrderRow,
     get cookieJar() { return cookieHeader(jar); },
     get isLoggedIn() { return loggedIn; },

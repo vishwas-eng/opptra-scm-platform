@@ -2,13 +2,27 @@ import {
   register,
   getAction,
   listRegisteredActions,
+  validateActionParams,
 } from './registry.js';
 import {
   registerAuthActions,
   registerFacilityActions,
   registerOrderActions,
+  registerOrderDetailActions,
   registerInventoryActions,
+  registerShipmentSearchActions,
+  registerChannelActions,
+  registerReturnActions,
 } from './actions.js';
+import { registerReportActions } from './actionsReports.js';
+import {
+  registerAllocationActions,
+  registerInvoiceDispatchActions,
+  registerManifestActions,
+  registerReturnMutateActions,
+  registerInventoryMutateActions,
+  registerOrderMutateActions,
+} from './actionsMutate.js';
 
 export const CONNECTOR_ID = 'unicommerce';
 export const CONNECTOR_NAME = 'Unicommerce';
@@ -20,7 +34,18 @@ function ensureBuiltins() {
   registerAuthActions(register);
   registerFacilityActions(register);
   registerOrderActions(register);
+  registerOrderDetailActions(register);
   registerInventoryActions(register);
+  registerShipmentSearchActions(register);
+  registerChannelActions(register);
+  registerReturnActions(register);
+  registerReportActions(register);
+  registerAllocationActions(register);
+  registerInvoiceDispatchActions(register);
+  registerManifestActions(register);
+  registerReturnMutateActions(register);
+  registerInventoryMutateActions(register);
+  registerOrderMutateActions(register);
   builtinsRegistered = true;
 }
 
@@ -84,7 +109,21 @@ export function createUnicommerceConnector({ uc, logger } = {}) {
     async invoke(action, params = {}, ctx = {}) {
       const def = getAction(action);
       if (!def) {
-        return { ok: false, error: `unknown action: ${action}` };
+        return { ok: false, code: 'UNKNOWN_ACTION', retryable: false, error: `unknown action: ${action}` };
+      }
+      // Enforce the declared inputSchema before anything reaches Unicommerce. The HTTP
+      // invoke route cannot do this — it does not know which action is being called when
+      // its own body schema is compiled.
+      const valid = validateActionParams(action, params || {});
+      if (!valid.ok) {
+        return {
+          ok: false,
+          code: 'INVALID_INPUT',
+          retryable: false,
+          action,
+          error: `invalid params for ${action}: ${valid.errors.join('; ')}`,
+          validationErrors: valid.errors,
+        };
       }
       if (def.mutates && ctx.dryRun) {
         return {

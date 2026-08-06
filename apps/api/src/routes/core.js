@@ -29,12 +29,24 @@ export default async function coreRoutes(app) {
     };
   });
 
-  app.get('/api/uc-session', { preValidation: app.requireUser }, async () => {
+  app.get('/api/uc-session', { preValidation: app.requireUser }, async (req) => {
+    const instanceId = String(req.query.instanceId || 'india').toLowerCase();
     const { rows } = await query(
-      `SELECT status, source, updated_by, updated_at, last_ok_at, last_check_at, fail_count,
-              needs_relogin, relogin_since, (jsessionid <> '') AS has_cookie
-       FROM uc_session WHERE id = 1`);
-    return rows[0];
+      `SELECT instance_id, base_url, status, source, updated_by, updated_at, last_ok_at, last_check_at,
+              fail_count, needs_relogin, relogin_since, (jsessionid <> '') AS has_cookie
+       FROM uc_session WHERE instance_id = $1`,
+      [instanceId],
+    );
+    // Backward compatible: default india row (dashboard banner / existing clients).
+    if (!req.query.all) return rows[0] || { instance_id: instanceId, status: 'unknown', has_cookie: false };
+    const all = await query(
+      `SELECT instance_id, base_url, status, source, updated_by, updated_at, last_ok_at, last_check_at,
+              fail_count, needs_relogin, relogin_since, (jsessionid <> '') AS has_cookie
+       FROM uc_session
+       ORDER BY CASE instance_id
+         WHEN 'india' THEN 1 WHEN 'uae' THEN 2 WHEN 'staging' THEN 3 ELSE 9 END`,
+    );
+    return { session: rows[0] || null, sessions: all.rows };
   });
 
   app.get('/api/runs', {

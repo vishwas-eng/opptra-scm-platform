@@ -39,7 +39,7 @@ export function summarizeRunError(result) {
 
 export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, packingGoogleFor, runUserEmail, packingPipelineFor, unicommerceConnector }) {
   const { markRunning, markPendingRetry, finishRun } = runs;
-  const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, packingPipeline, sheetPipeline, reverseDcPipeline, homecentrePipeline } = pipelines;
+  const { returnPipeline, ewaybillPipeline, inventoryPipeline, asnPipeline, packingPipeline, sheetPipeline, reverseDcPipeline, homecentrePipeline, street6Pipeline } = pipelines;
 
   async function packingPipe(runUid, userEmailHint) {
     const userEmail = runUserEmail
@@ -53,11 +53,35 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
   }
 
   return {
-    // Keep-alive: ping UC, record liveness. Death triggers refresh/alert inside uc-client.
-    'system.keepalive': async () => {
-      const r = await uc.ping();
-      logger.info({ alive: r.alive, facility: r.currentFacility || null }, 'uc keepalive');
-      return r;
+    // Keep-alive: ping each UC instance that has a cookie (always ping india).
+    // Optional job.data.instanceId limits the ping to one tenant after an admin paste.
+    'system.keepalive': async (job) => {
+      const { ucClient: getUc, PgSessionStore, UC_INSTANCE_IDS } = await import('@opptra/uc-client');
+      const only = job?.data?.instanceId ? String(job.data.instanceId) : null;
+      const ids = only ? [only] : [...UC_INSTANCE_IDS];
+      const results = {};
+      for (const id of ids) {
+        try {
+          if (!only && id !== 'india') {
+            const st = await new PgSessionStore({ instanceId: id }).status();
+            if (!st?.has_cookie) {
+              results[id] = { alive: false, skipped: true, reason: 'no cookie' };
+              continue;
+            }
+          }
+          const client = id === 'india' ? uc : getUc(id);
+          const r = await client.ping();
+          results[id] = r;
+          logger.info(
+            { instanceId: id, alive: r.alive, facility: r.currentFacility || null },
+            'uc keepalive',
+          );
+        } catch (err) {
+          results[id] = { alive: false, error: String(err.message || err) };
+          logger.warn({ instanceId: id, err: String(err.message || err) }, 'uc keepalive failed');
+        }
+      }
+      return only ? results[only] : { ok: true, instances: results };
     },
 
     // Unicommerce connector invoke — capability layer on top of the shared UcClient.
@@ -266,7 +290,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       return out;
     },
 
-    // Home Centre: Vinculum orders → UC B2C SO punch (customer + saleOrder only). Manual only.
+    // Home Centre: Vinculum orders → UC STAGING SO (default). UAE only when HC_ORDERS_UC_TARGET=uae + HC_LIVE.
     'homecentre.sync': async ({ data: { runUid, input = {} } }) => {
       if (runUid) await markRunning(runUid);
       if (!homecentrePipeline) {
@@ -275,26 +299,69 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
           empty: true,
           configured: false,
           processed: 0,
-          message: 'Home Centre ready (manual). Set VINCULUM_USER + VINCULUM_PASS to list/punch orders. No orders expected yet.',
+          message: 'Home Centre ready. Set VINCULUM_USER + VINCULUM_PASS. Orders punch staging UC until HC_ORDERS_UC_TARGET=uae + HC_LIVE.',
         };
         if (runUid) await finishRun(runUid, { ok: true, result });
         return result;
       }
       const result = await homecentrePipeline.syncOrders({
-        dryRun: !!input.dryRun,
+        dryRun: input.dryRun !== false, // default dry-run unless explicitly false
         limit: input.limit || 50,
         source: input.source || 'active',
         buyerByOrder: input.buyerByOrder || {},
       });
       if (runUid) await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
-      // Never Slack-alert on empty list or dry-run
       if (result.failed && !result.dryRun && result.processed > 0) {
         await alert('homecentre-sync', `Home Centre sync: ${result.failed} of ${result.processed} failed`, { runUid });
       }
       return result;
     },
 
-    // Home Centre: Vinculum confirm / ship / label (needs VINCULUM_FULFILL_ACTIONS_JSON).
+    // Home Centre: UAE UC inventory → Vinculum import (upload gated by HC_LIVE).
+    'homecentre.inventory': async ({ data: { runUid, input = {} } }) => {
+      if (runUid) await markRunning(runUid);
+      if (!homecentrePipeline) {
+        const result = { ok: true, empty: true, configured: false, processed: 0, message: 'Vinculum not configured' };
+        if (runUid) await finishRun(runUid, { ok: true, result });
+        return result;
+      }
+      const result = await homecentrePipeline.syncInventory({
+        dryRun: input.dryRun !== false,
+        sellerCode: input.sellerCode || undefined,
+        skus: input.skus || null,
+      });
+      if (runUid) await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
+      return result;
+    },
+
+    // Combined scheduled tick: inventory preview/push + order sync (each respects gates).
+    'homecentre.scheduled': async ({ data: { runUid, input = {} } }) => {
+      if (runUid) await markRunning(runUid);
+      if (!homecentrePipeline) {
+        const result = { ok: true, configured: false, message: 'Home Centre not configured' };
+        if (runUid) await finishRun(runUid, { ok: true, result });
+        return result;
+      }
+      const dryRun = input.dryRun !== false;
+      const inventory = await homecentrePipeline.syncInventory({ dryRun, sellerCode: input.sellerCode });
+      const orders = await homecentrePipeline.syncOrders({
+        dryRun,
+        limit: input.limit || 50,
+        source: input.source || 'active',
+      });
+      const result = {
+        ok: inventory.ok !== false && orders.ok !== false,
+        dryRun,
+        ownerEmail: orders.ownerEmail || inventory.ownerEmail,
+        inventory,
+        orders,
+        message: `HC scheduled: inventory ${inventory.ok ? 'ok' : 'fail'}; orders ${orders.ok ? 'ok' : 'fail'}`,
+      };
+      if (runUid) await finishRun(runUid, { ok: result.ok, result, error: result.ok ? null : result.message });
+      return result;
+    },
+
+    // Home Centre: Vinculum confirm / ship / label — OUT OF SCOPE (stub).
     'homecentre.fulfill': async ({ data: { runUid, input = {} } }) => {
       if (runUid) await markRunning(runUid);
       if (!homecentrePipeline) {
@@ -303,7 +370,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
         return result;
       }
       const result = await homecentrePipeline.fulfillOrders({
-        dryRun: !!input.dryRun,
+        dryRun: input.dryRun !== false,
         limit: input.limit || 20,
         webOrderNos: input.webOrderNos || null,
       });
@@ -311,19 +378,109 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       return result;
     },
 
-    // Agent Beta playbook replay (daily or manual). Runs saved tool steps via the same
-    // catalog executor the chat uses — Sheets/Drive/UC/Waypoint/Home Centre only.
+    // 6th Street PRIMARY: picklist + invoice + label → email Daniyal (invoice price only).
+    'street6.packEmail': async ({ data: { runUid, input = {} } }) => {
+      if (runUid) await markRunning(runUid);
+      if (!street6Pipeline) {
+        const result = {
+          ok: true,
+          configured: false,
+          empty: true,
+          message: '6th Street pipeline not loaded — set STREET6_VPN_* / portal creds on VM',
+        };
+        if (runUid) await finishRun(runUid, { ok: true, result });
+        return result;
+      }
+      const userEmail = runUserEmail ? await runUserEmail(runUid) : null;
+      const g = packingGoogleFor ? await packingGoogleFor(userEmail || input.userEmail) : null;
+      // Prefer operator Gmail when available (same as packing mail); pipeline handles missing gmail as dry preview.
+      const pipe = street6Pipeline.withGoogle
+        ? street6Pipeline.withGoogle(g)
+        : street6Pipeline;
+      const result = await pipe.emailPack({
+        orderIds: input.orderIds || [],
+        dryRun: input.dryRun !== false,
+        send: !!input.send,
+        artifactsByOrder: input.artifactsByOrder || {},
+      });
+      if (runUid) await finishRun(runUid, { ok: result.ok !== false, result, error: result.ok === false ? (result.message || result.error) : null });
+      return result;
+    },
+
+    // 6th Street SECONDARY: UC → portal inventory (HAR-gated).
+    'street6.inventory': async ({ data: { runUid, input = {} } }) => {
+      if (runUid) await markRunning(runUid);
+      if (!street6Pipeline) {
+        const result = { ok: true, configured: false, empty: true, message: '6th Street not configured' };
+        if (runUid) await finishRun(runUid, { ok: true, result });
+        return result;
+      }
+      const result = await street6Pipeline.syncInventory({
+        dryRun: input.dryRun !== false,
+        skus: input.skus || null,
+      });
+      if (runUid) await finishRun(runUid, { ok: result.ok !== false, result });
+      return result;
+    },
+
+    // Combined 6th Street scheduled tick: pack-email (primary) + UC→portal inventory.
+    'street6.scheduled': async ({ data: { runUid, input = {} } }) => {
+      if (runUid) await markRunning(runUid);
+      if (!street6Pipeline) {
+        const result = { ok: true, configured: false, message: '6th Street not configured' };
+        if (runUid) await finishRun(runUid, { ok: true, result });
+        return result;
+      }
+      const dryRun = input.dryRun !== false;
+      const userEmail = runUserEmail ? await runUserEmail(runUid) : null;
+      const g = packingGoogleFor ? await packingGoogleFor(userEmail || input.userEmail) : null;
+      const pipe = street6Pipeline.withGoogle ? street6Pipeline.withGoogle(g) : street6Pipeline;
+      const pack = await pipe.emailPack({
+        orderIds: input.orderIds || [],
+        dryRun,
+        send: !dryRun && !!input.send,
+        artifactsByOrder: input.artifactsByOrder || {},
+      });
+      const inventory = await street6Pipeline.syncInventory({
+        dryRun,
+        skus: input.skus || null,
+      });
+      const result = {
+        ok: pack.ok !== false && inventory.ok !== false,
+        dryRun,
+        pack,
+        inventory,
+        message: `6th Street scheduled: pack-email ${pack.ok !== false ? 'ok' : 'fail'}; inventory ${inventory.ok !== false ? 'ok' : 'fail'}`,
+      };
+      if (runUid) await finishRun(runUid, { ok: result.ok, result, error: result.ok ? null : result.message });
+      return result;
+    },
+
+    // Agent Beta playbook replay (daily or manual). Runs saved tool steps via the SHARED
+    // executor (@opptra/agent-connectors) — Sheets/Drive/UC/Waypoint/Home Centre only.
+    // UC tools call the connector DIRECTLY here: the worker is the UC-talking process,
+    // and enqueueing back into this concurrency-1 queue would deadlock the playbook job
+    // against the UC job it just queued until the wait times out.
     'agent.playbook.run': async ({ data = {} }) => {
       const playbookUid = data.playbookUid;
       if (!playbookUid) return { ok: false, error: 'playbookUid required' };
       const {
         getAgentPlaybook, markPlaybookRun, listConnectorStates, createRun,
+        playbookOwnerActive,
       } = await import('@opptra/core');
-      const { makeToolExecutor, buildConnectorStatus } = await import('../../api/src/agent/catalog.js');
+      const { makeToolExecutor, buildConnectorStatus, connectedLiveIds } = await import('@opptra/agent-connectors');
 
       const pb = await getAgentPlaybook({ playbookUid });
       if (!pb) return { ok: false, error: 'playbook not found' };
       if (pb.status === 'archived') return { ok: false, error: 'playbook archived' };
+      // Boot-time re-registration filters deactivated owners, but a scheduler registered
+      // before the user was deactivated survives until the next restart. Check at run time
+      // so nothing executes under a departed employee's Google grant.
+      if (!(await playbookOwnerActive(pb.user_email))) {
+        await markPlaybookRun(playbookUid, { ok: false, error: 'owner deactivated' });
+        logger.warn({ playbookUid, owner: pb.user_email }, 'playbook skipped - owner deactivated');
+        return { ok: false, error: 'playbook owner is not an active user' };
+      }
 
       const def = typeof pb.definition === 'string' ? JSON.parse(pb.definition) : (pb.definition || {});
       const steps = Array.isArray(def.steps) ? def.steps.slice(0, 20) : [];
@@ -333,9 +490,21 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
       }
 
       const prefs = await listConnectorStates(pb.user_email);
-      const connectors = await buildConnectorStatus(prefs);
-      const connectedIds = connectors.filter((c) => c.connected && c.live).map((c) => c.id);
-      const executeTool = makeToolExecutor({ userEmail: pb.user_email, connectedIds });
+      const connectors = await buildConnectorStatus(prefs, { userEmail: pb.user_email });
+      const connectedIds = connectedLiveIds(connectors);
+      const executeTool = makeToolExecutor({
+        userEmail: pb.user_email,
+        connectedIds,
+        invokeUc: async (action, params = {}) => {
+          if (!unicommerceConnector) return { ok: false, error: 'unicommerce connector not configured' };
+          try {
+            return await unicommerceConnector.invoke(action, params, { dryRun: false });
+          } catch (err) {
+            if (err instanceof SessionError) return { ok: false, error: 'session expired', code: 'AUTH_EXPIRED' };
+            throw err;
+          }
+        },
+      });
 
       const run = await createRun({
         userEmail: pb.user_email || 'system',

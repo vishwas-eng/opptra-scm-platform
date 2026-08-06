@@ -48,20 +48,123 @@ function mockUc(overrides = {}) {
   };
 }
 
-test('listCapabilities exposes Phase-1 read actions with mutates:false', () => {
+test('listCapabilities covers the full read surface with mutates:false', () => {
   const c = createUnicommerceConnector({ uc: mockUc() });
-  const caps = c.listCapabilities();
-  const ids = caps.map((x) => x.id).sort();
-  assert.deepEqual(ids, [
+  const reads = c.listCapabilities().filter((x) => !x.mutates).map((x) => x.id).sort();
+  assert.deepEqual(reads, [
+    'channels.list',
     'facilities.list',
     'health.ping',
+    'inventory.batchwise',
     'inventory.snapshot',
+    'reports.exportConfigGet',
+    'reports.exportJobsList',
+    'reports.exportTypes',
+    'returns.bulkReturnSummary',
     'saleOrder.get',
+    'saleOrder.getInvoiceDetails',
+    'saleOrder.getLineItems',
     'saleOrder.getShippingPackages',
     'saleOrder.getSummary',
+    'shipments.search',
   ]);
-  assert.ok(caps.every((x) => x.mutates === false));
+});
+
+test('the write surface covers the whole order lifecycle, every action flagged mutates', () => {
+  const c = createUnicommerceConnector({ uc: mockUc() });
+  const mutating = c.listCapabilities().filter((x) => x.mutates).map((x) => x.id).sort();
+  assert.deepEqual(mutating, [
+    'inventory.adjust',
+    'manifest.addPackages',
+    'manifest.close',
+    'manifest.create',
+    'putaway.complete',
+    'reports.exportJobCreate',
+    'returns.bulkReturnCreate',
+    'saleOrder.allocateB2B',
+    'saleOrder.allocateB2C',
+    'saleOrder.cancel',
+    'shipment.allocateProvider',
+    'shipment.dispatch',
+    'shipment.markDelivered',
+    'shippingPackage.createInvoice',
+  ]);
+});
+
+test('every action declares an RE backend and a real input schema', () => {
+  const caps = createUnicommerceConnector({ uc: mockUc() }).listCapabilities();
   assert.ok(caps.every((x) => x.backend === 're'));
+  // A schema of bare {} would mean the ajv gate accepts anything — the exact hole that
+  // let a 50k-SKU array through before validation was wired in.
+  for (const cap of caps) {
+    assert.equal(cap.inputSchema.type, 'object', `${cap.id} has no object schema`);
+    assert.equal(cap.inputSchema.additionalProperties, false, `${cap.id} allows unknown params`);
+  }
+});
+
+test('new read actions: invoice details + batchwise + export jobs list against mocks', async () => {
+  const uc = mockUc({
+    dataGet: async (path) => {
+      if (path.includes('batchwise')) {
+        return { batchwiseInventories: [{ shelfCode: 'DEFAULT', batchCode: 'B1', availableQuantity: 4 }] };
+      }
+      if (path.includes('exportJobs')) {
+        return { exportJobs: [{ id: 11, statusCode: 'COMPLETED', successful: true, exportFilePath: '/x.csv', exportCount: 9 }] };
+      }
+      return {};
+    },
+  });
+  uc.data = async (path, body) => {
+    if (path.includes('fetchInvoiceDetails')) {
+      return { invoices: [{ code: 'SBHR1234', saleOrderCode: body.saleOrderCode }] };
+    }
+    if (path.includes('/fetch') && !path.includes('fetchSummary') && !path.includes('fetchShipping')) {
+      return { successful: true, saleOrderDTO: { code: body.code, saleOrderItems: [{ facilityCode: 'Opp_RSG_MH' }] } };
+    }
+    if (path.includes('fetchSummary')) {
+      return { saleOrderSummary: { code: body.code, status: 'CREATED', customFieldValues: [] } };
+    }
+    return {};
+  };
+  const c = createUnicommerceConnector({ uc });
+
+  const inv = await c.invoke('saleOrder.getInvoiceDetails', { saleOrder: 'SO1', facility: 'Opp_RSG_MH' });
+  assert.equal(inv.ok, true);
+  assert.equal(inv.invoices[0].code, 'SBHR1234');
+
+  const batches = await c.invoke('inventory.batchwise', { sku: 'SKU-1' });
+  assert.equal(batches.ok, true);
+  assert.equal(batches.batches[0].shelfCode, 'DEFAULT');
+
+  const jobs = await c.invoke('reports.exportJobsList', { exportJobId: 11 });
+  assert.equal(jobs.ok, true);
+  assert.equal(jobs.jobs[0].done, true);
+  assert.equal(jobs.jobs[0].failed, false);
+});
+
+test('reports.exportJobCreate is dry-runnable and sends the exportColums typo for real', async () => {
+  let sentBody = null;
+  const uc = mockUc({
+    dataGet: async () => ({
+      exportColumns: [{ id: 'colA' }, { id: 'colB', exportable: false }],
+      exportFilters: [{ id: 'createdIn', type: 'DATE' }],
+    }),
+  });
+  uc.data = async (path, body) => {
+    if (path.includes('job/create')) { sentBody = body; return { successful: true, exportJobId: 42 }; }
+    return {};
+  };
+  const c = createUnicommerceConnector({ uc });
+
+  const preview = await c.invoke('reports.exportJobCreate', { name: 'DATATABLE SEARCH INVENTORY' }, { dryRun: true });
+  assert.equal(preview.dryRun, true);
+  assert.equal(sentBody, null, 'dryRun must not hit UC');
+
+  const real = await c.invoke('reports.exportJobCreate', { name: 'DATATABLE SEARCH INVENTORY' });
+  assert.equal(real.ok, true);
+  assert.equal(real.exportJobId, 42);
+  assert.deepEqual(sentBody.exportColums, ['colA'], 'exportColums (sic) with only exportable columns');
+  assert.equal(sentBody.frequency, 'ONETIME');
 });
 
 test('health.ping and health() never leak cookie fields', async () => {

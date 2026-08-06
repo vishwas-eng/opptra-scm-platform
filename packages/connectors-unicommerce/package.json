@@ -8,6 +8,7 @@
     ".": "./src/index.js"
   },
   "dependencies": {
-    "@opptra/uc-client": "*"
+    "@opptra/uc-client": "*",
+    "ajv": "^8.17.1"
   }
 }

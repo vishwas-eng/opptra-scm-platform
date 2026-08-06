@@ -16,10 +16,19 @@ const Env = z.object({
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
 
-  // --- Unicommerce (single whitelisted bot account) ---
+  // --- Unicommerce ---
   UC_BASE_URL: z.string().url(),
+  // India bot ONLY (sc.automations@opptra.com). Never used for UAE/KSA/staging.
+  // GCC identities (DLs): UAE scuae.automations@opptra.com, KSA scksa.automations@opptra.com.
+  // FZE scfze.automations@opptra.com planned — no config keys until UC host known.
+  // DL alone cannot OAuth to UC — need UC user with that username or session paste.
   UC_USER: z.string().default(''),
   UC_PASS: z.string().default(''),
+  // Dedicated UAE / KSA bots (scuae / scksa DLs). Never fall back to UC_USER.
+  UC_UAE_USER: z.string().default(''),
+  UC_UAE_PASS: z.string().default(''),
+  UC_KSA_USER: z.string().default(''),
+  UC_KSA_PASS: z.string().default(''),
   // Bridge until the whitelisted account lands: a manually captured JSESSIONID may be
   // seeded via env (or pasted in the Admin tab, which stores it in Postgres).
   UC_JSESSIONID_OVERRIDE: z.string().default(''),
@@ -108,14 +117,58 @@ const Env = z.object({
   VINCULUM_PASS: z.string().default(''),
   // JSON map of named fulfill steps once HAR-captured (confirm/invoice/ship/label).
   VINCULUM_FULFILL_ACTIONS_JSON: z.string().default(''),
-  // How often to poll HC orders (minutes). 0 = disabled schedule.
+  // How often to poll HC orders + inventory (minutes). 0 = disabled schedule.
   HC_SYNC_MINUTES: z.coerce.number().int().min(0).max(1440).default(0),
-  // UC B2C punch settings for Home Centre (GCC)
+  HC_OWNER_EMAIL: z.string().default('ratikanta@opptra.com'),
+  // Safety gates — production marketplace writes + UAE SO require HC_LIVE=true.
+  HC_LIVE: zbool(false),
+  HC_DRY_RUN: zbool(true),
+  // Orders UC target: staging (default) | uae (only after staging proof + approval)
+  HC_ORDERS_UC_TARGET: z.enum(['staging', 'uae']).default('staging'),
+  // Shared / legacy punch settings
   HC_UC_CHANNEL: z.string().default('CUSTOM'),
   HC_UC_SHIP_METHOD: z.string().default('STD'),
   HC_UC_CURRENCY: z.string().default('AED'),
   HC_UC_FACILITY: z.string().default(''),
-  // {"LAND02600683":"UC-SKU"} — empty = use HC SKU as UC SKU
+  HC_UC_USER: z.string().default(''),
+  HC_UC_PASS: z.string().default(''),
+  HC_UC_BASE_URL: z.string().default(''),
+  HC_CUSTOMER_CODE: z.string().default(''),
+  // Staging UC (orders proof)
+  HC_UC_STAGING_BASE_URL: z.string().default('https://oppdoorstg.unicommerce.com'),
+  HC_UC_STAGING_USER: z.string().default(''),
+  HC_UC_STAGING_PASS: z.string().default(''),
+  HC_UC_STAGING_FACILITY: z.string().default('oppdoorstg'),
+  HC_UC_STAGING_CHANNEL: z.string().default('CUSTOM'),
+  HC_UC_STAGING_SHIP_METHOD: z.string().default('STD'),
+  HC_UC_STAGING_CURRENCY: z.string().default('INR'),
+  HC_UC_STAGING_CUSTOMER: z.string().default('OPPB2B01'),
+  // Staging SKU fallback when HC SKU is not in map (e.g. optest)
+  HC_STAGING_SKU_FALLBACK: z.string().default('optest'),
+  // UAE UC (inventory source; future orders target) — company code opptrauae
+  HC_UC_UAE_BASE_URL: z.string().default('https://opptrauae.unicommerce.com'),
+  HC_UC_UAE_USER: z.string().default(''),
+  HC_UC_UAE_PASS: z.string().default(''),
+  HC_UC_UAE_FACILITY: z.string().default(''),
+  // Facility for inventorySnapshot (HC Tower stock is at opptrauae; session may be OPP_RFS_FZ_UAE)
+  HC_UC_UAE_INV_FACILITY: z.string().default('opptrauae'),
+  HC_UC_UAE_CHANNEL: z.string().default('Home Centre B2C'),
+  HC_UC_UAE_SHIP_METHOD: z.string().default('STD'),
+  HC_UC_UAE_CURRENCY: z.string().default('AED'),
+  HC_UC_UAE_CUSTOMER: z.string().default(''),
+  // KSA UC — company code opptraksa
+  HC_UC_KSA_BASE_URL: z.string().default('https://opptraksa.unicommerce.com'),
+  HC_UC_KSA_USER: z.string().default(''),
+  HC_UC_KSA_PASS: z.string().default(''),
+  HC_UC_KSA_FACILITY: z.string().default(''),
+  // Seller Code column on Vinculum import. OppDoor grid uses Vinculum user id (e.g. 2424675).
+  // Empty = use sellerCode from downloaded seller SKU list. Legacy doc value "75" is not vendorCode.
+  HC_SELLER_CODE_UAE: z.string().default(''),
+  HC_SELLER_CODE_KSA: z.string().default('90'),
+  // Vinculum vendorCode for jsonSellerSkuEnqBS (defaults to VINCULUM_USER)
+  HC_VINCULUM_VENDOR_CODE: z.string().default(''),
+  // Optional overrides only — identity skuCode match is enough for current OppDoor UAE catalog.
+  // {"T80358":"T80358"} or rare remaps. Do not invent LAND*→UC maps from archive orders.
   HC_SKU_MAP_JSON: z.string().default(''),
   // UI default region: india | gcc
   SCM_DEFAULT_REGION: z.string().default('india'),
@@ -150,6 +203,33 @@ const Env = z.object({
   FLIPKART_APP_SECRET: z.string().default(''),
   FLIPKART_ACCESS_TOKEN: z.string().default(''),
   FLIPKART_API_BASE: z.string().default('https://api.flipkart.net/sellers'),
+
+  // --- 6th Street (GCC): VPN + seller portal + IBM OMS. Secrets on VM only. ---
+  STREET6_VPN_NAME: z.string().default('6thStreet-OMS'),
+  STREET6_VPN_HOST: z.string().default('10.61.1.11'),
+  STREET6_VPN_USER: z.string().default(''),
+  STREET6_VPN_PASS: z.string().default(''),
+  STREET6_PORTAL_URL: z.string().default('https://seller-portal.6thstreet.com/#/app'),
+  // Reversed from Flutter assets/.env (public, no VPN)
+  STREET6_PORTAL_API_BASE: z.string().default('https://prod-seller-portal-backend.6thstreet.com/sellerportal/'),
+  STREET6_PORTAL_USER: z.string().default(''),
+  STREET6_PORTAL_PASS: z.string().default(''),
+  STREET6_OMS_URL: z.string().default('https://apg-oms.prod.coc.ibmcloud.com/wsc/store/login.do'),
+  STREET6_OMS_HOME_URL: z.string().default('https://apg-oms.prod.coc.ibmcloud.com/wsc/ngstore/home.do?scFlag=Y'),
+  STREET6_OMS_USER: z.string().default(''),
+  STREET6_OMS_PASS: z.string().default(''),
+  STREET6_EMAIL_TO: z.string().default('daniyal@opptra.com'),
+  STREET6_OWNER_EMAIL: z.string().default('daniyal@opptra.com'),
+  // Inventory source UC instance until facility mapping confirmed (india default).
+  STREET6_UC_INSTANCE: z.enum(['india', 'uae', 'ksa', 'staging']).default('india'),
+  STREET6_UC_BASE_URL: z.string().default(''),
+  STREET6_UC_USER: z.string().default(''),
+  STREET6_UC_PASS: z.string().default(''),
+  STREET6_UC_FACILITY: z.string().default(''),
+  STREET6_LIVE: zbool(false),
+  STREET6_DRY_RUN: zbool(true),
+  // Combined scheduled job (pack-email + UC→portal inventory). 0 = manual only.
+  STREET6_SYNC_MINUTES: z.coerce.number().int().min(0).max(1440).default(0),
 });
 
 let cached = null;

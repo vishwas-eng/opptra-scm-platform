@@ -1,0 +1,12 @@
+{
+  "name": "@opptra/connectors-6thstreet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "dependencies": {
+    "@opptra/connectors-sdk": "*",
+    "@opptra/core": "*"
+  }
+}

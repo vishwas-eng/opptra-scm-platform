@@ -22,14 +22,25 @@ export class UcClient {
   #http; #mutex = new Mutex();
   #currentFacility = null;
 
-  constructor({ baseUrl, user, pass, overrideCookie = '', defaultFacility = '', fetchImpl, sessionStore, alertFn, rps, burst } = {}) {
+  constructor({
+    baseUrl, user, pass, overrideCookie = '', defaultFacility = '',
+    fetchImpl, sessionStore, alertFn, rps, burst, instanceId = 'india',
+  } = {}) {
     this.base = baseUrl.replace(/\/+$/, '');
     this.defaultFacility = defaultFacility;
+    this.instanceId = instanceId;
     // One shared limiter throttles ALL public + internal calls across every automation.
     this.limiter = new RateLimiter({ rps: rps ?? 4, burst: burst ?? 8 });
     this.#http = makeHttp({ fetchImpl, limiter: this.limiter });
     this.bearer = new BearerManager({ http: this.#http, baseUrl: this.base, user, pass });
-    this.session = new SessionManager({ overrideCookie, store: sessionStore, alertFn });
+    // Env JSESSIONID override is India-only — never seed UAE/staging from UC_JSESSIONID_OVERRIDE.
+    const cookieOverride = instanceId === 'india' ? overrideCookie : '';
+    this.session = new SessionManager({
+      overrideCookie: cookieOverride,
+      store: sessionStore,
+      alertFn,
+      instanceId,
+    });
   }
 
   /* ---------------- public API (bearer) ---------------- */

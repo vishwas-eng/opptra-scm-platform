@@ -7,12 +7,15 @@
 
 | Path | Used by | Storage |
 |---|---|---|
-| **Per-user OAuth** | Agent Sheets/Drive tools, Packing Mail Gmail | `user_google_oauth` (keyed by `user_email`) |
+| **Per-user OAuth (Layer A)** | Agent Sheets/Drive tools, Packing Mail Gmail | `user_google_oauth` (keyed by `user_email`) |
+| **Bound resources (Layer B)** | Agent tool allow-list (specific spreadsheet / folder / file) | `connector_resources` |
 | **Shared OAuth / SA+DWD** | Sheet Update automation, shared Master sheet | `google_oauth_token` id=1 + `GOOGLE_SA_*` env |
+
+See **`docs/connectors/RESOURCE-CONNECTORS.md`** for how individual sheet/drive connectors work.
 
 Per-user refresh tokens are AES-256-GCM encrypted at rest (`enc1:` prefix, key derived from `JWT_SECRET`). Legacy plaintext rows still decrypt/read; re-connect rewrites encrypted. Tokens never leave the API/worker to the browser.
 
-Agent tools **never** fall back to the service account. If the user has no personal grant, tools return “Connect Google” with `/auth/google/connect?return=connectors`.
+Agent tools **never** fall back to the service account. If the user has no personal grant, tools return “Connect Google” with `/auth/google/connect?return=connectors`. After OAuth, **bind** each spreadsheet/folder the Agent may use — discovery (`sheets_list_spreadsheets`) does not unlock read/write.
 
 ## Connect flow
 
@@ -65,8 +68,10 @@ From `@opptra/integrations-google` `SCOPES`:
 - `GET /api/me/google/status` — connected, scopes, mismatch, `connectUrl`
 - `POST /api/me/google/disconnect` — revoke per-user token
 - Agent: `POST /api/agent/connectors/google-sheets/connect` enables both Sheets+Drive prefs once OAuth exists
+- Resources: `GET|POST /api/agent/connectors/{google-sheets|google-drive}/resources`, `DELETE …/resources/:resourceUid`
 
 ## UX
 
 - **Connectors** page: marketplace grid (live + coming soon)
+- Under Sheets / Drive detail: **Add spreadsheet** / **Add folder** list with Remove
 - **Agent** chat: clean composer + “Tools” summary + **Manage connectors** (no wall of disabled cards)

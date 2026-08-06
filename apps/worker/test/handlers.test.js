@@ -112,6 +112,56 @@ test('connector.unicommerce.invoke reads { runUid, input:{action,params} } and f
   assert.equal(finished[0].r.ok, true);
 });
 
+// The worker must never reach across into apps/api source. It used to import
+// apps/api/src/agent/catalog.js for playbook replay, which dragged in the API's BullMQ
+// producer: a playbook step calling Unicommerce would ENQUEUE a job and then wait for it
+// while holding the only slot of the concurrency-1 worker — a guaranteed deadlock until
+// the 90s poll timed out. Shared code now lives in @opptra/agent-connectors.
+test('ARCHITECTURE: worker never imports apps/api source (playbook deadlock regression)', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const path = await import('node:path');
+  const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../src');
+  for (const file of readdirSync(srcDir).filter((f) => f.endsWith('.js'))) {
+    const source = readFileSync(path.join(srcDir, file), 'utf8');
+    assert.equal(/apps\/api|\.\.\/\.\.\/api\//.test(source), false,
+      `${file} imports API app source — move the shared code into a package instead`);
+  }
+});
+
+test('agent.playbook.run calls the UC connector DIRECTLY, never through the queue', async () => {
+  // Proves the deadlock fix at the seam that matters: whatever invokeUc the worker builds
+  // must hit unicommerceConnector.invoke, not reenqueue().
+  const reenqueued = [];
+  const connectorCalls = [];
+  const handlers = makeHandlers({
+    uc: { ping: async () => ({ alive: true }) },
+    logger: { info() {}, warn() {}, error() {} },
+    alert: async () => {},
+    runs: { markRunning: async () => {}, markPendingRetry: async () => {}, finishRun: async () => {} },
+    pipelines: { returnPipeline: {}, inventoryPipeline: {}, ewaybillPipeline: {} },
+    reenqueue: async (name, data) => { reenqueued.push({ name, data }); },
+    unicommerceConnector: {
+      invoke: async (action, params) => { connectorCalls.push({ action, params }); return { ok: true, action }; },
+    },
+  });
+
+  // No playbookUid short-circuits before any DB access — enough to prove the handler
+  // exists and refuses cleanly; the direct-invoke wiring is asserted below by source.
+  const bad = await handlers['agent.playbook.run']({ data: {} });
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /playbookUid/);
+  assert.equal(reenqueued.length, 0, 'playbook path must never enqueue');
+
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const pathMod = await import('node:path');
+  const src = readFileSync(
+    pathMod.join(pathMod.dirname(fileURLToPath(import.meta.url)), '../src/handlers.js'), 'utf8');
+  assert.match(src, /invokeUc:\s*async/, 'playbook executor must inject invokeUc');
+  assert.match(src, /unicommerceConnector\.invoke/, 'invokeUc must call the connector directly');
+});
+
 test('soft-fail packing results populate runs.error for Admin/KPI', async () => {
   const { summarizeRunError, makeHandlers } = await import('../src/handlers.js');
   assert.match(

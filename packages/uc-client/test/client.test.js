@@ -41,7 +41,7 @@ test('data(): 401 → one refresh attempt → throws SessionError when no login 
   await assert.rejects(() => client.data('/data/x', {}), SessionError);
   assert.equal(n, 1); // no blind retry without a fresh session
   assert.equal(alerts.length, 1);
-  assert.equal(alerts[0].key, 'uc-session-dead');
+  assert.equal(alerts[0].key, 'uc-session-dead-india');
 });
 
 test('data(): 401 → scripted login → retried once with fresh cookie', async () => {

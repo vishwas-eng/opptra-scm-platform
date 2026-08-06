@@ -3,19 +3,7 @@
 import { createRun, query } from '@opptra/core';
 import { createUnicommerceConnector, CONNECTOR_ID, CONNECTOR_NAME } from '@opptra/connectors-unicommerce';
 import { enqueue } from '../queue.js';
-
-function userBucket(req) {
-  try {
-    const m = (req.headers.cookie || '').match(/(?:^|;\s*)opptra_session=([^;]+)/);
-    if (m) {
-      const payload = decodeURIComponent(m[1]).split('.')[1];
-      const claims = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
-      if (claims.email) return `u:${claims.email}`;
-    }
-  } catch { /* fall through to IP */ }
-  return `ip:${req.ip}`;
-}
-const perUser = (max, timeWindow) => ({ rateLimit: { max, timeWindow, keyGenerator: userBucket } });
+import { perUser } from '../plugins/rateLimitKey.js';
 
 /** Capability catalog without a live UcClient (handlers never run here). */
 const catalog = createUnicommerceConnector({
@@ -23,6 +11,7 @@ const catalog = createUnicommerceConnector({
     ping: async () => ({ alive: false }),
     listFacilities: async () => ({ all: [], current: null }),
     data: async () => ({}),
+    dataGet: async () => ({}),
     public: async () => ({}),
   },
 });
@@ -30,14 +19,15 @@ const catalog = createUnicommerceConnector({
 async function sessionVaultMeta() {
   try {
     const { rows } = await query(
-      `SELECT status, source, updated_at, last_ok_at, last_check_at, fail_count,
+      `SELECT instance_id, status, source, updated_at, last_ok_at, last_check_at, fail_count,
               needs_relogin, (jsessionid <> '') AS has_cookie
-       FROM uc_session WHERE id = 1`,
+       FROM uc_session WHERE instance_id = 'india'`,
     );
     const row = rows[0];
     if (!row) return { configured: false };
     return {
       configured: true,
+      instanceId: row.instance_id || 'india',
       status: row.status,
       source: row.source,
       hasCookie: !!row.has_cookie,

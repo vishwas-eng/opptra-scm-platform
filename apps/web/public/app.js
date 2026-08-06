@@ -4,7 +4,7 @@
   const PAGE_TITLES = {
     dashboard: 'Workspace', return: 'Return Flow', ewaybill: 'E-way Bill', inventory: 'Inward / Outward',
     asn: 'ASN Compile', reversedc: 'Reverse DC', sheet: 'Sheet Update', packing: 'Packing Mail',
-    homecentre: 'Home Centre Sync', extensions: 'Extensions', admin: 'Admin',
+    homecentre: 'Home Centre Sync', schedules: 'Scheduled Jobs', extensions: 'Extensions', admin: 'Admin',
     agent: 'Agent · Beta',
     connectors: 'Connectors',
   };
@@ -182,14 +182,18 @@
   });
 
   /* ---------------- re-login flow ---------------- */
-  async function openUcLogin() {
-    if (!ucLoginUrl) {
-      try { ucLoginUrl = (await api('/api/admin/uc-login-url')).url; } catch { ucLoginUrl = null; }
+  async function openUcLogin(instanceId) {
+    const id = instanceId || $('admin-uc-instance')?.value || 'india';
+    let url = null;
+    try {
+      url = (await api('/api/admin/uc-login-url?instanceId=' + encodeURIComponent(id))).url;
+    } catch {
+      url = ucLoginUrl;
     }
-    if (ucLoginUrl) window.open(ucLoginUrl, '_blank', 'noopener');
+    if (url) window.open(url, '_blank', 'noopener');
   }
-  $('dash-relogin-btn').addEventListener('click', openUcLogin);
-  $('admin-relogin-btn')?.addEventListener('click', openUcLogin);
+  $('dash-relogin-btn').addEventListener('click', () => openUcLogin('india'));
+  $('admin-relogin-btn')?.addEventListener('click', () => openUcLogin());
 
   /* ---------------- dashboard + KPIs ---------------- */
   async function refreshDashboard() {
@@ -648,37 +652,193 @@
     });
   });
 
-  /* ---------------- Home Centre (GCC) — manual, empty-safe ---------------- */
+  /* ---------------- Home Centre (GCC) — staging orders / UAE inventory ---------------- */
   function renderHc(r) {
     const ok = r.ok !== false;
     const msg = r.message || (r.empty ? 'No orders — nothing to do' : (ok ? 'Done' : 'Failed'));
     const rows = [
       ['Status', ok ? (r.empty ? 'OK (empty)' : 'OK') : 'Failed'],
+      ['Mode', r.mode || (r.dryRun ? 'dry-run' : 'live')],
       ['Dry run', r.dryRun ? 'yes' : 'no'],
+      ['Orders UC', r.ucTarget || r.ordersTarget || '—'],
+      ['UC base', r.ucBaseUrl || '—'],
       ['Fetched', r.fetched ?? '—'],
-      ['Processed', r.processed ?? 0],
+      ['Processed', r.processed ?? r.skuCount ?? 0],
       ['OK / failed', `${r.okCount ?? 0} / ${r.failed ?? 0}`],
-      ['Configured', r.configured === false ? 'Vinculum creds missing' : 'yes'],
+      ['Created', r.created ?? '—'],
+      ['Configured', r.configured === false ? 'missing creds' : 'yes'],
     ];
     return resultHead(ok, msg) + kv(rows);
   }
 
+  async function loadHcStatus() {
+    try {
+      const s = await api('/api/automations/homecentre/status');
+      const badge = $('hc-mode-badge');
+      if (badge) {
+        badge.textContent = s.modeLabel || 'Staging / Dry-run';
+        badge.className = 'badge ' + (s.live ? 'badge-live' : 'badge-staging');
+      }
+      if ($('hc-owner-meta')) $('hc-owner-meta').textContent = s.ownerEmail ? `Owner: ${s.ownerEmail}` : '';
+      if ($('hc-status-kv')) {
+        $('hc-status-kv').innerHTML = kv([
+          ['Schedule', s.syncMinutes ? `every ${s.syncMinutes} min` : 'manual / disabled'],
+          ['Orders target', s.ordersTarget || 'staging'],
+          ['Staging UC', s.staging?.configured ? (s.staging.baseUrl || 'configured') : 'creds missing — need HC_UC_STAGING_*'],
+          ['UAE UC', s.uae?.configured ? (s.uae.baseUrl || 'configured') : 'creds missing — need HC_UC_UAE_*'],
+          ['Vinculum', s.vinculumConfigured ? 'configured' : 'missing'],
+          ['Seller UAE', s.sellerCodes?.uae || '75'],
+        ]);
+      }
+      const tb = $('hc-runs-table')?.querySelector('tbody');
+      if (tb) {
+        const runs = s.recentRuns || [];
+        tb.innerHTML = runs.length
+          ? runs.map((r) => `<tr>
+              <td>${esc(fmt(r.finished_at || r.created_at))}</td>
+              <td>${esc(r.action)}</td>
+              <td>${esc(r.mode || (r.dryRun ? 'dry-run' : '—'))}</td>
+              <td>${esc(r.status)}</td>
+              <td>${esc(r.okCount != null ? `${r.okCount}/${r.failed || 0}` : (r.summary || '—'))}</td>
+            </tr>`).join('')
+          : '<tr><td colspan="5" class="meta">No Home Centre runs yet</td></tr>';
+      }
+    } catch (err) {
+      if ($('hc-status-kv')) $('hc-status-kv').textContent = String(err.message || err);
+    }
+  }
+
+  $('hc-refresh-status')?.addEventListener('click', () => loadHcStatus());
   $('hc-sync-btn')?.addEventListener('click', () => {
     const dryRun = !!$('hc-dry')?.checked;
+    const source = $('hc-source-archive')?.checked ? 'archive' : 'active';
     return runJob({
       btn: $('hc-sync-btn'), out: $('hc-output'),
-      working: dryRun ? 'Checking Home Centre orders (dry run)…' : 'Syncing Home Centre → UC B2C SO…',
-      submit: () => api('/api/automations/homecentre/sync', { body: { dryRun, limit: 50, source: 'active' } }),
-      render: renderHc,
+      working: dryRun
+        ? `Previewing Home Centre ${source} orders → staging UC…`
+        : `Punching Home Centre ${source} orders → staging UC…`,
+      submit: () => api('/api/automations/homecentre/sync', { body: { dryRun, limit: dryRun ? 50 : 1, source } }),
+      render: (r) => { loadHcStatus(); return renderHc(r); },
+    });
+  });
+
+  $('hc-inv-btn')?.addEventListener('click', () => {
+    const dryRun = !!$('hc-dry')?.checked;
+    return runJob({
+      btn: $('hc-inv-btn'), out: $('hc-output'),
+      working: 'Pulling UAE UC inventory preview…',
+      submit: () => api('/api/automations/homecentre/inventory', { body: { dryRun } }),
+      render: (r) => { loadHcStatus(); return renderHc(r); },
     });
   });
 
   $('hc-fulfill-btn')?.addEventListener('click', () => runJob({
     btn: $('hc-fulfill-btn'), out: $('hc-output'),
-    working: 'Fulfill dry-run…',
+    working: 'Fulfill out-of-scope check…',
     submit: () => api('/api/automations/homecentre/fulfill', { body: { dryRun: true, limit: 20 } }),
     render: renderHc,
   }));
+
+  // Load status when opening HC tab
+  document.querySelector('[data-tab="homecentre"]')?.addEventListener('click', () => setTimeout(loadHcStatus, 50));
+
+  async function loadSchedulesBoard() {
+    const box = $('schedules-board');
+    if (!box) return;
+    try {
+      const { jobs } = await api('/api/schedules');
+      box.innerHTML = (jobs || []).map((j) => {
+        const on = j.enabled ? 'On' : 'Off';
+        const last = j.lastRun
+          ? `${esc(j.lastRun.status)} · ${fmt(j.lastRun.finished_at || j.lastRun.created_at)}${j.lastRun.summary ? ' · ' + esc(j.lastRun.summary) : ''}`
+          : 'No runs yet';
+        return `<div class="panel schedule-card">
+          <div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+            <div>
+              <h3 style="margin:0">${esc(j.name)} <span class="badge">${on}</span></h3>
+              <p class="meta" style="margin:6px 0 0">${esc(j.description || '')}</p>
+            </div>
+            <div class="meta" style="text-align:right">
+              ${j.everyMinutes ? `every ${j.everyMinutes}m` : 'manual'}<br/>
+              ${j.ownerEmail ? esc(j.ownerEmail) : ''}
+              ${j.dryRunDefault ? '<br/>dry-run default' : ''}
+              ${j.awaitingHar ? '<br/>awaiting HAR' : ''}
+            </div>
+          </div>
+          <p class="meta" style="margin-top:8px">Steps: ${(j.steps || []).map(esc).join(' · ')}</p>
+          <p class="meta">Last: ${last}</p>
+        </div>`;
+      }).join('') || '<p class="meta">No scheduled jobs configured.</p>';
+    } catch (e) {
+      box.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+    }
+  }
+
+  async function loadUcSessionsBoard() {
+    const box = $('uc-sessions-board');
+    if (!box) return;
+    try {
+      const payload = await api('/api/uc-session?all=1');
+      const sessions = payload.sessions || [];
+      box.innerHTML = sessions.length
+        ? sessions.map((s) => {
+          const id = s.instance_id || '?';
+          const st = (s.status || '?').toUpperCase();
+          return `<div><b>${esc(id)}</b>: ${st} · cookie ${s.has_cookie ? 'yes' : 'no'} · last OK ${fmt(s.last_ok_at)}</div>`;
+        }).join('')
+        : '<div class="meta">No sessions loaded yet.</div>';
+    } catch {
+      box.innerHTML = '<div class="meta">Sign in as ops/admin to see UC sessions.</div>';
+    }
+  }
+
+  $('uc-connect-open')?.addEventListener('click', async () => {
+    const instanceId = $('uc-connect-instance')?.value || 'india';
+    try {
+      const { url } = await api('/api/admin/uc-login-url?instanceId=' + encodeURIComponent(instanceId));
+      window.open(url || 'https://oppdoor.unicommerce.co.in', '_blank', 'noopener');
+      toast('Log into Unicommerce in the new tab, then Capture with Session Helper (or Paste session).', 'ok', 7000);
+    } catch (e) {
+      // Non-admin fallback: open known host
+      const hosts = {
+        india: 'https://oppdoor.unicommerce.co.in',
+        staging: 'https://oppdoorstg.unicommerce.com',
+        uae: 'https://opptrauae.unicommerce.com',
+        ksa: 'https://opptraksa.unicommerce.com',
+      };
+      window.open(hosts[instanceId] || hosts.india, '_blank', 'noopener');
+      toast(e.message || 'Opened Unicommerce — use Session Helper to capture.', 'ok', 6000);
+    }
+  });
+
+  $('uc-connect-paste-toggle')?.addEventListener('click', () => {
+    $('uc-connect-paste')?.classList.toggle('hidden');
+  });
+
+  $('uc-connect-save')?.addEventListener('click', async () => {
+    const instanceId = $('uc-connect-instance')?.value || 'india';
+    const jsessionid = ($('uc-connect-cookie')?.value || '').trim().replace(/^JSESSIONID=/i, '');
+    if (!jsessionid || jsessionid.length < 8) {
+      toast('Paste a valid JSESSIONID.', 'bad');
+      return;
+    }
+    try {
+      // Admin paste endpoint (same as Admin tab)
+      const res = await api('/api/admin/uc-session', {
+        method: 'POST',
+        body: { jsessionid, instanceId },
+      });
+      toast(`Saved ${res.instanceId || instanceId} session` + (res.facility ? ` · ${res.facility}` : ''), 'ok');
+      $('uc-connect-cookie').value = '';
+      loadUcSessionsBoard();
+    } catch (e) {
+      toast(e.message, 'bad');
+    }
+  });
+
+  document.querySelector('[data-tab="schedules"]')?.addEventListener('click', () => {
+    setTimeout(() => { loadSchedulesBoard(); loadUcSessionsBoard(); }, 50);
+  });
 
   /* ---------------- India / GCC region toggle ---------------- */
   function setRegion(region) {
@@ -1037,31 +1197,33 @@
   /* ---------------- admin ---------------- */
   $('admin-cookie-btn')?.addEventListener('click', async () => {
     const v = $('admin-cookie').value.trim();
+    const instanceId = $('admin-uc-instance')?.value || 'india';
     const msg = $('admin-cookie-msg');
     const btn = $('admin-cookie-btn');
     if (!v) { msg.textContent = 'Paste a JSESSIONID first.'; msg.className = 'meta error'; return; }
     setLoading(btn, true);
     msg.className = 'meta';
-    msg.textContent = 'Testing this session against Unicommerce…';
+    msg.textContent = `Testing this session against ${instanceId}…`;
     try {
       // api() throws on non-2xx, but the 400-with-reason body is what we want to show,
       // so read the raw response instead of letting a bad-session 400 look like a network error.
       const res = await fetch('/api/admin/uc-session', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsessionid: v }), credentials: 'same-origin',
+        body: JSON.stringify({ jsessionid: v, instanceId }), credentials: 'same-origin',
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.alive) {
         msg.className = 'meta ok';
-        msg.textContent = `Verified ALIVE${data.facility ? ' on facility ' + data.facility : ''}. Automations are unblocked.`;
+        msg.textContent = `Verified ALIVE on ${data.instanceId || instanceId}${data.facility ? ' / facility ' + data.facility : ''}.`;
         $('admin-cookie').value = '';
-        toast('Session verified and saved. It is ALIVE.', 'ok');
+        toast(`${data.instanceId || instanceId} session verified ALIVE.`, 'ok');
       } else {
         msg.className = 'meta error';
         msg.textContent = data.error || 'Unicommerce rejected this session.';
         toast('That session did not work: ' + (data.error || 'rejected by Unicommerce'), 'bad');
       }
       refreshDashboard();
+      loadAdmin();
     } catch (err) {
       msg.className = 'meta error';
       msg.textContent = 'Could not reach the platform to test the session: ' + err.message;
@@ -1101,11 +1263,24 @@
   async function loadAdmin() {
     if (me.role !== 'admin') return;
     loadTokens();
-    // session detail
+    // multi-instance session vault (no cookies)
     try {
-      const s = await api('/api/uc-session');
-      $('admin-session-meta').innerHTML = `Status: <b>${(s.status || '?').toUpperCase()}</b> · source: ${esc(s.source)} · last OK: ${fmt(s.last_ok_at)}` +
-        (s.needs_relogin ? ` · <span class="error">re-login needed since ${fmt(s.relogin_since)}</span>` : '');
+      const payload = await api('/api/uc-session?all=1');
+      const sessions = payload.sessions || (payload.status ? [payload] : []);
+      if (sessions.length) {
+        $('admin-session-meta').innerHTML = sessions.map((s) => {
+          const id = s.instance_id || 'india';
+          const st = (s.status || '?').toUpperCase();
+          const relogin = s.needs_relogin
+            ? ` · <span class="error">re-login needed since ${fmt(s.relogin_since)}</span>`
+            : '';
+          return `<div><b>${esc(id)}</b>: ${st} · cookie ${s.has_cookie ? 'yes' : 'no'} · source ${esc(s.source || 'none')} · last OK ${fmt(s.last_ok_at)}${relogin}</div>`;
+        }).join('');
+      } else {
+        const s = payload.session || payload;
+        $('admin-session-meta').innerHTML = `Status: <b>${(s.status || '?').toUpperCase()}</b> · source: ${esc(s.source)} · last OK: ${fmt(s.last_ok_at)}` +
+          (s.needs_relogin ? ` · <span class="error">re-login needed since ${fmt(s.relogin_since)}</span>` : '');
+      }
     } catch {}
     // google workspace connection
     try {
@@ -1315,6 +1490,30 @@
   const statCard = (label, val, cls) => `<div class="card"><h3>${label}</h3><div class="big ${cls}">${esc(String(val))}</div></div>`;
   const emptyRow = (cols) => `<tr><td colspan="${cols}" class="empty">No data yet.</td></tr>`;
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const CONNECTOR_LOGOS = {
+    'google-sheets': '/assets/connectors/google-sheets.svg',
+    'google-drive': '/assets/connectors/google-drive.svg',
+    unicommerce: '/assets/connectors/unicommerce.svg',
+    waypoint: '/assets/connectors/waypoint.svg',
+    homecentre: '/assets/connectors/homecentre.svg',
+    amazon: '/assets/connectors/amazon.svg',
+    flipkart: '/assets/connectors/flipkart.svg',
+    myntra: '/assets/connectors/myntra.svg',
+    zepto: '/assets/connectors/zepto.svg',
+    blinkit: '/assets/connectors/blinkit.svg',
+    instamart: '/assets/connectors/instamart.svg',
+    nykaa: '/assets/connectors/nykaa.svg',
+    meesho: '/assets/connectors/meesho.svg',
+    '6thstreet': '/assets/connectors/6thstreet.svg',
+  };
+  function connectorIconHtml(c, lg = false) {
+    const src = CONNECTOR_LOGOS[c.id];
+    const cls = `conn-market-icon${lg ? ' lg' : ''}${src ? ' has-logo' : ''}`;
+    if (src) {
+      return `<div class="${cls}"><img src="${esc(src)}" alt="" width="20" height="20" decoding="async" /></div>`;
+    }
+    return `<div class="${cls}">${esc(c.icon || '?')}</div>`;
+  }
   const fmt = (t) => t ? new Date(t).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
   // Plain-words summary of a run's input - users never see raw JSON.
   const shortInput = (input) => {
@@ -1355,10 +1554,21 @@
       const { connectors } = await api('/api/agent/connectors');
       const live = (connectors || []).filter((c) => c.live);
       const connected = live.filter((c) => c.connected);
-      const labels = connected.map((c) => c.name).join(' · ') || 'None connected';
+      const sheetBound = (connectors.find((c) => c.id === 'google-sheets')?.resources || []).length;
+      const driveBound = (connectors.find((c) => c.id === 'google-drive')?.resources || []).length;
+      const chips = connected.map((c) => {
+        let label = c.name;
+        if (c.id === 'google-sheets') label = `Sheets(${sheetBound})`;
+        else if (c.id === 'google-drive') label = `Drive(${driveBound})`;
+        const src = CONNECTOR_LOGOS[c.id];
+        const icon = src
+          ? `<img class="tools-chip-logo" src="${esc(src)}" alt="" width="14" height="14" decoding="async" />`
+          : '';
+        return `<span class="tools-chip">${icon}${esc(label)}</span>`;
+      }).join('') || '<span class="tools-summary-list">None</span>';
       box.innerHTML = `<span class="tools-summary-label">Tools</span>
-        <span class="tools-summary-list">${esc(labels)}</span>
-        <button type="button" class="linkish" id="agent-summary-manage">Manage connectors</button>`;
+        <span class="tools-summary-list">${chips}</span>
+        <button type="button" class="linkish" id="agent-summary-manage">Manage</button>`;
       $('agent-summary-manage')?.addEventListener('click', () => go('connectors'));
     } catch {
       box.innerHTML = `<button type="button" class="linkish" id="agent-summary-manage">Manage connectors</button>`;
@@ -1366,7 +1576,7 @@
     }
   }
 
-  async function loadConnectorsPage() {
+  async function loadConnectorsPage(reopenId = null) {
     if (me?.role !== 'admin') return;
     const liveBox = $('connectors-grid-live');
     const soonBox = $('connectors-grid-soon');
@@ -1378,21 +1588,59 @@
       const soon = connectors.filter((c) => !c.live);
       const card = (c) => {
         const status = c.status || 'disconnected';
-        const statusLabel = status === 'connected' ? 'Connected'
-          : status === 'coming_soon' ? 'Coming soon'
+        const statusLabel = status === 'connected' ? 'On'
+          : status === 'coming_soon' ? 'Soon'
           : status === 'needs_reconnect' ? 'Reconnect'
-          : status === 'ready' ? 'Ready' : 'Not connected';
+          : status === 'ready' ? 'Ready' : 'Off';
+        const resCount = Array.isArray(c.resources) ? c.resources.length : 0;
+        const blurb = (c.id === 'google-sheets' || c.id === 'google-drive')
+          ? (resCount ? `${resCount} bound` : (c.connected ? 'Bind a resource' : (c.connectHint || c.blurb || '')))
+          : (c.connectHint || c.blurb || '');
         return `<button type="button" class="conn-market-card ${c.live ? '' : 'soon'}" data-cid="${esc(c.id)}">
-          <div class="conn-market-icon">${esc(c.icon || '?')}</div>
+          ${connectorIconHtml(c)}
           <div class="conn-market-body">
             <div class="conn-market-name">${esc(c.name)}</div>
-            <div class="conn-market-blurb">${esc(c.blurb || c.connectHint || '')}</div>
+            <div class="conn-market-blurb">${esc(blurb)}</div>
           </div>
           <span class="status-pill ${status}">${statusLabel}</span>
         </button>`;
       };
       liveBox.innerHTML = live.map(card).join('');
       soonBox.innerHTML = soon.map(card).join('');
+
+      const renderResourcesBlock = (c) => {
+        if (c.id !== 'google-sheets' && c.id !== 'google-drive') return '';
+        if (!c.systemReady) {
+          return `<div class="conn-resources">
+            <p class="meta">Connect Google first, then bind individual ${c.id === 'google-sheets' ? 'spreadsheets' : 'folders/files'} the Agent may use.</p>
+          </div>`;
+        }
+        const resources = Array.isArray(c.resources) ? c.resources : [];
+        const placeholder = c.id === 'google-sheets'
+          ? 'Paste spreadsheet URL or ID'
+          : 'Paste Drive folder/file URL or ID';
+        const addLabel = c.id === 'google-sheets' ? 'Add spreadsheet' : 'Add folder / file';
+        const list = resources.length
+          ? `<ul class="conn-resource-list">${resources.map((r) => `
+              <li>
+                <div>
+                  <strong>${esc(r.name || r.externalId)}</strong>
+                  <span class="meta">${esc(r.kind)} · ${esc(String(r.externalId).slice(0, 18))}…</span>
+                </div>
+                <button type="button" class="secondary compact" data-rm-res="${esc(r.resourceUid)}" data-rm-conn="${esc(c.id)}">Remove</button>
+              </li>`).join('')}</ul>`
+          : `<p class="meta">No bound resources yet. Agent read/write only works on items you add here.</p>`;
+        return `<div class="conn-resources">
+          <h4>Bound resources</h4>
+          ${list}
+          <form class="conn-resource-form" data-add-res="${esc(c.id)}">
+            <input type="text" name="name" placeholder="Optional name" maxlength="160" />
+            <input type="text" name="url" placeholder="${esc(placeholder)}" required maxlength="500" />
+            <button type="submit" class="primary compact">${esc(addLabel)}</button>
+          </form>
+        </div>`;
+      };
+
       const openDetail = (id) => {
         const c = connectors.find((x) => x.id === id);
         if (!c || !detail) return;
@@ -1412,28 +1660,61 @@
         } else if (c.systemReady) {
           actions = `<button type="button" class="primary" data-conn="${esc(c.id)}">Connect</button>`;
         } else if (c.id === 'unicommerce') {
-          actions = `<p class="meta">${esc(c.connectHint)}</p><button type="button" class="secondary" data-tab-jump="admin">Open Admin</button>`;
+          actions = `<p class="meta">${esc(c.connectHint || 'Open Scheduled Jobs → Connect Unicommerce (login + Session Helper).')}</p>
+            <button type="button" class="primary" data-tab-jump="schedules">Connect Unicommerce</button>`;
         } else {
           actions = `<p class="meta">${esc(c.connectHint)}</p>`;
         }
         detail.innerHTML = `<div class="connector-detail-inner">
-          <div class="conn-market-icon lg">${esc(c.icon)}</div>
+          ${connectorIconHtml(c, true)}
           <div>
             <h3>${esc(c.name)}</h3>
             <p>${esc(c.blurb || '')}</p>
             <p class="meta">${esc(c.connectHint || '')}${c.detail?.googleEmail ? ' · ' + esc(c.detail.googleEmail) : ''}</p>
             <div class="row mt-md">${actions}</div>
+            ${renderResourcesBlock(c)}
           </div>
           <button type="button" class="secondary" id="connector-detail-close">Close</button>
         </div>`;
         $('connector-detail-close')?.addEventListener('click', () => detail.classList.add('hidden'));
         detail.querySelector('[data-tab-jump]')?.addEventListener('click', () => go('admin'));
-        detail.querySelectorAll('[data-conn]').forEach((b) => b.addEventListener('click', () => agentConnect(b.dataset.conn).then(loadConnectorsPage)));
-        detail.querySelectorAll('[data-disc]').forEach((b) => b.addEventListener('click', () => agentDisconnect(b.dataset.disc).then(loadConnectorsPage)));
+        detail.querySelectorAll('[data-conn]').forEach((b) => b.addEventListener('click', () => agentConnect(b.dataset.conn).then(() => loadConnectorsPage(b.dataset.conn))));
+        detail.querySelectorAll('[data-disc]').forEach((b) => b.addEventListener('click', () => agentDisconnect(b.dataset.disc).then(() => loadConnectorsPage(b.dataset.disc))));
+        detail.querySelectorAll('[data-rm-res]').forEach((b) => b.addEventListener('click', async () => {
+          try {
+            await api(`/api/agent/connectors/${encodeURIComponent(b.dataset.rmConn)}/resources/${encodeURIComponent(b.dataset.rmRes)}`, { method: 'DELETE' });
+            toast('Resource removed.', 'ok');
+            await loadConnectorsPage(b.dataset.rmConn);
+          } catch (e) { toast(e.message, 'bad'); }
+        }));
+        detail.querySelectorAll('form[data-add-res]').forEach((form) => {
+          form.addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const fd = new FormData(form);
+            const body = {
+              name: String(fd.get('name') || '').trim() || undefined,
+              url: String(fd.get('url') || '').trim(),
+            };
+            try {
+              await api(`/api/agent/connectors/${encodeURIComponent(form.dataset.addRes)}/resources`, {
+                method: 'POST', body,
+              });
+              toast('Resource bound.', 'ok');
+              await loadConnectorsPage(form.dataset.addRes);
+            } catch (e) {
+              if (/oauth|Connect Google|Reconnect/i.test(e.message)) {
+                location.href = '/auth/google/connect?return=connectors';
+                return;
+              }
+              toast(e.message, 'bad');
+            }
+          });
+        });
       };
       [...liveBox.querySelectorAll('[data-cid]'), ...soonBox.querySelectorAll('[data-cid]')].forEach((b) => {
         b.addEventListener('click', () => openDetail(b.dataset.cid));
       });
+      if (reopenId) openDetail(reopenId);
     } catch (e) {
       liveBox.innerHTML = `<p class="error">${esc(e.message)}</p>`;
     }
@@ -1518,69 +1799,127 @@
 
   $('agent-new-chat')?.addEventListener('click', async () => {
     agentThreadId = null;
-    $('agent-messages').innerHTML = `<div class="agent-empty"><h3>Automate your daily ops</h3><p>Connect Sheets &amp; Drive, then describe what to do.</p><p class="agent-empty-hints"><button type="button" class="linkish" id="agent-empty-connectors">Manage connectors</button></p></div>`;
+    $('agent-messages').innerHTML = `<div class="agent-empty"><h3>Build a daily workflow</h3><p>Connect Sheets, bind a spreadsheet, run tools — then Automate daily.</p><p class="agent-empty-hints"><button type="button" class="linkish" id="agent-empty-connectors">Connectors</button></p></div>`;
     $('agent-empty-connectors')?.addEventListener('click', () => go('connectors'));
     await loadAgentThreads();
   });
 
+  // Ops think in IST wall-clock ("9 am"), and the scheduler now stores hour + minute +
+  // IANA zone, so offer the real times rather than the UTC hours that could only ever
+  // land on :30 IST.
+  const SCHEDULE_TZ = 'Asia/Kolkata';
+
+  function fillScheduleHourSelect() {
+    const sel = $('agent-schedule-hour');
+    if (!sel || sel.options.length) return;
+    for (let h = 0; h < 24; h++) {
+      for (const m of [0, 30]) {
+        const opt = document.createElement('option');
+        opt.value = `${h}:${m}`;
+        opt.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} IST`;
+        if (h === 9 && m === 0) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    }
+  }
+
+  function showScheduleBar(show) {
+    const bar = $('agent-schedule-bar');
+    if (!bar) return;
+    bar.classList.toggle('hidden', !show);
+    if (show) {
+      fillScheduleHourSelect();
+      const title = $('agent-schedule-title');
+      if (title && !title.value) title.value = 'Daily sheet sync';
+      title?.focus();
+    }
+  }
+
   async function loadAgentPlaybooks() {
     const box = $('agent-playbooks');
+    const label = $('agent-playbooks-label');
     if (!box) return;
     try {
       const { playbooks } = await api('/api/agent/playbooks');
       if (!playbooks?.length) {
         box.innerHTML = '';
+        if (label) label.hidden = true;
         return;
       }
-      box.innerHTML = playbooks.slice(0, 8).map((p) => {
+      if (label) label.hidden = false;
+      box.innerHTML = playbooks.slice(0, 10).map((p) => {
         const daily = p.schedule_kind === 'daily' && p.status === 'active';
-        const label = `${esc(p.title)} · ${daily ? 'daily' : p.status}`;
-        return `<span class="agent-playbook-chip ${daily ? 'active-daily' : ''}">${label}
+        const zone = (p.timezone || 'UTC').split('/').pop().replace('Kolkata', 'IST');
+        const when = daily
+          ? `${String(p.hour_utc).padStart(2, '0')}:${String(p.schedule_minute ?? 0).padStart(2, '0')} ${zone}`
+          : p.status;
+        const last = p.last_run_status
+          ? ` · last ${p.last_run_status === 'succeeded' ? 'ok' : 'fail'}`
+          : '';
+        return `<span class="agent-playbook-chip ${daily ? 'active-daily' : ''}">
+          ${esc(p.title)}
+          <span class="pb-meta">${esc(when)}${esc(last)}</span>
           <button type="button" data-run-pb="${esc(p.playbook_uid)}">Run</button>
-          ${p.status === 'active' ? `<button type="button" data-pause-pb="${esc(p.playbook_uid)}">Pause</button>` : `<button type="button" data-act-pb="${esc(p.playbook_uid)}">Activate</button>`}
+          ${p.status === 'active'
+            ? `<button type="button" data-pause-pb="${esc(p.playbook_uid)}">Pause</button>`
+            : `<button type="button" data-act-pb="${esc(p.playbook_uid)}">Activate</button>`}
         </span>`;
       }).join('');
       box.querySelectorAll('[data-run-pb]').forEach((b) => b.addEventListener('click', async () => {
         try {
           await api('/api/agent/playbooks/' + b.dataset.runPb + '/run', { method: 'POST', body: {} });
-          toast('Playbook queued.', 'ok');
+          toast('Playbook queued on worker.', 'ok');
         } catch (e) { toast(e.message, 'bad'); }
       }));
       box.querySelectorAll('[data-pause-pb]').forEach((b) => b.addEventListener('click', async () => {
         try {
           await api('/api/agent/playbooks/' + b.dataset.pausePb + '/pause', { method: 'POST', body: {} });
-          toast('Playbook paused.', 'ok');
+          toast('Schedule paused (BullMQ scheduler removed).', 'ok');
           await loadAgentPlaybooks();
         } catch (e) { toast(e.message, 'bad'); }
       }));
       box.querySelectorAll('[data-act-pb]').forEach((b) => b.addEventListener('click', async () => {
         try {
           await api('/api/agent/playbooks/' + b.dataset.actPb + '/activate', { method: 'POST', body: {} });
-          toast('Daily automation activated (UTC hour from playbook).', 'ok');
+          toast('Daily BullMQ schedule activated.', 'ok');
           await loadAgentPlaybooks();
         } catch (e) { toast(e.message, 'bad'); }
       }));
-    } catch { box.innerHTML = ''; }
+    } catch { box.innerHTML = ''; if (label) label.hidden = true; }
   }
 
-  $('agent-save-daily')?.addEventListener('click', async () => {
+  $('agent-save-daily')?.addEventListener('click', () => {
     if (me?.role !== 'admin') return;
-    const title = prompt('Name this daily automation', 'Daily sheet sync') || '';
-    if (!title.trim()) return;
+    if (!agentThreadId) {
+      toast('Run tools in a chat first, then schedule those steps.', 'bad', 5000);
+      return;
+    }
+    showScheduleBar(true);
+  });
+  $('agent-schedule-cancel')?.addEventListener('click', () => showScheduleBar(false));
+  $('agent-schedule-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (me?.role !== 'admin') return;
+    const title = ($('agent-schedule-title')?.value || '').trim();
+    const [pickedHour, pickedMinute] = String($('agent-schedule-hour')?.value ?? '9:0').split(':');
+    if (!title) return;
     try {
       const res = await api('/api/agent/playbooks', {
         body: {
-          title: title.trim(),
+          title,
           threadId: agentThreadId || undefined,
           scheduleKind: 'daily',
-          hourUtc: 3,
+          hourUtc: Number(pickedHour) || 0,
+          scheduleMinute: Number(pickedMinute) || 0,
+          timezone: SCHEDULE_TZ,
           activate: true,
-          instruction: title.trim(),
+          instruction: title,
         },
       });
-      toast(res.note || 'Daily automation saved.', 'ok', 6000);
+      toast(res.note || 'Daily automation scheduled on BullMQ.', 'ok', 6000);
+      showScheduleBar(false);
       await loadAgentPlaybooks();
-    } catch (e) { toast(e.message, 'bad', 8000); }
+    } catch (err) { toast(err.message, 'bad', 8000); }
   });
 
   $('agent-composer')?.addEventListener('submit', async (e) => {

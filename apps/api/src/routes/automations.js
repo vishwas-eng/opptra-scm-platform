@@ -3,7 +3,7 @@
 // wait briefly for the result (sync UI actions).
 import { randomUUID } from 'node:crypto';
 import {
-  createRun, finishRun, query,
+  createRun, finishRun, query, config, listRuns,
   validateReverseDcInput, validateEwaybillInput, validatePackingInput,
   validateSheetSaleOrders, validateAsnInput, validateRequiredId,
   validationFailBody,
@@ -30,22 +30,7 @@ const INVENTORY_ITEMS = {
 
 // Per-user (not per-IP) rate limits on job-producing routes: the global HTTP limit
 // doesn't stop one insider from flooding the concurrency-1 worker queue.
-//
-// The limiter runs in onRequest, BEFORE auth populates req.user, so we read the email
-// straight from the JWT cookie payload for bucketing. No signature check is needed here
-// (real auth still verifies the token later) - this only picks a stable per-user bucket.
-function userBucket(req) {
-  try {
-    const m = (req.headers.cookie || '').match(/(?:^|;\s*)opptra_session=([^;]+)/);
-    if (m) {
-      const payload = decodeURIComponent(m[1]).split('.')[1];
-      const claims = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
-      if (claims.email) return `u:${claims.email}`;
-    }
-  } catch { /* fall through to IP */ }
-  return `ip:${req.ip}`;
-}
-const perUser = (max, timeWindow) => ({ rateLimit: { max, timeWindow, keyGenerator: userBucket } });
+import { perUser } from '../plugins/rateLimitKey.js';
 
 /** Return 400 with { ok:false, error, fieldErrors } and never create a Run / enqueue. */
 function rejectInvalid(reply, result) {
@@ -487,15 +472,26 @@ export default async function automationRoutes(app) {
       params: { type: 'object', required: ['runUid'], properties: { runUid: { type: 'string', minLength: 8 } } },
     },
   }, async (req, reply) => {
+    // Scope to the caller, exactly like GET /api/runs does for the list. A run's
+    // `result` holds whatever the automation produced — for Agent playbooks that is the
+    // contents of the owner's bound spreadsheets and Drive files, and for connector
+    // invokes it is full UC order/invoice payloads. A runUid leaking into Slack (alerts
+    // carry it) must not turn into another user's data for any signed-in account.
+    const isAdmin = req.user.role === 'admin';
     const { rows } = await query(
       `SELECT run_uid, user_email, automation, action, input, status, result, error,
               created_at, started_at, finished_at
-       FROM runs WHERE run_uid = $1`, [req.params.runUid]);
+       FROM runs
+       WHERE run_uid = $1 AND ($2::text IS NULL OR user_email = $2)`,
+      [req.params.runUid, isAdmin ? null : req.user.email],
+    );
+    // 404 rather than 403 for someone else's run: an existence oracle over run ids is
+    // itself a small leak.
     if (!rows.length) return reply.code(404).send({ error: 'run not found' });
     return rows[0];
   });
 
-  // --- Home Centre (GCC): manual only. Empty order list = success. ---
+  // --- Home Centre (GCC): orders→staging UC; inventory←UAE UC. HC_LIVE gates marketplace writes. ---
   const hcBody = {
     type: 'object',
     properties: {
@@ -504,9 +500,71 @@ export default async function automationRoutes(app) {
       source: { type: 'string', enum: ['active', 'archive'], default: 'active' },
       skipFulfill: { type: 'boolean', default: true },
       webOrderNos: { type: 'array', items: { type: 'string' }, maxItems: 100 },
+      sellerCode: { type: 'string', maxLength: 20 },
+      skus: { type: 'array', items: { type: 'string' }, maxItems: 500 },
     },
     additionalProperties: false,
   };
+
+  app.get('/api/automations/homecentre/status', {
+    preValidation: opsOnly,
+    config: perUser(30, '1 minute'),
+  }, async () => {
+    const c = config();
+    const recent = await listRuns({ automation: 'homecentre', limit: 15 });
+    return {
+      ok: true,
+      ownerEmail: c.HC_OWNER_EMAIL || 'ratikanta@opptra.com',
+      live: c.HC_LIVE,
+      dryRunDefault: c.HC_DRY_RUN,
+      ordersTarget: c.HC_ORDERS_UC_TARGET,
+      syncMinutes: c.HC_SYNC_MINUTES,
+      vinculumConfigured: !!(c.VINCULUM_USER && c.VINCULUM_PASS),
+      staging: {
+        baseUrl: c.HC_UC_STAGING_BASE_URL,
+        facility: c.HC_UC_STAGING_FACILITY,
+        channel: c.HC_UC_STAGING_CHANNEL,
+        customer: c.HC_UC_STAGING_CUSTOMER || c.HC_CUSTOMER_CODE,
+        // Staging personal/bot only — never India UC_USER / sc.automations.
+        configured: !!(c.HC_UC_STAGING_USER && c.HC_UC_STAGING_PASS),
+      },
+      uae: {
+        baseUrl: c.HC_UC_UAE_BASE_URL,
+        facility: c.HC_UC_UAE_FACILITY,
+        channel: c.HC_UC_UAE_CHANNEL,
+        customer: c.HC_UC_UAE_CUSTOMER || c.HC_CUSTOMER_CODE,
+        // Dedicated UAE bot only — never India UC_USER / sc.automations.
+        configured: !!(c.HC_UC_UAE_USER || c.UC_UAE_USER)
+          && !!(c.HC_UC_UAE_PASS || c.UC_UAE_PASS),
+      },
+      ksa: {
+        instance_id: 'ksa',
+        baseUrl: c.HC_UC_KSA_BASE_URL,
+        facility: c.HC_UC_KSA_FACILITY,
+        // Dedicated KSA bot only — never India UC_USER / sc.automations / HC_UC_USER.
+        configured: !!(c.HC_UC_KSA_USER || c.UC_KSA_USER)
+          && !!(c.HC_UC_KSA_PASS || c.UC_KSA_PASS),
+      },
+      sellerCodes: { uae: c.HC_SELLER_CODE_UAE, other: c.HC_SELLER_CODE_KSA },
+      recentRuns: recent.map((r) => ({
+        run_uid: r.run_uid,
+        action: r.action,
+        status: r.status,
+        user_email: r.user_email,
+        created_at: r.created_at,
+        finished_at: r.finished_at,
+        error: r.error,
+        summary: r.result?.message || r.result?.mode || null,
+        mode: r.result?.mode || null,
+        dryRun: r.result?.dryRun,
+        okCount: r.result?.okCount ?? r.result?.orders?.okCount,
+        failed: r.result?.failed ?? r.result?.orders?.failed,
+      })),
+      modeLabel: c.HC_LIVE
+        ? (c.HC_ORDERS_UC_TARGET === 'uae' ? 'Live UAE' : 'Live inventory / staging orders')
+        : (c.HC_DRY_RUN ? 'Staging / Dry-run' : 'Staging writes (HC_LIVE=false)'),
+    };
+  });
 
   app.post('/api/automations/homecentre/sync', {
     preValidation: opsOnly,
@@ -519,9 +577,34 @@ export default async function automationRoutes(app) {
       source: req.body?.source || 'active',
     };
     const run = await createRun({
-      userEmail: req.user.email, automation: 'homecentre', action: 'sync', input,
+      userEmail: req.user.email,
+      ownerEmail: 'ratikanta@opptra.com',
+      automation: 'homecentre',
+      action: 'sync',
+      input,
     });
     await enqueue('homecentre.sync', { runUid: run.run_uid, input });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  app.post('/api/automations/homecentre/inventory', {
+    preValidation: opsOnly,
+    config: perUser(10, '1 minute'),
+    schema: { body: hcBody },
+  }, async (req) => {
+    const input = {
+      dryRun: req.body?.dryRun !== false,
+      sellerCode: req.body?.sellerCode,
+      skus: req.body?.skus || null,
+    };
+    const run = await createRun({
+      userEmail: req.user.email,
+      ownerEmail: 'ratikanta@opptra.com',
+      automation: 'homecentre',
+      action: 'inventory',
+      input,
+    });
+    await enqueue('homecentre.inventory', { runUid: run.run_uid, input });
     return { runUid: run.run_uid, queued: true };
   });
 
@@ -536,9 +619,168 @@ export default async function automationRoutes(app) {
       webOrderNos: req.body?.webOrderNos || null,
     };
     const run = await createRun({
-      userEmail: req.user.email, automation: 'homecentre', action: 'fulfill', input,
+      userEmail: req.user.email,
+      ownerEmail: 'ratikanta@opptra.com',
+      automation: 'homecentre',
+      action: 'fulfill',
+      input,
     });
     await enqueue('homecentre.fulfill', { runUid: run.run_uid, input });
     return { runUid: run.run_uid, queued: true };
+  });
+
+  // --- 6th Street (GCC): picklist+invoice+label → email Daniyal; inventory UC→portal secondary. ---
+  const street6Body = {
+    type: 'object',
+    properties: {
+      dryRun: { type: 'boolean', default: true },
+      send: { type: 'boolean', default: false },
+      orderIds: { type: 'array', items: { type: 'string', maxLength: 80 }, maxItems: 50 },
+      skus: { type: 'array', items: { type: 'string', maxLength: 60 }, maxItems: 500 },
+    },
+    additionalProperties: false,
+  };
+
+  app.get('/api/automations/6thstreet/status', {
+    preValidation: opsOnly,
+    config: perUser(30, '1 minute'),
+  }, async () => {
+    const c = config();
+    const recent = await listRuns({ automation: '6thstreet', limit: 15 });
+    return {
+      ok: true,
+      ownerEmail: c.STREET6_OWNER_EMAIL,
+      emailTo: c.STREET6_EMAIL_TO,
+      live: c.STREET6_LIVE,
+      dryRunDefault: c.STREET6_DRY_RUN,
+      vpnConfigured: !!(c.STREET6_VPN_USER && c.STREET6_VPN_PASS && c.STREET6_VPN_HOST),
+      portalConfigured: !!(c.STREET6_PORTAL_USER && c.STREET6_PORTAL_PASS),
+      omsConfigured: !!(c.STREET6_OMS_USER && c.STREET6_OMS_PASS),
+      ucInstance: c.STREET6_UC_INSTANCE,
+      ucFacility: c.STREET6_UC_FACILITY || null,
+      syncMinutes: c.STREET6_SYNC_MINUTES || 0,
+      awaitingHar: true,
+      primary: 'pack.email',
+      secondary: 'inventory.push',
+      recentRuns: recent.map((r) => ({
+        run_uid: r.run_uid,
+        action: r.action,
+        status: r.status,
+        user_email: r.user_email,
+        created_at: r.created_at,
+        finished_at: r.finished_at,
+        error: r.error,
+        summary: r.result?.message || null,
+        dryRun: r.result?.dryRun,
+      })),
+    };
+  });
+
+  app.post('/api/automations/6thstreet/pack-email', {
+    preValidation: opsOnly,
+    config: perUser(10, '1 minute'),
+    schema: { body: street6Body },
+  }, async (req) => {
+    const input = {
+      dryRun: req.body?.dryRun !== false,
+      send: !!req.body?.send,
+      orderIds: req.body?.orderIds || [],
+    };
+    const run = await createRun({
+      userEmail: req.user.email,
+      ownerEmail: config().STREET6_OWNER_EMAIL || 'daniyal@opptra.com',
+      automation: '6thstreet',
+      action: 'pack-email',
+      input: { ...input, orderCount: input.orderIds.length },
+    });
+    await enqueue('street6.packEmail', { runUid: run.run_uid, input });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  app.post('/api/automations/6thstreet/inventory', {
+    preValidation: opsOnly,
+    config: perUser(10, '1 minute'),
+    schema: { body: street6Body },
+  }, async (req) => {
+    const input = {
+      dryRun: req.body?.dryRun !== false,
+      skus: req.body?.skus || null,
+    };
+    const run = await createRun({
+      userEmail: req.user.email,
+      ownerEmail: config().STREET6_OWNER_EMAIL || 'daniyal@opptra.com',
+      automation: '6thstreet',
+      action: 'inventory',
+      input,
+    });
+    await enqueue('street6.inventory', { runUid: run.run_uid, input });
+    return { runUid: run.run_uid, queued: true };
+  });
+
+  // Scheduled running jobs board (HC + 6th Street + sheet sync).
+  app.get('/api/schedules', {
+    preValidation: opsOnly,
+    config: perUser(60, '1 minute'),
+  }, async () => {
+    const c = config();
+    const [hcRuns, streetRuns, sheetRuns] = await Promise.all([
+      listRuns({ automation: 'homecentre', limit: 5 }),
+      listRuns({ automation: '6thstreet', limit: 5 }),
+      listRuns({ automation: 'sheet', limit: 5 }),
+    ]);
+    const lastOf = (runs, actions) => {
+      const hit = runs.find((r) => !actions || actions.includes(r.action));
+      return hit ? {
+        run_uid: hit.run_uid,
+        action: hit.action,
+        status: hit.status,
+        created_at: hit.created_at,
+        finished_at: hit.finished_at,
+        error: hit.error,
+        summary: hit.result?.message || null,
+      } : null;
+    };
+    return {
+      ok: true,
+      jobs: [
+        {
+          id: 'homecentre-sync',
+          name: 'Home Centre Sync',
+          description: 'One job: UAE UC inventory → Vinculum + HC orders → UC (staging until live).',
+          ownerEmail: c.HC_OWNER_EMAIL || 'ratikanta@opptra.com',
+          everyMinutes: c.HC_SYNC_MINUTES,
+          enabled: c.HC_SYNC_MINUTES > 0 && !!(c.VINCULUM_USER && c.VINCULUM_PASS),
+          dryRunDefault: c.HC_DRY_RUN,
+          live: c.HC_LIVE,
+          steps: ['inventory (UAE UC → HC seller 75)', 'orders (HC → staging/UAE UC)'],
+          lastRun: lastOf(hcRuns, ['scheduled', 'sync', 'inventory']),
+        },
+        {
+          id: 'street6-sync',
+          name: '6th Street Sync',
+          description: 'One job: picklist+invoice+label email to Daniyal + UC→portal inventory.',
+          ownerEmail: c.STREET6_OWNER_EMAIL || 'daniyal@opptra.com',
+          everyMinutes: c.STREET6_SYNC_MINUTES || 0,
+          enabled: (c.STREET6_SYNC_MINUTES || 0) > 0,
+          dryRunDefault: c.STREET6_DRY_RUN,
+          live: c.STREET6_LIVE,
+          steps: ['pack-email (picklist + invoice + label)', 'inventory (UC → 6th Street)'],
+          lastRun: lastOf(streetRuns, ['scheduled', 'pack-email', 'inventory']),
+          awaitingHar: true,
+        },
+        {
+          id: 'sheet-sync-source',
+          name: 'Sheet source sync',
+          description: 'Pull ops source into Master sheet.',
+          ownerEmail: null,
+          everyMinutes: c.SHEET_SYNC_MINUTES || 0,
+          enabled: (c.SHEET_SYNC_MINUTES || 0) > 0,
+          dryRunDefault: false,
+          live: true,
+          steps: ['sheet.syncSource'],
+          lastRun: lastOf(sheetRuns, ['syncSource', 'sync']),
+        },
+      ],
+    };
   });
 }

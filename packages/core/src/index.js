@@ -24,7 +24,14 @@ export {
 export {
   createAgentPlaybook, listAgentPlaybooks, getAgentPlaybook,
   updateAgentPlaybook, markPlaybookRun, listActiveDailyPlaybooks,
+  playbookCron, normalizeTimezone, playbookOwnerActive,
 } from './agentPlaybooks.js';
+export {
+  parseGoogleResourceRef,
+  listConnectorResources, getConnectorResource, findConnectorResourceByExternal,
+  resolveBoundResource, createConnectorResource, deleteConnectorResource,
+  deleteConnectorResourcesForUser,
+} from './connectorResources.js';
 export {
   validateReverseDcInput,
   validateEwaybillInput,

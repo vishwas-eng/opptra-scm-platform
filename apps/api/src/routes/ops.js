@@ -47,8 +47,8 @@ export default async function opsRoutes(app) {
       query(`SELECT run_uid, user_email, automation, action, error, status, created_at, finished_at
               FROM runs WHERE status='failed' AND created_at > ${since}
               ORDER BY finished_at DESC NULLS LAST LIMIT 25`),
-      query(`SELECT status, source, needs_relogin, relogin_since, last_ok_at, last_check_at, fail_count,
-                (jsessionid <> '') AS has_cookie FROM uc_session WHERE id = 1`),
+      query(`SELECT instance_id, status, source, needs_relogin, relogin_since, last_ok_at, last_check_at, fail_count,
+                (jsessionid <> '') AS has_cookie FROM uc_session WHERE instance_id = 'india'`),
       query(`SELECT count(*) FILTER (WHERE status='queued')::int queued,
                      count(*) FILTER (WHERE status='running')::int running,
                      count(*) FILTER (WHERE status='pending_retry')::int pending
