@@ -1,31 +1,63 @@
-/** Shared action registry + connector shell used by marketplace packages. */
+/** Shared action registry + connector shell used by every connector package. */
 
+import Ajv from 'ajv';
 import { CONNECTOR_ERROR_CODES, connectorError } from './errors.js';
 
 export {
   CONNECTOR_ERROR_CODES, connectorError, isRetryable,
 } from './errors.js';
 
+// One Ajv per process is enough: compile() is pure and the compiled validators are
+// stored per-action, so registries never share validation state.
+const ajv = new Ajv({ allErrors: true, coerceTypes: false, strict: false });
+
+/**
+ * Create an isolated action registry.
+ *
+ * `inputSchema` is ENFORCED, not documentation. Callers reach actions through an HTTP
+ * route (or MCP tools/call) whose own body schema can only say `params: object` — it
+ * cannot know which action is being invoked when it compiles. Without per-action
+ * validation here, a 50 000-entry `skus` array goes straight to the vendor on the
+ * tenant's credential, and an arbitrary `facility` re-pins the session-global facility
+ * for every job that follows.
+ *
+ * Schemas compile at registration, so an unparseable schema fails at boot — never by
+ * silently skipping validation on a live call.
+ */
 export function createRegistry() {
   const actions = new Map();
   return {
     register(def) {
       if (!def?.id || typeof def.handler !== 'function') throw new Error('register() requires id and handler');
       if (actions.has(def.id)) throw new Error(`duplicate action id: ${def.id}`);
+      const inputSchema = def.inputSchema || { type: 'object' };
       actions.set(def.id, {
         id: def.id,
         title: def.title || def.id,
         mutates: !!def.mutates,
         backend: def.backend || 're',
         description: def.description || '',
-        inputSchema: def.inputSchema || { type: 'object' },
+        inputSchema,
         awaitingHar: !!def.awaitingHar,
+        validate: ajv.compile(inputSchema),
         handler: def.handler,
       });
     },
     getAction(id) { return actions.get(id) || null; },
+    /**
+     * @returns {{ ok: true } | { ok: false, errors: string[] }}
+     */
+    validateParams(id, params) {
+      const def = actions.get(id);
+      if (!def) return { ok: false, errors: [`unknown action: ${id}`] };
+      if (def.validate(params ?? {})) return { ok: true };
+      const errors = (def.validate.errors || [])
+        .slice(0, 8)
+        .map((e) => `params${e.instancePath || ''} ${e.message}`);
+      return { ok: false, errors };
+    },
     listRegisteredActions() {
-      return [...actions.values()].map(({ handler, ...meta }) => meta);
+      return [...actions.values()].map(({ handler, validate, ...meta }) => meta);
     },
     _reset() { actions.clear(); },
   };
@@ -68,8 +100,22 @@ export function createConnectorShell({ id, name, auth, registry, health, beforeI
           { action, awaitingHar: true },
         );
       }
+      // Enforce the declared inputSchema before anything reaches the vendor.
+      const valid = registry.validateParams(action, params || {});
+      if (!valid.ok) {
+        return connectorError(
+          CONNECTOR_ERROR_CODES.INVALID_INPUT,
+          `invalid params for ${action}: ${valid.errors.join('; ')}`,
+          { action, validationErrors: valid.errors },
+        );
+      }
       if (def.mutates && ctx.dryRun) {
-        return { ok: true, dryRun: true, action, preview: { params } };
+        return {
+          ok: true,
+          dryRun: true,
+          action,
+          preview: { params, note: 'mutating action not executed (dryRun)' },
+        };
       }
       return def.handler(params || {}, ctx);
     },

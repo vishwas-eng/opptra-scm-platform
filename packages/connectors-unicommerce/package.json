@@ -9,6 +9,6 @@
   },
   "dependencies": {
     "@opptra/uc-client": "*",
-    "ajv": "^8.17.1"
+    "@opptra/connectors-sdk": "*"
   }
 }
