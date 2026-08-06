@@ -206,8 +206,8 @@ test('download, fill, upload: the portal list drives the sync', async () => {
   const dry = await p.syncInventory({ dryRun: true });
   assert.equal(dry.ok, true);
   assert.equal(dry.listSource, 'portal', 'the SKU list came from the portal, not the caller');
-  assert.equal(dry.skuCount, 3);
-  assert.equal(dry.notInUc, 1, 'GONE is not in UC');
+  assert.equal(dry.skuCount, 2, 'only SKUs Unicommerce holds are sent');
+  assert.equal(dry.notInUc, 1, 'GONE is listed by the portal but absent from UC');
   assert.equal(portalClient.uploaded, null, 'a preview must never upload');
 
   const live = await p.syncInventory({ dryRun: false });
@@ -216,9 +216,12 @@ test('download, fill, upload: the portal list drives the sync', async () => {
   // Sellable = on hand minus already promised, so A1 is 10-4, and a SKU UC does not
   // know becomes 0 rather than being dropped (dropping it leaves 6th Street selling
   // stock we do not have).
+  // A1 is 10 on hand minus 4 promised. GONE is omitted entirely rather than sent as
+  // 0: 6th Street lists its whole catalogue, and zeroing SKUs we do not stock would
+  // wipe out other sellers' inventory on the storefront.
   assert.deepEqual(
     portalClient.uploaded.map((r) => [r.sku, r.count]),
-    [['A1', 6], ['B2', 10], ['GONE', 0]],
+    [['A1', 6], ['B2', 10]],
   );
 });
 
@@ -232,4 +235,38 @@ test('live writes stay behind STREET6_LIVE even when dryRun is false', async () 
   const r = await p.syncInventory({ dryRun: false });
   assert.equal(r.ok, false);
   assert.match(r.message, /STREET6_LIVE/);
+});
+
+test('a catalogue with nothing of ours in it fails with a useful reason', async () => {
+  // Unicommerce throws when a batch has no SKU it recognises. 6th Street lists ~8500
+  // products and only some are ours, so a foreign batch must not abort the run.
+  const portalClient = {
+    catalogueSkus: async () => ({ ok: true, count: 2, skus: ['FOREIGN1', 'FOREIGN2'], rows: [] }),
+    uploadInventory: async () => { throw new Error('must not upload'); },
+  };
+  const uc = { public: async () => { throw new Error('/inventorySnapshot/get -> [200] Could not find any any items'); } };
+  const p = makeSixthStreetPipeline(null, { STREET6_UC_INSTANCE: 'ksa', HC_UC_KSA_USER: 'u', HC_UC_KSA_PASS: 'p' }, null, { portalClient, ucClientFor: () => uc });
+
+  const r = await p.syncInventory({ dryRun: true, region: 'ksa' });
+  assert.equal(r.ok, false);
+  assert.match(r.message, /None of the 2 products/);
+  assert.match(r.message, /facility/i, 'must point at the likely cause');
+});
+
+test('foreign batches are skipped, ours still sync', async () => {
+  const portalClient = {
+    catalogueSkus: async () => ({ ok: true, count: 3, skus: ['MINE', 'F1', 'F2'], rows: [] }),
+    uploaded: null,
+    uploadInventory: async function (rows) { this.uploaded = rows; return { ok: true, data: {} }; },
+  };
+  const uc = {
+    public: async (_p, body) => {
+      if (!body.itemTypeSKUs.includes('MINE')) throw new Error('Could not find any any items');
+      return { inventorySnapshots: [{ itemTypeSKU: 'MINE', inventory: 4, openSale: 1 }] };
+    },
+  };
+  const p = makeSixthStreetPipeline(null, { STREET6_UC_INSTANCE: 'ksa', HC_UC_KSA_USER: 'u', HC_UC_KSA_PASS: 'p', STREET6_LIVE: 'true' }, null, { portalClient, ucClientFor: () => uc });
+  const r = await p.syncInventory({ dryRun: false, region: 'ksa' });
+  assert.equal(r.uploaded, true);
+  assert.deepEqual(portalClient.uploaded, [{ sku: 'MINE', count: 3, known: true }]);
 });

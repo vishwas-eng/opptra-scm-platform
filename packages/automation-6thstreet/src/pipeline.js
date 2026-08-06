@@ -71,7 +71,7 @@ function normalizePortalInventory(data) {
     .filter((r) => r.sku);
 }
 
-export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) {
+export function makeSixthStreetPipeline(uc, cfg, google, { portalClient, ucClientFor } = {}) {
   // A real portal client whenever credentials exist; tests inject their own.
   const portal = portalClient || ((cfg.STREET6_PORTAL_USER && cfg.STREET6_PORTAL_PASS)
     ? makeStreet6PortalClient({
@@ -295,9 +295,13 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
 
     // Prefer instance-bound client (uae/ksa/staging) so we never touch India session for GCC reads.
     // India instance may use the injected shared `uc` singleton.
-    const client = target.label === 'india' && uc && typeof uc.public === 'function'
-      ? uc
-      : makeStreet6UcClient(target);
+    // GCC regions always get their own instance-bound client; the India singleton must
+    // never serve them. ucClientFor is a test seam, not a production path.
+    const client = ucClientFor
+      ? ucClientFor(target)
+      : (target.label === 'india' && uc && typeof uc.public === 'function'
+        ? uc
+        : makeStreet6UcClient(target));
     if (!client || typeof client.public !== 'function') {
       return {
         ok: true,
@@ -358,29 +362,46 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
 
     let snapshots = [];
     let sample = null;
-    try {
-      const fac = target.facility ? { facility: target.facility } : {};
-      // UC caps how many SKUs one snapshot call may ask for, so walk the list in
-      // batches rather than truncating it and silently syncing a partial catalogue.
-      for (let i = 0; i < skuList.length; i += SNAPSHOT_BATCH) {
-        const batch = skuList.slice(i, i + SNAPSHOT_BATCH);
+    let batchesWithNoMatch = 0;
+    const fac = target.facility ? { facility: target.facility } : {};
+
+    // 6th Street lists its whole catalogue, most of which is not ours. Unicommerce
+    // THROWS when a batch contains no SKU it recognises, so a single foreign batch
+    // used to abort the entire sync. A batch with no matches is normal here and simply
+    // contributes nothing.
+    for (let i = 0; i < skuList.length; i += SNAPSHOT_BATCH) {
+      const batch = skuList.slice(i, i + SNAPSHOT_BATCH);
+      try {
         const snap = await client.public(
           '/services/rest/v1/inventory/inventorySnapshot/get',
           { itemTypeSKUs: batch },
           { ...fac, idempotent: true },
         );
         snapshots = snapshots.concat(snap?.inventorySnapshots || []);
+      } catch (err) {
+        const msg = String(err.message || err);
+        if (/could not find any/i.test(msg)) { batchesWithNoMatch += 1; continue; }
+        return {
+          ok: false,
+          dryRun,
+          ownerEmail,
+          ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
+          error: msg.slice(0, 200),
+          message: 'Could not read stock from Unicommerce.',
+          probedSkus: skuList.length,
+        };
       }
-      sample = snapshots[0] || null;
-    } catch (err) {
+    }
+    sample = snapshots[0] || null;
+
+    if (!snapshots.length) {
       return {
         ok: false,
         dryRun,
         ownerEmail,
         ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
-        error: String(err.message || err).slice(0, 200),
-        message: 'Could not read stock from Unicommerce.',
         probedSkus: skuList.length,
+        message: `None of the ${skuList.length} products 6th Street lists were found in Unicommerce ${target.label.toUpperCase()} at facility ${target.facility || '(default)'}. Check the facility, or whether these SKUs live in a different instance.`,
       };
     }
 
@@ -388,11 +409,13 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
     // than being dropped: leaving it out would leave 6th Street selling stock we do
     // not have.
     const bySku = new Map(snapshots.map((r) => [String(r.itemTypeSKU), r]));
-    const rows = skuList.map((sku) => {
-      const snap = bySku.get(String(sku));
-      return { sku, count: sellableFrom(snap), known: !!snap };
-    });
-    const unknown = rows.filter((r) => !r.known).length;
+    // Only send SKUs Unicommerce actually holds. 6th Street lists its entire
+    // catalogue, so pushing 0 for every SKU we do not stock would zero out other
+    // sellers' inventory on the storefront.
+    const rows = skuList
+      .filter((sku) => bySku.has(String(sku)))
+      .map((sku) => ({ sku, count: sellableFrom(bySku.get(String(sku))), known: true }));
+    const unknown = skuList.length - rows.length;
 
     const preview = {
       ok: true,
