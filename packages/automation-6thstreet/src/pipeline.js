@@ -329,7 +329,7 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
           snapshotCount: 0,
         };
       }
-      const live = await portal.liveInventory();
+      const live = await portal.catalogueSkus({ country: (region || ucInstance || 'ksa').toUpperCase() === 'KSA' ? 'SA' : 'AE' });
       if (live.ok !== true) {
         return {
           ok: false,
@@ -337,12 +337,12 @@ export function makeSixthStreetPipeline(uc, cfg, google, { portalClient } = {}) 
           ownerEmail,
           needsPortalLogin: live.code === 'AUTH_REQUIRED' || live.code === 'AUTH_EXPIRED',
           ucTarget: { label: target.label, facility: target.facility, baseUrl: target.baseUrl },
-          message: `Could not download the 6th Street inventory list: ${live.error}`,
+          message: `Could not download the 6th Street catalogue: ${live.error}`,
           snapshotCount: 0,
         };
       }
-      portalRows = normalizePortalInventory(live.data);
-      skuList = portalRows.map((r) => r.sku);
+      skuList = live.skus || [];
+      portalRows = live.rows || [];
       listSource = 'portal';
       if (!skuList.length) {
         return {

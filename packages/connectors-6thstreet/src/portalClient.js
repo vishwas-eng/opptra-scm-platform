@@ -28,6 +28,20 @@ function looksLikeCredentialFailure(status, body) {
   return CREDENTIAL_FAILURE_RE.test(String(body || ''));
 }
 
+/** Parse the portal's `Sku,...` CSV exports. Blank and malformed lines are skipped. */
+function parseCsv(text) {
+  const lines = String(text || '').split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+  const cols = lines[0].split(',').map((c) => c.trim().toLowerCase());
+  const skuAt = cols.findIndex((c) => c === 'sku');
+  if (skuAt < 0) return [];
+  return lines.slice(1).map((line) => {
+    const parts = line.split(',');
+    const sku = String(parts[skuAt] ?? '').trim();
+    return sku ? { sku, price: Number(parts[1]) || 0 } : null;
+  }).filter(Boolean);
+}
+
 export function makeStreet6PortalClient({
   baseUrl = DEFAULT_BASE,
   username,
@@ -63,7 +77,7 @@ export function makeStreet6PortalClient({
         redirect: 'manual',
         signal: AbortSignal.timeout(30_000),
       });
-      const text = accept === 'json' ? await res.text() : '';
+      const text = await res.text();
       // Relabel a credential rejection so the guard treats it as auth (terminal),
       // not as a server fault worth retrying. See CREDENTIAL_FAILURE_RE above.
       const status = looksLikeCredentialFailure(res.status, text) ? 401 : res.status;
@@ -81,7 +95,11 @@ export function makeStreet6PortalClient({
     if (run.ok !== true) return run; // guard refused (blocked, throttled, budget)
     const { response } = run;
 
-    if (accept !== 'json') return { ok: response.status < 400, status: response.status, res: response.res };
+    if (accept !== 'json') {
+      return response.status < 400
+        ? { ok: true, status: response.status, text: response.body }
+        : connectorError(CONNECTOR_ERROR_CODES.UPSTREAM_ERROR, `6th Street portal ${response.status}`, { status: response.status });
+    }
 
     let data = null;
     try { data = response.body ? JSON.parse(response.body) : null; } catch { data = { raw: response.body?.slice(0, 400) }; }
@@ -164,9 +182,32 @@ export function makeStreet6PortalClient({
       return { ok: true, profile: r.data, portal: base };
     },
 
-    /** Current stock the portal believes it has. */
-    async liveInventory() {
-      return authed(() => call('api/inventory/live'));
+    /**
+     * The catalogue 6th Street sells in a country, as CSV (`Sku,Price,SpecialPrice`).
+     *
+     * This is the SKU source for an inventory sync. `api/inventory/live` would be the
+     * obvious choice but it never responds: it timed out at 25s, 60s and 90s on every
+     * shape tried, with and without paging or a country. price/live answers in about a
+     * second and lists the same catalogue, which is all the sync needs.
+     */
+    async catalogueSkus({ country = 'SA' } = {}) {
+      const r = await authed(() => call(
+        `api/price/live?country=${encodeURIComponent(country)}`,
+        { accept: 'text' },
+      ));
+      if (r.ok !== true) return r;
+      const rows = parseCsv(r.text || '');
+      return { ok: true, country, count: rows.length, skus: rows.map((x) => x.sku), rows };
+    },
+
+    /** Past inventory imports, newest first. Each carries its own per-row outcome. */
+    async inventoryImports({ start = 0, limit = 20 } = {}) {
+      return authed(() => call(`api/inventory/imports?start=${start}&limit=${limit}`));
+    },
+
+    /** Per-SKU rows of one import: `{ sku, count, pushToOMS, status }`. */
+    async importItems(importId, { start = 0, limit = 500 } = {}) {
+      return authed(() => call(`api/inventory/import-items/${encodeURIComponent(importId)}?start=${start}&limit=${limit}`));
     },
 
     /** Recent inventory import jobs, newest first. */

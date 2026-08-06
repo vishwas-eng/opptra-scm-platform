@@ -147,7 +147,7 @@ test('the guard protects the account: a 403 stops the client dead', async () => 
   const { c } = client((url) => (
     url.endsWith('api/public/login') ? { body: LOGIN_OK } : { status: 403, headers: {}, body: '' }
   ));
-  const r = await c.liveInventory();
+  const r = await c.catalogueSkus();
   assert.equal(r.ok, false);
   assert.equal(r.blocked, true, 'a portal block must be reported as a block, not a generic error');
   assert.equal(r.retryable, false);
@@ -158,4 +158,29 @@ test('requests identify us honestly', async () => {
   await c.health();
   assert.match(calls[0].headers['user-agent'], /OpptraSCM/);
   assert.ok(!/Mozilla/.test(calls[0].headers['user-agent']), 'no forged browser UA');
+});
+
+test('the catalogue comes from price/live, which is CSV not JSON', async () => {
+  // api/inventory/live never responds (timed out at 25s, 60s and 90s on every shape
+  // tried), so the catalogue is read from price/live, which answers in about a second.
+  const { c, calls } = client((url) => (
+    url.endsWith('api/public/login')
+      ? { body: LOGIN_OK }
+      : { headers: { 'content-type': 'text/csv' },
+        body: 'Sku,Price,SpecialPrice\n044208320027,299.0000,299.0000\n044208320034,299.0000,250.0000\n' }
+  ));
+
+  const r = await c.catalogueSkus({ country: 'SA' });
+  assert.equal(r.ok, true);
+  assert.equal(r.count, 2);
+  assert.deepEqual(r.skus, ['044208320027', '044208320034']);
+  assert.ok(calls[1].url.includes('country=SA'));
+});
+
+test('a malformed or empty catalogue yields no SKUs rather than junk rows', async () => {
+  const { c } = client((url) => (
+    url.endsWith('api/public/login') ? { body: LOGIN_OK } : { body: 'Sku,Price\n\n,\n' }
+  ));
+  const r = await c.catalogueSkus();
+  assert.equal(r.count, 0, 'blank lines must not become SKUs');
 });

@@ -1,45 +1,72 @@
 #!/usr/bin/env bash
-# 6th Street VPN helper — documents how the GCP VM (or a jump host) may connect.
-# Does NOT print secrets. Reads STREET6_VPN_* from /opt/opptra-scm/.env if present.
+# 6th Street OMS tunnel.
 #
-# Reality check: FortiClient / SSL VPN often cannot run headless on the e2-medium
-# app VM. If connect fails, use Path B in docs/connectors/6thstreet.md (operator
-# laptop on VPN downloads picklist/invoice/label; worker only emails).
+# The FortiClient profile is IPsec, not SSL-VPN: gateway 37.76.253.34 (public),
+# pre-shared key, XAuth user OMS999. That distinction matters because openfortivpn
+# only speaks SSL-VPN and can never connect to this, which is why the old version of
+# this script could not work regardless of credentials.
+#
+# On Linux the equivalent is strongSwan (IKEv1 + PSK + XAuth). This script writes the
+# config and brings the tunnel up.
 set -euo pipefail
 
-ENV_FILE="${STREET6_ENV_FILE:-/opt/opptra-scm/.env}"
-if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  set -a
-  # Only load STREET6_VPN_* lines
-  eval "$(grep -E '^STREET6_VPN_(NAME|HOST|USER|PASS)=' "$ENV_FILE" | sed 's/\r$//' || true)"
-  set +a
+ENV_FILE="${ENV_FILE:-/opt/opptra-scm/.env}"
+val() { grep -m1 "^$1=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true; }
+
+HOST="$(val STREET6_VPN_HOST)";  HOST="${HOST:-37.76.253.34}"
+USER_="$(val STREET6_VPN_USER)"; PASS="$(val STREET6_VPN_PASS)"
+PSK="$(val STREET6_VPN_PSK)";    MODE="$(val STREET6_VPN_MODE)"; MODE="${MODE:-ipsec}"
+
+echo "gateway : $HOST"
+echo "mode    : $MODE"
+echo "user    : ${USER_:-(unset)}"
+echo "psk     : $([ -n "$PSK" ] && echo set || echo MISSING)"
+
+[ -n "$USER_" ] && [ -n "$PASS" ] || { echo "ERROR: set STREET6_VPN_USER and STREET6_VPN_PASS in $ENV_FILE"; exit 2; }
+
+if [ "$MODE" = "ssl" ]; then
+  command -v openfortivpn >/dev/null || { echo "ERROR: openfortivpn not installed"; exit 3; }
+  exec openfortivpn "$HOST" -u "$USER_" -p "$PASS"
 fi
 
-HOST="${STREET6_VPN_HOST:-10.61.1.11}"
-USER="${STREET6_VPN_USER:-}"
-NAME="${STREET6_VPN_NAME:-6thStreet-OMS}"
+# ---- IPsec (what the FortiClient profile actually uses) ----
+[ -n "$PSK" ] || { echo "ERROR: STREET6_VPN_PSK is required for IPsec. It is the Pre-shared key from the FortiClient profile."; exit 4; }
+command -v ipsec >/dev/null || {
+  echo "strongSwan is not installed. On Debian:"
+  echo "  sudo apt-get update && sudo apt-get install -y strongswan strongswan-pki libcharon-extra-plugins"
+  exit 5
+}
 
-echo "6th Street VPN profile: name=${NAME} host=${HOST} user=${USER:+set}${USER:-missing}"
-echo "Pass configured: $([[ -n "${STREET6_VPN_PASS:-}" ]] && echo yes || echo no)"
+# Secrets go to a root-only file, never into the config or the process list.
+sudo tee /etc/ipsec.secrets >/dev/null <<SECRETS
+: PSK "$PSK"
+$USER_ : XAUTH "$PASS"
+SECRETS
+sudo chmod 600 /etc/ipsec.secrets
 
-if [[ -z "${STREET6_VPN_USER:-}" || -z "${STREET6_VPN_PASS:-}" ]]; then
-  echo "Missing STREET6_VPN_USER / STREET6_VPN_PASS in env — abort."
-  exit 2
-fi
+sudo tee /etc/ipsec.conf >/dev/null <<CONF
+config setup
+    charondebug="ike 1, cfg 1"
 
-if command -v openfortivpn >/dev/null 2>&1; then
-  echo "Attempting openfortivpn (interactive OTP may still be required)…"
-  # Password via stdin; do not echo.
-  exec openfortivpn "$HOST" -u "$STREET6_VPN_USER" -p "$STREET6_VPN_PASS"
-fi
+conn street6-oms
+    keyexchange=ikev1
+    authby=xauthpsk
+    xauth=client
+    xauth_identity=$USER_
+    left=%defaultroute
+    leftsourceip=%config
+    leftauth=psk
+    leftauth2=xauth
+    right=$HOST
+    rightauth=psk
+    rightsubnet=10.61.0.0/16
+    auto=add
+    dpdaction=restart
+    ike=aes256-sha256-modp2048,aes256-sha1-modp1024!
+    esp=aes256-sha256,aes256-sha1!
+CONF
 
-if command -v forticlient >/dev/null 2>&1; then
-  echo "forticlient binary found — use GUI/profile '${NAME}' on a desktop jump host."
-  echo "This script will not auto-drive FortiClient GUI."
-  exit 3
-fi
-
-echo "No openfortivpn/forticlient on this host."
-echo "Path B: connect VPN on an operator laptop, capture HAR + files, use SCM dry-run email with injected artifacts."
-exit 4
+sudo ipsec restart
+sleep 4
+sudo ipsec up street6-oms
+sudo ipsec status street6-oms

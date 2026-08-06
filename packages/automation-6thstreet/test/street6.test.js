@@ -189,9 +189,7 @@ test('download, fill, upload: the portal list drives the sync', async () => {
   // 6th Street publishes what it sells; we fill our quantities against exactly those
   // rows. The operator never supplies a SKU list.
   const portalClient = {
-    liveInventory: async () => ({ ok: true, data: { items: [
-      { sku: 'A1', count: 3 }, { sku: 'B2', count: 7 }, { sku: 'GONE', count: 1 },
-    ] } }),
+    catalogueSkus: async () => ({ ok: true, count: 3, skus: ['A1', 'B2', 'GONE'], rows: [] }),
     uploaded: null,
     uploadInventory: async function (rows) { this.uploaded = rows; return { ok: true, data: { importId: 99 } }; },
   };
@@ -226,7 +224,7 @@ test('download, fill, upload: the portal list drives the sync', async () => {
 
 test('live writes stay behind STREET6_LIVE even when dryRun is false', async () => {
   const portalClient = {
-    liveInventory: async () => ({ ok: true, data: { items: [{ sku: 'A1', count: 1 }] } }),
+    catalogueSkus: async () => ({ ok: true, count: 1, skus: ['A1'], rows: [] }),
     uploadInventory: async () => { throw new Error('must not upload'); },
   };
   const uc = { public: async () => ({ inventorySnapshots: [{ itemTypeSKU: 'A1', inventory: 5 }] }) };

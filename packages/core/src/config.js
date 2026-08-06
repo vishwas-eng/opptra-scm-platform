@@ -227,7 +227,13 @@ const Env = z.object({
 
   // --- 6th Street (GCC): VPN + seller portal + IBM OMS. Secrets on VM only. ---
   STREET6_VPN_NAME: z.string().default('6thStreet-OMS'),
-  STREET6_VPN_HOST: z.string().default('10.61.1.11'),
+  // The real FortiClient profile dials 37.76.253.34, a PUBLIC address, over IPsec
+  // with a pre-shared key plus XAuth. The old 10.61.1.11 default was an internal host
+  // reached only after the tunnel is up, so nothing could ever connect to it.
+  STREET6_VPN_HOST: z.string().default('37.76.253.34'),
+  // 'ipsec' (FortiClient IPsec, needs strongSwan) or 'ssl' (openfortivpn).
+  STREET6_VPN_MODE: z.enum(['ipsec', 'ssl']).default('ipsec'),
+  STREET6_VPN_PSK: z.string().default(''),
   STREET6_VPN_USER: z.string().default(''),
   STREET6_VPN_PASS: z.string().default(''),
   STREET6_PORTAL_URL: z.string().default('https://seller-portal.6thstreet.com/#/app'),
