@@ -127,16 +127,28 @@ export const RUN_STATUS_TEXT = {
  */
 export function humanSummary(result) {
   if (!result || typeof result !== 'object') return '';
+  if (result.empty) return 'There was nothing new to process.';
+
   const bits = [];
 
-  if (result.empty) return 'There was nothing new to process.';
+  // Home Centre inventory: report what the channel itself confirmed, not what we sent.
+  const c = result.importResult?.counts;
+  if (c) {
+    bits.push(`${c.success ?? 0} accepted by the channel`);
+    if (c.failed) bits.push(`${c.failed} rejected`);
+    if (c.pending) bits.push(`${c.pending} still processing`);
+  }
+
+  if (typeof result.catalogMatched === 'number') bits.push(`${result.catalogMatched} products matched`);
+  if (typeof result.positiveQtySkus === 'number') bits.push(`${result.positiveQtySkus} with stock`);
   if (typeof result.fetched === 'number') bits.push(`${result.fetched} found`);
   if (typeof result.okCount === 'number') bits.push(`${result.okCount} done`);
   if (typeof result.created === 'number' && result.created) bits.push(`${result.created} created`);
-  if (typeof result.skuCount === 'number') bits.push(`${result.skuCount} products`);
+  if (typeof result.skuCount === 'number' && !c) bits.push(`${result.skuCount} products`);
   if (typeof result.draftCount === 'number') bits.push(`${result.draftCount} drafts`);
   if (typeof result.lineCount === 'number') bits.push(`${result.lineCount} lines`);
   if (typeof result.failed === 'number' && result.failed) bits.push(`${result.failed} failed`);
+  if (result.upload?.batchNo) bits.push(`batch ${result.upload.batchNo}`);
 
   if (result.dryRun) bits.push('preview only, nothing was changed');
   return bits.join(', ');

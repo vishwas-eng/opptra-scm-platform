@@ -589,6 +589,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
 
     // 3) Upload only when HC_LIVE (never in dry-run) AND validation gate passes.
     let upload = { skipped: true, reason: 'dry-run or HC_LIVE=false' };
+    let importResult = null;
     let workbookBytes = 0;
     try {
       await step('Filling the Home Centre inventory template', 'running', `${rows.length} rows`);
@@ -610,9 +611,35 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
             validationErrors: validation.errors,
           };
         } else {
-          await step('Uploading the updated file to Home Centre', 'running');
+          await step('Uploading the updated file to Home Centre', 'running', `${rows.length} products`);
           upload = await vin.uploadInventoryWorkbook(buf, `hc-inv-${creds.region}-${effectiveSellerCode || vinVendor || 'seller'}.xlsx`);
-          await step('Uploading the updated file to Home Centre', upload?.ok ? 'done' : 'failed', upload?.reason || '');
+          await step(
+            'Uploading the updated file to Home Centre',
+            upload?.ok ? 'done' : 'failed',
+            upload?.batchNo ? `batch ${upload.batchNo}` : (upload?.reason || ''),
+          );
+
+          // Ask Vinculum what the import actually did, rather than inferring it from an
+          // HTML page. This is the request behind the portal's own Successful / Error /
+          // Pending tabs, so the numbers we report are theirs, not ours.
+          if (upload?.ok && typeof vin.getImportResult === 'function') {
+            await step('Checking the result in Home Centre', 'running');
+            // The rows are queued, not applied the instant the POST returns.
+            await new Promise((r) => setTimeout(r, 3000));
+            importResult = await vin.getImportResult(upload.batchNo || '').catch((err) => ({
+              ok: false, error: String(err.message || err),
+            }));
+            if (importResult?.ok) {
+              const c = importResult.counts || {};
+              await step(
+                'Checking the result in Home Centre',
+                c.failed ? 'failed' : 'done',
+                `${c.success ?? 0} accepted, ${c.failed ?? 0} rejected${c.pending ? `, ${c.pending} pending` : ''}`,
+              );
+            } else {
+              await step('Checking the result in Home Centre', 'failed', importResult?.error || 'could not read the batch');
+            }
+          }
         }
       }
     } catch (err) {
@@ -671,6 +698,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
         priorSellerInv: r.priorSellerInv,
       })),
       upload,
+      importResult,
       ownerEmail,
       identityMapEnough: Object.keys(skuMap).length === 0,
       message: gateBlocked

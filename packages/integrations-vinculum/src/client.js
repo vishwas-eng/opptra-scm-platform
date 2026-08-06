@@ -376,23 +376,81 @@ export function makeVinculumClient(cfg = {}) {
    * Upload inventory/price xlsx to Vinculum (LIVE write, caller must gate).
    * Form field name from sellerPriceUpdateBS: importFileName.
    */
+  /**
+   * Upload the filled inventory xlsx.
+   *
+   * The shape here is copied from the page's own Import handler, not guessed:
+   *
+   *   $("#importFileNameTemp").val($('#importFileName').val().split('\\').pop());
+   *   document.sellerSkuImportForm.action = "sellerSkuImportBS?importFlag=I";
+   *   document.sellerSkuImportForm.submit();
+   *
+   * Two details matter and both were wrong before. The URL has NO `.action` suffix
+   * (Struts maps the bare name), and `importFileNameTemp` carries the bare filename
+   * alongside the file itself. Posting to `sellerSkuImportBS.action?importFlag=I`
+   * returned the page with a 200 and silently imported nothing.
+   */
   async function uploadInventoryWorkbook(buffer, filename = 'hc-inventory.xlsx') {
     await ensureLogin();
-    const url = `${baseUrl}/sellerSkuImportBS.action?importFlag=I`;
+    const url = `${baseUrl}/sellerSkuImportBS?importFlag=I`;
     const form = new FormData();
     const blob = new Blob([buffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
     form.append('importFileName', blob, filename);
-    const h = {
-      Cookie: cookieHeader(jar),
-      'User-Agent': 'Mozilla/5.0 Chrome/149',
-      Referer: `${baseUrl}/sellerPriceUpdateBS.action`,
-    };
-    const res = await fetch(url, { method: 'POST', headers: h, body: form });
+    // The page sends the basename it stripped off the fake C:\\fakepath\\ prefix.
+    form.append('importFileNameTemp', filename);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Cookie: cookieHeader(jar),
+        'User-Agent': 'Mozilla/5.0 Chrome/149',
+        Referer: `${baseUrl}/sellerSkuImportBS.action`,
+      },
+      body: form,
+      redirect: 'follow',
+    });
     mergeJar(jar, res.headers.getSetCookie?.() || res.headers.get('set-cookie'));
     const text = await res.text();
     return { ...classifyImportResponse(res.status, text), status: res.status };
+  }
+
+  /**
+   * Read back what an import actually did. This is the request behind the
+   * Successful / Error / Pending tabs (`jsonSkuImportResultBS`), so it is the portal's
+   * own record rather than our inference from an HTML page.
+   *
+   * @param {string} batchId empty string asks for the most recent batch, which is what
+   *   the page itself sends on load.
+   */
+  async function getImportResult(batchId = '') {
+    await ensureLogin();
+    const r = await raw('jsonSkuImportResultBS', {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+        Referer: `${baseUrl}/sellerSkuImportBS.action`,
+      },
+      form: { batchId: String(batchId || '') },
+    });
+    let json = null;
+    try { json = JSON.parse(r.text); } catch { /* not json */ }
+    if (!json) {
+      return { ok: false, status: r.status, error: 'import result was not JSON', preview: r.text.slice(0, 300) };
+    }
+    const pick = (...keys) => keys.map((k) => json[k]).find((v) => Array.isArray(v)) || [];
+    const success = pick('successList', 'successRecords', 'success');
+    const failed = pick('failedList', 'errorList', 'failedRecords', 'failed');
+    const pending = pick('pendingList', 'pendingRecords', 'pending');
+    return {
+      ok: true,
+      batchId: json.batchId || batchId || null,
+      counts: { success: success.length, failed: failed.length, pending: pending.length },
+      failed: failed.slice(0, 25),
+      raw: json,
+    };
   }
 
   async function listActiveOrders(opts = {}) {
@@ -437,6 +495,7 @@ export function makeVinculumClient(cfg = {}) {
     listSellerSkus,
     listAllSellerSkus,
     uploadInventoryWorkbook,
+    getImportResult,
     mapOrderRow,
     get cookieJar() { return cookieHeader(jar); },
     get isLoggedIn() { return loggedIn; },
