@@ -22,7 +22,10 @@ REGION="${REGION:-asia-south1}"
 ZONE="${ZONE:-asia-south1-a}"
 VM_NAME="${VM_NAME:-opptra-scm}"
 MACHINE_TYPE="${MACHINE_TYPE:-e2-medium}"
-DISK_GB="${DISK_GB:-50}"
+# 20 GB is ample: Postgres holds runs/audit rows (KBs per run), Redis is capped at
+# 256 MB, and artifacts stream rather than accumulate. A GCP boot disk can grow but
+# never shrink, so start small and raise it if the data actually demands it.
+DISK_GB="${DISK_GB:-20}"
 IP_NAME="${IP_NAME:-opptra-scm-ip}"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
