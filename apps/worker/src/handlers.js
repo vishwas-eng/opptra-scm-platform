@@ -7,6 +7,24 @@
 import { addRunProgress } from '@opptra/core';
 import { SessionError } from '@opptra/uc-client';
 
+
+/**
+ * A job that correctly detected it cannot run yet is NOT a failure.
+ *
+ * Missing credentials, a channel not switched on, or nothing to process are all
+ * healthy outcomes: the automation did exactly the right thing by stopping. Marking
+ * them failed buries the failures that DO need someone, and trains people to ignore
+ * red. Real errors still fail.
+ */
+export function isBlockedNotFailed(result) {
+  if (!result || typeof result !== 'object') return false;
+  if (result.error) return false;
+  return result.configured === false
+    || result.needsPortalLogin === true
+    || result.needsSetup === true
+    || result.empty === true;
+}
+
 export const RETURN_MAX_PENDING_RETRIES = 40;   // resumable pipeline: ~40 × 90s ≈ 1h of patience
 export const RETURN_PENDING_RETRY_MS = 90_000;
 
@@ -379,7 +397,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
         limit: input.limit || 20,
         webOrderNos: input.webOrderNos || null,
       });
-      if (runUid) await finishRun(runUid, { ok: result.ok !== false, result });
+      if (runUid) await finishRun(runUid, { ok: result.ok !== false || isBlockedNotFailed(result), result });
       return result;
     },
 
@@ -428,7 +446,7 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
         region: input.region || '',
         ucInstance: input.ucInstance || '',
       });
-      if (runUid) await finishRun(runUid, { ok: result.ok !== false, result });
+      if (runUid) await finishRun(runUid, { ok: result.ok !== false || isBlockedNotFailed(result), result });
       return result;
     },
 

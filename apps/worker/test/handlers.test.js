@@ -205,3 +205,21 @@ test('soft-fail packing results populate runs.error for Admin/KPI', async () => 
   assert.equal(finished[0].ok, false);
   assert.match(finished[0].error, /SO9: not found on the B2B sheet/);
 });
+
+test('a job that stops because it is not set up yet is not a failure', async () => {
+  // Marking these failed buries the failures that DO need a person, and trains
+  // everyone to ignore red on the dashboard.
+  const { isBlockedNotFailed } = await import('../src/handlers.js');
+
+  assert.equal(isBlockedNotFailed({ ok: false, configured: false }), true, 'no credentials yet');
+  assert.equal(isBlockedNotFailed({ ok: false, needsPortalLogin: true }), true, 'portal login missing');
+  assert.equal(isBlockedNotFailed({ ok: true, empty: true }), true, 'nothing to process');
+
+  // Real problems must still fail loudly.
+  assert.equal(isBlockedNotFailed({ ok: false, error: 'upload rejected' }), false);
+  assert.equal(isBlockedNotFailed({ ok: false, configured: false, error: 'boom' }), false,
+    'an error alongside not-configured is still an error');
+  assert.equal(isBlockedNotFailed({ ok: false, message: 'None of the 8485 products exist' }), false,
+    'a genuine mismatch is a failure someone must fix');
+  assert.equal(isBlockedNotFailed(null), false);
+});
