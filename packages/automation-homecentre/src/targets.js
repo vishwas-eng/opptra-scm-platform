@@ -170,8 +170,16 @@ export function normalizeHcRegion(region) {
 export function vinculumCredsFor(cfg, region = 'uae') {
   const r = normalizeHcRegion(region);
   const suffix = r.toUpperCase();
-  const user = pick(cfg, [`VINCULUM_${suffix}_USER`, 'VINCULUM_USER'], '');
-  const pass = pick(cfg, [`VINCULUM_${suffix}_PASS`, 'VINCULUM_PASS'], '');
+  const ownUser = pick(cfg, [`VINCULUM_${suffix}_USER`], '');
+  const ownPass = pick(cfg, [`VINCULUM_${suffix}_PASS`], '');
+
+  // The shared VINCULUM_USER/PASS pair IS the UAE seller account. Letting KSA fall back
+  // to it would sign in as UAE and push KSA stock onto the UAE storefront, quietly
+  // corrupting both. Only UAE may inherit the shared pair; KSA must be explicit.
+  const canInheritShared = r === 'uae';
+  const user = ownUser || (canInheritShared ? pick(cfg, ['VINCULUM_USER'], '') : '');
+  const pass = ownPass || (canInheritShared ? pick(cfg, ['VINCULUM_PASS'], '') : '');
+
   return {
     region: r,
     baseUrl: cfg.VINCULUM_BASE_URL || 'https://landmarkgroup.vinsupplier.com/eRetailWeb',
@@ -179,13 +187,20 @@ export function vinculumCredsFor(cfg, region = 'uae') {
     pass,
     // The seller SKU grid is filtered by vendor code, which IS the login id unless
     // overridden. Getting this wrong returns another seller's catalogue.
-    vendorCode: pick(cfg, [`HC_VINCULUM_${suffix}_VENDOR_CODE`, 'HC_VINCULUM_VENDOR_CODE'], '') || user,
+    vendorCode: pick(cfg, [`HC_VINCULUM_${suffix}_VENDOR_CODE`], '')
+      || (canInheritShared ? pick(cfg, ['HC_VINCULUM_VENDOR_CODE'], '') : '')
+      || user,
+    // No cross-region default: a wrong seller code stamps someone else's account on
+    // the upload. Empty means "use the code on the downloaded SKU row", always right.
     sellerCode: pick(cfg, [`HC_SELLER_CODE_${suffix}`], ''),
     configured: !!(user && pass),
+    missingReason: (user && pass) ? '' : (
+      r === 'ksa'
+        ? 'Home Centre KSA needs its own Vinculum login. Set VINCULUM_KSA_USER and VINCULUM_KSA_PASS. It will not reuse the UAE account.'
+        : 'Home Centre UAE has no Vinculum login. Set VINCULUM_USER and VINCULUM_PASS.'
+    ),
   };
 }
-
-/** Build a dedicated UcClient for a HC target (does not touch the India bot singleton). */
 export function makeHcUcClient(targetCfg, { rps = 4, burst = 8 } = {}) {
   if (!targetCfg?.baseUrl) throw new Error('HC UC baseUrl missing');
   // Session-only targets (cookie in vault) may omit user/pass; OAuth needs both.

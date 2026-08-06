@@ -329,6 +329,9 @@ export function makeHandlers({ uc, pipelines, runs, alert, logger, reenqueue, pa
         dryRun: input.dryRun !== false,
         sellerCode: input.sellerCode || undefined,
         skus: input.skus || null,
+        // UAE and KSA are separate seller accounts and separate UC tenants; without
+        // this the region chosen in the UI is ignored and UAE always runs.
+        region: input.region || input.ucInstance || 'uae',
       });
       if (runUid) await finishRun(runUid, { ok: result.ok !== false, result, error: result.error || null });
       return result;

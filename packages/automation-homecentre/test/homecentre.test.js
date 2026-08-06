@@ -1,3 +1,4 @@
+import { vinculumCredsFor, inventoryUcConfig } from '../src/targets.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mapOrderRow, encryptPasswordRsaPkcs1, extractPublicKeyPem } from '@opptra/integrations-vinculum';
@@ -297,4 +298,60 @@ test('uae inventory facility defaults to opptrauae via invFacility', () => {
   assert.equal(uaeUcConfig({
     HC_UC_UAE_USER: 'u', HC_UC_UAE_PASS: 'p', HC_UC_UAE_INV_FACILITY: 'custom-fac',
   }).invFacility, 'custom-fac');
+});
+
+/* --------------------- region isolation (UAE vs KSA) --------------------- */
+
+test('KSA never borrows the UAE Vinculum login', async () => {
+  // The shared VINCULUM_USER/PASS pair IS the UAE seller account. If KSA inherited it,
+  // we would sign in as UAE and push KSA stock onto the UAE storefront, corrupting the
+  // quantities on both.
+  const cfg = { VINCULUM_USER: 'uae-seller', VINCULUM_PASS: 'p' };
+
+  const uae = vinculumCredsFor(cfg, 'uae');
+  assert.equal(uae.configured, true);
+  assert.equal(uae.user, 'uae-seller');
+
+  const ksa = vinculumCredsFor(cfg, 'ksa');
+  assert.equal(ksa.configured, false, 'KSA must refuse rather than reuse the UAE account');
+  assert.equal(ksa.user, '');
+  assert.match(ksa.missingReason, /VINCULUM_KSA_USER/);
+  assert.match(ksa.missingReason, /will not reuse the UAE account/i);
+});
+
+test('KSA works once it has its own login', () => {
+  const creds = vinculumCredsFor({
+    VINCULUM_USER: 'uae-seller', VINCULUM_PASS: 'p',
+    VINCULUM_KSA_USER: 'ksa-seller', VINCULUM_KSA_PASS: 'q',
+  }, 'ksa');
+  assert.equal(creds.configured, true);
+  assert.equal(creds.user, 'ksa-seller');
+  assert.equal(creds.vendorCode, 'ksa-seller', 'vendor code defaults to the login id');
+});
+
+test('no seller code is ever guessed across regions', () => {
+  // '90' is the UAE seller code. Defaulting it into KSA would file our stock under the
+  // wrong seller; an empty value falls back to the code on the downloaded SKU row.
+  const cfg = { VINCULUM_KSA_USER: 'k', VINCULUM_KSA_PASS: 'p', HC_SELLER_CODE_UAE: '90' };
+  assert.equal(vinculumCredsFor(cfg, 'ksa').sellerCode, '', 'KSA must not inherit the UAE seller code');
+  assert.equal(vinculumCredsFor({ ...cfg, HC_SELLER_CODE_KSA: '75' }, 'ksa').sellerCode, '75');
+});
+
+test('inventory reads the UC tenant of the region being synced', () => {
+  const cfg = {
+    HC_UC_UAE_USER: 'uae', HC_UC_UAE_PASS: 'p',
+    HC_UC_KSA_USER: 'ksa', HC_UC_KSA_PASS: 'q',
+  };
+  assert.equal(inventoryUcConfig(cfg, 'uae').label, 'uae');
+  assert.equal(inventoryUcConfig(cfg, 'ksa').label, 'ksa');
+  assert.match(inventoryUcConfig(cfg, 'ksa').baseUrl, /opptraksa/);
+  assert.equal(inventoryUcConfig(cfg).label, 'uae', 'UAE stays the default');
+});
+
+test('a KSA sync with no KSA login stops with a fixable message, and touches nothing', async () => {
+  const pipeline = makeHomecentrePipeline(null, { VINCULUM_USER: 'uae-seller', VINCULUM_PASS: 'p' });
+  const r = await pipeline.syncInventory({ dryRun: true, region: 'ksa' });
+  assert.equal(r.ok, false);
+  assert.equal(r.configured, false);
+  assert.match(r.message, /VINCULUM_KSA_USER/);
 });

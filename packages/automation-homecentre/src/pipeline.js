@@ -6,6 +6,7 @@
 import { makeVinculumClient, makeVinculumFulfill } from '@opptra/integrations-vinculum';
 import {
   parseSkuMap,
+  vinculumCredsFor,
   resolveHcMode,
   ordersUcConfig,
   inventoryUcConfig,
@@ -86,8 +87,30 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
   const ownerEmail = cfg.HC_OWNER_EMAIL || 'ratikanta@opptra.com';
   const skuMap = parseSkuMap(cfg.HC_SKU_MAP_JSON);
   const sellerCodeUae = cfg.HC_SELLER_CODE_UAE || '';
-  const sellerCodeOther = cfg.HC_SELLER_CODE_KSA || cfg.HC_SELLER_CODE_OTHER || '90';
+  // No '90' default here any more: 90 is the UAE seller code, and stamping it on a KSA
+  // upload would file our stock under the wrong seller. Empty falls back to the code
+  // on the downloaded SKU row, which is always correct for whichever account is used.
+  const sellerCodeOther = cfg.HC_SELLER_CODE_KSA || cfg.HC_SELLER_CODE_OTHER || '';
   const vendorCode = cfg.HC_VINCULUM_VENDOR_CODE || cfg.VINCULUM_USER || '';
+
+  /**
+   * Vinculum client for one region. UAE and KSA are different seller accounts on the
+   * same portal, so a region gets its own login or it does not run at all. An injected
+   * client (tests) always wins.
+   */
+  const vinByRegion = new Map();
+  function vinFor(region = 'uae') {
+    if (vinculumClient) return { client: vinculumClient, creds: vinculumCredsFor(cfg, region) };
+    const creds = vinculumCredsFor(cfg, region);
+    if (!creds.configured) return { client: null, creds };
+    if (!vinByRegion.has(creds.region)) {
+      vinByRegion.set(creds.region, makeVinculumClient({
+        baseUrl: creds.baseUrl, userName: creds.user, password: creds.pass,
+      }));
+    }
+    return { client: vinByRegion.get(creds.region), creds };
+  }
+
   const vin = vinculumClient || makeVinculumClient({
     baseUrl: cfg.VINCULUM_BASE_URL,
     userName: cfg.VINCULUM_USER,
@@ -379,11 +402,30 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
    * Download Vinculum seller SKU list → merge UAE UC quantities → optional upload.
    * Identity match on seller skuCode (not archive LAND*). Upload only when HC_LIVE.
    */
-  async function syncInventory({ dryRun, sellerCode = sellerCodeUae, skus = null } = {}) {
+  async function syncInventory({ dryRun, sellerCode = null, skus = null, region = 'uae' } = {}) {
     const mode = resolveHcMode(cfg, { dryRun });
-    const invTarget = inventoryUcConfig(cfg);
-    const invFacility = invTarget.invFacility || invTarget.facility || 'opptrauae';
-    const vinVendor = vendorCode || cfg.VINCULUM_USER || '';
+    // Stock for a region lives in that region's own UC tenant, and its seller account
+    // is a different Vinculum login. Both must follow the region or KSA quantities end
+    // up on the UAE storefront.
+    const invTarget = inventoryUcConfig(cfg, region);
+    const { client: regionVin, creds } = vinFor(region);
+
+    if (!regionVin) {
+      return {
+        ok: false,
+        dryRun: mode.dryRun,
+        region: creds.region,
+        configured: false,
+        message: creds.missingReason,
+      };
+    }
+
+    const invFacility = invTarget.invFacility || invTarget.facility
+      || (creds.region === 'ksa' ? '' : 'opptrauae');
+    const vinVendor = creds.vendorCode || vendorCode || '';
+    const effectiveSellerCode = sellerCode ?? creds.sellerCode
+      ?? (creds.region === 'uae' ? sellerCodeUae : sellerCodeOther);
+    const vin = regionVin;
 
     if (!invTarget.configured) {
       return {
@@ -393,7 +435,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
         inventoryTarget: invTarget.label,
         ucBaseUrl: invTarget.baseUrl,
         facility: invFacility,
-        sellerCode: sellerCode || null,
+        sellerCode: effectiveSellerCode || null,
         ownerEmail,
         error: 'UAE UC credentials missing',
         message: 'Set HC_UC_UAE_USER/PASS (+ HC_UC_UAE_BASE_URL / FACILITY) in VM .env',
@@ -414,7 +456,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
           qty: 0,
           salePrice: '',
           mrp: '',
-          sellerCode: sellerCode || vinVendor,
+          sellerCode: effectiveSellerCode || vinVendor,
           skuShortName: '',
           webStatus: '',
           skuSize: '',
@@ -520,7 +562,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
     }
     const merged = mergeSellerInventoryRows(hcSkus, ucQtyBySku, {
       skuMap,
-      sellerCode: sellerCode || '',
+      sellerCode: effectiveSellerCode || '',
     });
     const rows = merged.rows;
 
@@ -554,7 +596,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
             validationErrors: validation.errors,
           };
         } else {
-          upload = await vin.uploadInventoryWorkbook(buf, `hc-inv-${sellerCode || vinVendor || 'uae'}.xlsx`);
+          upload = await vin.uploadInventoryWorkbook(buf, `hc-inv-${creds.region}-${effectiveSellerCode || vinVendor || 'seller'}.xlsx`);
         }
       }
     } catch (err) {
@@ -582,7 +624,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
       ucBaseUrl: invTarget.baseUrl,
       facility: invFacility,
       vendorCode: vinVendor,
-      sellerCode: sellerCode || (rows[0]?.sellerCode || null),
+      sellerCode: effectiveSellerCode || (rows[0]?.sellerCode || null),
       skuCount: rows.length,
       // Inventory-row presence at facility (expected <100% → qty 0 fill).
       matched: merged.matched,
@@ -698,6 +740,7 @@ export function makeHomecentrePipeline(ucFallback, cfg, vinculumClient) {
 
 export {
   parseSkuMap,
+  vinculumCredsFor,
   resolveHcMode,
   ordersUcConfig,
   inventoryUcConfig,
