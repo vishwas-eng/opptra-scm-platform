@@ -1504,6 +1504,9 @@
     instamart: '/assets/connectors/instamart.svg',
     nykaa: '/assets/connectors/nykaa.svg',
     meesho: '/assets/connectors/meesho.svg',
+    ajio: '/assets/connectors/ajio.svg',
+    noon: '/assets/connectors/noon.svg',
+    namshi: '/assets/connectors/namshi.svg',
     '6thstreet': '/assets/connectors/6thstreet.svg',
   };
   function connectorIconHtml(c, lg = false) {
