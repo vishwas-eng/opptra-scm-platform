@@ -6,8 +6,7 @@ import {
   createRun, finishRun, query, config, listRuns,
   validateReverseDcInput, validateEwaybillInput, validatePackingInput,
   validateSheetSaleOrders, validateAsnInput, validateRequiredId,
-  validationFailBody,
-} from '@opptra/core';
+  validationFailBody, listChannelSchedules } from '@opptra/core';
 import { enqueue } from '../queue.js';
 
 const SO_CODE = { type: 'string', pattern: '^[A-Za-z0-9/_-]{2,40}$' };
@@ -740,9 +739,38 @@ export default async function automationRoutes(app) {
         summary: hit.result?.message || null,
       } : null;
     };
+    // Schedules an operator set in the Channels screen live in the database, not in
+    // env, so this list has to read them or the page shows a stale env-only view and
+    // anything they scheduled appears to have vanished.
+    const channelRows = await listChannelSchedules().catch(() => []);
+    const channelJobs = channelRows.map((r) => ({
+      id: `channel:${r.connector_id}:${r.region}:${r.operation}`,
+      name: `${r.connector_id === 'homecentre' ? 'Home Centre' : '6th Street'}`
+        + `${r.region ? ` ${r.region.toUpperCase()}` : ''}`
+        + ` ${r.operation === 'inventory' ? 'inventory sync' : 'sale order punch'}`,
+      description: r.enabled
+        ? `Runs daily at ${String(r.hour).padStart(2, '0')}:${String(r.minute).padStart(2, '0')} ${r.timezone}`
+        : 'Scheduled off, run it by hand from Channels',
+      ownerEmail: r.owner_email || '',
+      everyMinutes: 0,
+      at: `${String(r.hour).padStart(2, '0')}:${String(r.minute).padStart(2, '0')}`,
+      timezone: r.timezone,
+      enabled: r.enabled,
+      dryRunDefault: r.dry_run,
+      live: !r.dry_run,
+      source: 'channels',
+      steps: r.operation === 'inventory'
+        ? ['Download the seller product list', 'Read stock from Unicommerce', 'Fill the template', 'Upload', 'Confirm in the channel']
+        : ['Fetch new orders', 'Map SKUs', 'Create sale orders in Unicommerce'],
+      lastRun: r.last_run_at
+        ? { status: r.last_status || 'unknown', finished_at: r.last_run_at, error: r.last_error || '' }
+        : null,
+    }));
+
     return {
       ok: true,
       jobs: [
+        ...channelJobs,
         {
           id: 'homecentre-sync',
           name: 'Home Centre Sync',

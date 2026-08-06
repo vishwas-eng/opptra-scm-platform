@@ -71,7 +71,10 @@ export async function api(path, opts = {}) {
 
 /* ------------------------------- runs ------------------------------- */
 
-const POLL_MS = 2500;
+// Progress steps are what the operator watches, so poll fast enough that a step
+// appears while it is still happening rather than in a batch at the end. A run row is
+// a single small SELECT; 1s costs nothing and makes the screen feel live.
+const POLL_MS = 1000;
 const POLL_TIMEOUT_MS = 10 * 60_000;
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed']);
@@ -89,8 +92,10 @@ export async function pollRun(runUid, { onProgress, signal, timeoutMs = POLL_TIM
   for (;;) {
     if (signal?.aborted) throw new ApiError('cancelled', { status: 0 });
     const run = await api(`/api/runs/${encodeURIComponent(runUid)}`, { signal });
-    if (TERMINAL_RUN_STATUSES.has(run.status)) return run;
+    // Report the final state too: the last steps often land in the same tick the run
+    // finishes, and skipping them loses the end of the story.
     onProgress?.(run);
+    if (TERMINAL_RUN_STATUSES.has(run.status)) return run;
     if (Date.now() - started > timeoutMs) {
       throw new ApiError('This is taking longer than expected. Check Recent Activity for the result.', { status: 0, body: run });
     }
